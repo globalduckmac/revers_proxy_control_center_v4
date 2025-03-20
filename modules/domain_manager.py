@@ -1,4 +1,5 @@
 import logging
+import dns.resolver
 from datetime import datetime
 from models import Domain, DomainGroup, Server, ServerLog, db
 
@@ -8,6 +9,137 @@ class DomainManager:
     """
     Handles operations related to domain and domain group management.
     """
+    
+    @staticmethod
+    def check_nameservers(domain_name):
+        """
+        Получает список актуальных NS-записей для домена
+        
+        Args:
+            domain_name: Имя домена для проверки
+            
+        Returns:
+            list: Список NS-записей
+        """
+        try:
+            answers = dns.resolver.resolve(domain_name, 'NS')
+            nameservers = [ns.target.to_text().rstrip('.').lower() for ns in answers]
+            return nameservers
+        except Exception as e:
+            logger.error(f"Error checking nameservers for {domain_name}: {str(e)}")
+            return []
+            
+    @staticmethod
+    def check_domain_ns_status(domain_id):
+        """
+        Проверяет соответствие NS-записей домена с ожидаемыми значениями
+        
+        Args:
+            domain_id: ID домена для проверки
+            
+        Returns:
+            bool: True если проверка пройдена, False в случае ошибки или несоответствия
+        """
+        try:
+            domain = Domain.query.get(domain_id)
+            if not domain:
+                logger.error(f"Domain with ID {domain_id} not found")
+                return False
+                
+            # Если ожидаемые NS не указаны, пропускаем проверку
+            if not domain.expected_nameservers:
+                domain.ns_status = 'pending'
+                db.session.commit()
+                return True
+                
+            # Получаем текущие NS записи
+            actual_ns = DomainManager.check_nameservers(domain.name)
+            
+            # Записываем в базу актуальные NS
+            domain.actual_nameservers = ','.join(actual_ns)
+            domain.ns_check_date = datetime.utcnow()
+            
+            # Разбираем ожидаемые NS
+            expected_ns = [ns.strip().lower() for ns in domain.expected_nameservers.split(',')]
+            
+            # Сравниваем списки
+            if set(actual_ns) == set(expected_ns):
+                domain.ns_status = 'ok'
+                logger.info(f"Domain {domain.name} NS check: OK")
+            else:
+                domain.ns_status = 'mismatch'
+                logger.warning(f"Domain {domain.name} NS mismatch. Expected: {expected_ns}, Actual: {actual_ns}")
+                
+            db.session.commit()
+            return domain.ns_status == 'ok'
+            
+        except Exception as e:
+            logger.error(f"Error checking NS status for domain {domain_id}: {str(e)}")
+            return False
+            
+    @staticmethod
+    def update_expected_nameservers(domain_id, expected_nameservers):
+        """
+        Обновляет список ожидаемых NS-записей для домена
+        
+        Args:
+            domain_id: ID домена
+            expected_nameservers: Список ожидаемых NS-серверов (строка, разделенная запятыми)
+            
+        Returns:
+            bool: True если обновление успешно, False в случае ошибки
+        """
+        try:
+            domain = Domain.query.get(domain_id)
+            if not domain:
+                logger.error(f"Domain with ID {domain_id} not found")
+                return False
+                
+            domain.expected_nameservers = expected_nameservers
+            domain.ns_status = 'pending'  # Сбрасываем статус для следующей проверки
+            db.session.commit()
+            
+            logger.info(f"Updated expected nameservers for domain {domain.name}: {expected_nameservers}")
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error updating nameservers for domain {domain_id}: {str(e)}")
+            return False
+            
+    @staticmethod
+    def check_all_domains_ns_status():
+        """
+        Проверяет NS-статус для всех доменов, у которых указаны ожидаемые NS
+        
+        Returns:
+            dict: Словарь с результатами проверки: {'ok': count, 'mismatch': count, 'error': count}
+        """
+        results = {'ok': 0, 'mismatch': 0, 'error': 0}
+        
+        try:
+            # Получаем все домены с указанными ожидаемыми NS
+            domains = Domain.query.filter(Domain.expected_nameservers.isnot(None)).all()
+            
+            for domain in domains:
+                try:
+                    if DomainManager.check_domain_ns_status(domain.id):
+                        results['ok'] += 1
+                    else:
+                        if domain.ns_status == 'mismatch':
+                            results['mismatch'] += 1
+                        else:
+                            results['error'] += 1
+                except Exception as e:
+                    logger.error(f"Error checking domain {domain.name}: {str(e)}")
+                    results['error'] += 1
+                    
+            logger.info(f"Checked NS status for {len(domains)} domains. Results: {results}")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in bulk NS check: {str(e)}")
+            return results
     
     @staticmethod
     def get_domains_by_group(group_id):

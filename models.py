@@ -47,6 +47,15 @@ class Domain(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Ожидаемые NS-записи, разделенные запятыми
+    expected_nameservers = db.Column(db.Text, nullable=True)
+    # Статус проверки NS: ok, mismatch, pending
+    ns_status = db.Column(db.String(20), default='pending')
+    # Фактические NS-записи, разделенные запятыми
+    actual_nameservers = db.Column(db.Text, nullable=True)
+    # Дата последней проверки NS
+    ns_check_date = db.Column(db.DateTime, nullable=True)
+    
     # Many-to-many relationship with DomainGroup
     groups = db.relationship('DomainGroup', secondary='domain_group_association', 
                             backref=db.backref('domains', lazy='dynamic'))

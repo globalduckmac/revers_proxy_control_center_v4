@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.cacert
     pkgs.rustc
     pkgs.pkg-config
     pkgs.libxcrypt
