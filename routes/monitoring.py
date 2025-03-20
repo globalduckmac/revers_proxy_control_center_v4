@@ -1,9 +1,12 @@
 import logging
+from datetime import datetime, timedelta
 from flask import Blueprint, render_template, redirect, url_for, request, jsonify, flash, current_app
 from flask_login import login_required
-from models import Server, Domain, ServerMetric, DomainMetric, DomainGroup
+from models import Server, Domain, ServerMetric, DomainMetric, DomainGroup, ServerLog
 from modules.monitoring import MonitoringManager
 from modules.domain_manager import DomainManager
+from sqlalchemy import func, desc
+from app import db
 
 bp = Blueprint('monitoring', __name__, url_prefix='/monitoring')
 logger = logging.getLogger(__name__)
@@ -185,3 +188,91 @@ def collect_domain_metrics(domain_id):
         flash(f'Error collecting metrics: {str(e)}', 'danger')
     
     return redirect(url_for('monitoring.domain_metrics', domain_id=domain_id))
+
+
+@bp.route('/activity-logs', methods=['GET'])
+@login_required
+def activity_logs():
+    """Show activity logs page with detailed system logs."""
+    # Получаем параметры фильтрации из GET запроса
+    server_id = request.args.get('server_id', type=int)
+    action = request.args.get('action')
+    status = request.args.get('status')
+    date_range = request.args.get('date_range', '30')
+    page = request.args.get('page', 1, type=int)
+    per_page = 50  # количество записей на странице
+    
+    # Базовый запрос для получения логов
+    query = ServerLog.query
+    
+    # Применяем фильтры
+    if server_id:
+        query = query.filter(ServerLog.server_id == server_id)
+    if action:
+        query = query.filter(ServerLog.action == action)
+    if status:
+        query = query.filter(ServerLog.status == status)
+    
+    # Фильтр по дате
+    if date_range != 'all':
+        try:
+            days = int(date_range)
+            date_from = datetime.utcnow() - timedelta(days=days)
+            query = query.filter(ServerLog.created_at >= date_from)
+        except (ValueError, TypeError):
+            # Если произошла ошибка при конвертации, просто игнорируем фильтр по дате
+            pass
+    
+    # Сортировка по дате (самые новые сверху)
+    query = query.order_by(desc(ServerLog.created_at))
+    
+    # Получаем все доступные действия для фильтра
+    actions = db.session.query(ServerLog.action).distinct().all()
+    actions = [a[0] for a in actions]
+    
+    # Получаем все сервера для фильтра
+    servers = Server.query.all()
+    
+    # Получаем общее количество записей и статистику
+    total_logs = query.count()
+    
+    # Получаем статистику по статусам
+    success_count = query.filter(ServerLog.status == 'success').count()
+    pending_count = query.filter(ServerLog.status == 'pending').count()
+    error_count = query.filter(ServerLog.status == 'error').count()
+    
+    # Статистика для самых частых действий
+    top_actions_query = db.session.query(
+        ServerLog.action, 
+        func.count(ServerLog.id).label('count')
+    ).group_by(ServerLog.action).order_by(desc('count')).limit(5).all()
+    
+    # Настраиваем пагинацию
+    total_pages = (total_logs + per_page - 1) // per_page  # округление вверх
+    offset = (page - 1) * per_page
+    logs = query.limit(per_page).offset(offset).all()
+    
+    # Собираем статистику для отображения
+    stats = {
+        'total': total_logs,
+        'success': success_count,
+        'pending': pending_count,
+        'error': error_count
+    }
+    
+    pagination = {
+        'page': page,
+        'per_page': per_page,
+        'pages': total_pages,
+        'total': total_logs
+    }
+    
+    return render_template(
+        'monitoring/activity_logs.html',
+        logs=logs,
+        servers=servers,
+        actions=actions,
+        stats=stats,
+        top_actions=top_actions_query,
+        pagination=pagination
+    )

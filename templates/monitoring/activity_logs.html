@@ -1,0 +1,236 @@
+{% extends 'layout.html' %}
+
+{% block title %}Activity Logs - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Activity Logs</h1>
+        <p class="lead">View system activity and server operation logs</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-3">
+        <div class="card">
+            <div class="card-header">
+                <h5>Log Filters</h5>
+            </div>
+            <div class="card-body">
+                <form method="get" action="{{ url_for('monitoring.activity_logs') }}">
+                    <div class="mb-3">
+                        <label for="server_id" class="form-label">Server</label>
+                        <select class="form-select" id="server_id" name="server_id">
+                            <option value="">All Servers</option>
+                            {% for server in servers %}
+                            <option value="{{ server.id }}" {% if request.args.get('server_id')|int == server.id %}selected{% endif %}>
+                                {{ server.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="action" class="form-label">Action</label>
+                        <select class="form-select" id="action" name="action">
+                            <option value="">All Actions</option>
+                            {% for action in actions %}
+                            <option value="{{ action }}" {% if request.args.get('action') == action %}selected{% endif %}>
+                                {{ action }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">All Statuses</option>
+                            <option value="success" {% if request.args.get('status') == 'success' %}selected{% endif %}>Success</option>
+                            <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>Pending</option>
+                            <option value="error" {% if request.args.get('status') == 'error' %}selected{% endif %}>Error</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="date_range" class="form-label">Date Range</label>
+                        <select class="form-select" id="date_range" name="date_range">
+                            <option value="1" {% if request.args.get('date_range') == '1' %}selected{% endif %}>Last 24 hours</option>
+                            <option value="7" {% if request.args.get('date_range') == '7' %}selected{% endif %}>Last 7 days</option>
+                            <option value="30" {% if request.args.get('date_range') == '30' or not request.args.get('date_range') %}selected{% endif %}>Last 30 days</option>
+                            <option value="all" {% if request.args.get('date_range') == 'all' %}selected{% endif %}>All time</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-1"></i> Apply Filters
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6>Status Distribution</h6>
+                    <div class="progress mb-1" style="height: 20px;">
+                        {% if stats.total > 0 %}
+                        <div class="progress-bar bg-success" role="progressbar" 
+                             style="width: {{ (stats.success / stats.total * 100) | round }}%;" 
+                             aria-valuenow="{{ stats.success }}" aria-valuemin="0" aria-valuemax="{{ stats.total }}">
+                            {{ stats.success }}
+                        </div>
+                        <div class="progress-bar bg-warning" role="progressbar" 
+                             style="width: {{ (stats.pending / stats.total * 100) | round }}%;" 
+                             aria-valuenow="{{ stats.pending }}" aria-valuemin="0" aria-valuemax="{{ stats.total }}">
+                            {{ stats.pending }}
+                        </div>
+                        <div class="progress-bar bg-danger" role="progressbar" 
+                             style="width: {{ (stats.error / stats.total * 100) | round }}%;" 
+                             aria-valuenow="{{ stats.error }}" aria-valuemin="0" aria-valuemax="{{ stats.total }}">
+                            {{ stats.error }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <small class="text-success">Success: {{ stats.success }}</small>
+                        <small class="text-warning">Pending: {{ stats.pending }}</small>
+                        <small class="text-danger">Error: {{ stats.error }}</small>
+                    </div>
+                </div>
+                
+                <div>
+                    <h6>Most Common Actions</h6>
+                    <ul class="list-group list-group-flush">
+                        {% for action, count in top_actions %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                            {{ action }}
+                            <span class="badge bg-primary rounded-pill">{{ count }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>System Activity Logs</h5>
+                <span class="badge bg-secondary">{{ logs|length }} results</span>
+            </div>
+            <div class="card-body">
+                {% if logs %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Server</th>
+                                <th>Action</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs %}
+                            <tr>
+                                <td>{{ log.server.name }}</td>
+                                <td>{{ log.action }}</td>
+                                <td>
+                                    {% if log.status == 'success' %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% elif log.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ log.message|default('No message', true)|truncate(50) }}
+                                        {% if log.message and log.message|length > 50 %}
+                                        <a href="#" data-bs-toggle="modal" data-bs-target="#logModal{{ log.id }}">
+                                            <i class="fas fa-search-plus"></i>
+                                        </a>
+                                        
+                                        <!-- Modal with full message -->
+                                        <div class="modal fade" id="logModal{{ log.id }}" tabindex="-1" aria-labelledby="logModalLabel{{ log.id }}" aria-hidden="true">
+                                            <div class="modal-dialog modal-lg">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="logModalLabel{{ log.id }}">Log Details</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <h6>Server: {{ log.server.name }}</h6>
+                                                        <h6>Action: {{ log.action }}</h6>
+                                                        <h6>Status: 
+                                                            {% if log.status == 'success' %}
+                                                            <span class="badge bg-success">Success</span>
+                                                            {% elif log.status == 'pending' %}
+                                                            <span class="badge bg-warning">Pending</span>
+                                                            {% else %}
+                                                            <span class="badge bg-danger">Error</span>
+                                                            {% endif %}
+                                                        </h6>
+                                                        <h6>Time: {{ log.created_at|humanize }}</h6>
+                                                        <hr>
+                                                        <h6>Message:</h6>
+                                                        <pre class="bg-dark text-light p-3 rounded">{{ log.message|default('No message provided', true) }}</pre>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    </small>
+                                </td>
+                                <td>{{ log.created_at|humanize }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                {% if pagination.pages > 1 %}
+                <nav aria-label="Activity log pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item {% if pagination.page == 1 %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('monitoring.activity_logs', page=pagination.page-1, **request.args) }}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        
+                        {% for p in range(1, pagination.pages + 1) %}
+                        <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('monitoring.activity_logs', page=p, **request.args) }}">{{ p }}</a>
+                        </li>
+                        {% endfor %}
+                        
+                        <li class="page-item {% if pagination.page == pagination.pages %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('monitoring.activity_logs', page=pagination.page+1, **request.args) }}" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+                {% endif %}
+                
+                {% else %}
+                <div class="alert alert-info">
+                    No log entries found for the selected filters.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

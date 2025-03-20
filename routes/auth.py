@@ -79,14 +79,10 @@ def dashboard():
         else:
             ns_status_counts['pending'] += 1
     
-    # Get recent logs
-    recent_logs = ServerLog.query.order_by(ServerLog.created_at.desc()).limit(10).all()
-    
     return render_template('dashboard.html',
                          servers_count=servers_count,
                          domains_count=domains_count,
                          domain_groups_count=domain_groups_count,
                          servers=servers,
                          domains=domains,
-                         ns_status_counts=ns_status_counts,
-                         recent_logs=recent_logs)
+                         ns_status_counts=ns_status_counts)
