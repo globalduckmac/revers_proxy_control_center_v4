@@ -62,13 +62,19 @@ class DomainManager:
             # Разбираем ожидаемые NS
             expected_ns = [ns.strip().lower() for ns in domain.expected_nameservers.split(',')]
             
-            # Сравниваем списки
-            if set(actual_ns) == set(expected_ns):
+            # Проверяем, что все ожидаемые NS-серверы присутствуют в фактическом списке
+            actual_ns_lowercase = [ns.lower() for ns in actual_ns]
+            expected_ns_lowercase = [ns.lower() for ns in expected_ns]
+            
+            # Проверяем, что каждый ожидаемый NS-сервер присутствует в фактическом списке
+            all_expected_found = all(ns in actual_ns_lowercase for ns in expected_ns_lowercase)
+            
+            if all_expected_found:
                 domain.ns_status = 'ok'
-                logger.info(f"Domain {domain.name} NS check: OK")
+                logger.info(f"Domain {domain.name} NS check: OK. All expected NS found in actual NS list.")
             else:
                 domain.ns_status = 'mismatch'
-                logger.warning(f"Domain {domain.name} NS mismatch. Expected: {expected_ns}, Actual: {actual_ns}")
+                logger.warning(f"Domain {domain.name} NS mismatch. Expected (any of): {expected_ns}, Actual: {actual_ns}")
                 
             db.session.commit()
             return domain.ns_status == 'ok'

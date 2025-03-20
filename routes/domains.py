@@ -182,10 +182,15 @@ def nameservers(domain_id):
 @login_required
 def check_ns(domain_id):
     """Проверка NS-записей домена."""
+    domain = Domain.query.get_or_404(domain_id)
+    
     if DomainManager.check_domain_ns_status(domain_id):
         flash('Проверка NS-записей завершена успешно', 'success')
     else:
-        flash('Обнаружено несоответствие NS-записей или произошла ошибка', 'warning')
+        if domain.ns_status == 'mismatch':
+            flash('Ожидаемые NS-записи не все обнаружены в фактическом списке NS. Убедитесь, что все NS-серверы настроены правильно.', 'warning')
+        else:
+            flash('Произошла ошибка при проверке NS-записей', 'danger')
     
     return redirect(url_for('domains.nameservers', domain_id=domain_id))
 
@@ -195,8 +200,20 @@ def check_all_ns():
     """Проверка NS-записей всех доменов."""
     results = DomainManager.check_all_domains_ns_status()
     
-    message = f"Проверка завершена. Результаты: {results['ok']} OK, {results['mismatch']} несоответствий, {results['error']} ошибок"
-    flash(message, 'info')
+    if results['ok'] > 0:
+        message_success = f"{results['ok']} доменов с корректными NS-записями"
+        flash(message_success, 'success')
+        
+    if results['mismatch'] > 0:
+        message_warning = f"{results['mismatch']} доменов имеют несоответствие NS-записей. Проверьте настройки NS-серверов."
+        flash(message_warning, 'warning')
+        
+    if results['error'] > 0:
+        message_error = f"{results['error']} доменов имеют ошибки при проверке NS-записей"
+        flash(message_error, 'danger')
+    
+    if results['ok'] + results['mismatch'] + results['error'] == 0:
+        flash("Нет доменов с указанными ожидаемыми NS-записями для проверки", 'info')
     
     return redirect(url_for('domains.index'))
 
