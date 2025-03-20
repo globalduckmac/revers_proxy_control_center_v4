@@ -104,9 +104,10 @@ class MonitoringManager:
             # Определим возможные варианты пути к файлу логов
             domain_name = domain.name
             possible_log_paths = [
-                f"/var/log/nginx/{domain_name}.access.log",
-                f"/var/log/nginx/access.{domain_name}.log",
-                f"/var/log/nginx/{domain_name}_access.log",
+                f"/var/log/nginx/{domain_name}.access.log",       # Как в нашем шаблоне
+                f"/var/log/nginx/access.{domain_name}.log",       # Альтернативный формат
+                f"/var/log/nginx/{domain_name}_access.log",       # Еще один формат
+                f"/var/log/nginx/{domain_name.replace('.', '_')}.access.log", # Для доменов с заменой точек
                 # Для случаев, когда имя домена используется как часть пути к логу
                 f"/var/log/nginx/{domain_name}/access.log"
             ]
@@ -141,7 +142,10 @@ class MonitoringManager:
             
             # Get stats from the last hour
             since = datetime.utcnow() - timedelta(hours=1)
-            since_str = since.strftime("%Y:%H:%M:%S")
+            # Изменим формат временной метки в зависимости от формата логов Nginx
+            # Тут используем несколько вариантов форматирования для поиска
+            since_str = since.strftime("%Y") # Год отдельно, чтобы найти любую запись с этим годом
+            # Позже можно добавить более точный поиск по времени
             
             # Проверим размер файла лога
             stdout, _ = ServerManager.execute_command(
@@ -212,10 +216,17 @@ class MonitoringManager:
                 )
                 avg_response_time = float(stdout.strip()) if stdout.strip() and re.match(r'^[0-9.]+$', stdout.strip()) else None
             
-            # Get status code counts
+            # Добавим команду для дебага, чтобы понять формат лога
+            stdout, stderr = ServerManager.execute_command(
+                server,
+                f"head -n 1 {log_path}"
+            )
+            logger.info(f"Nginx log format sample for {domain.name}: {stdout.strip()}")
+
+            # Get status code counts - попробуем несколько способов
             stdout, _ = ServerManager.execute_command(
                 server,
-                f"grep '{since_str}' {log_path} | cut -d ' ' -f 9 | sort | uniq -c"
+                f"grep '{since_str}' {log_path} | grep -o 'HTTP/[0-9.]\\+ [0-9]\\+' | cut -d ' ' -f 2 | sort | uniq -c"
             )
             
             # Parse status code counts
