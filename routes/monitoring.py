@@ -21,6 +21,9 @@ def index():
     group_id = request.args.get('group_id', type=int)
     server_group_id = request.args.get('server_group_id', type=int)
     
+    # Проверяем настройки Telegram
+    telegram_configured = TelegramNotifier.is_configured()
+    
     # Получаем все группы доменов и серверов для фильтра
     domain_groups = DomainGroup.query.all()
     server_groups = ServerGroup.query.order_by(ServerGroup.name).all()
@@ -38,9 +41,6 @@ def index():
         domains = group.domains.all()
     else:
         domains = Domain.query.all()
-    
-    # Проверяем, настроены ли Telegram-уведомления
-    telegram_configured = TelegramNotifier.is_configured()
     
     # Добавляем информацию о группах серверов для дашборда
     server_group_info = {}
