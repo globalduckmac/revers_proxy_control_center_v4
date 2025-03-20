@@ -16,6 +16,17 @@
             <div class="card-body">
                 <h5 class="card-title">Servers</h5>
                 <p class="card-text display-4">{{ servers_count }}</p>
+                <div class="mt-2">
+                    {% set active_servers = servers|selectattr('status', 'equalto', 'active')|list|length %}
+                    {% set error_servers = servers|selectattr('status', 'equalto', 'error')|list|length %}
+                    {% set pending_servers = servers|selectattr('status', 'equalto', 'pending')|list|length %}
+                    
+                    <div class="d-flex justify-content-between mb-2">
+                        <div><span class="badge bg-success">Активно: {{ active_servers }}</span></div>
+                        <div><span class="badge bg-warning">Ожидает: {{ pending_servers }}</span></div>
+                        <div><span class="badge bg-danger">Ошибка: {{ error_servers }}</span></div>
+                    </div>
+                </div>
                 <a href="{{ url_for('servers.index') }}" class="btn btn-sm btn-outline-primary">Manage Servers</a>
             </div>
         </div>
@@ -25,6 +36,13 @@
             <div class="card-body">
                 <h5 class="card-title">Domains</h5>
                 <p class="card-text display-4">{{ domains_count }}</p>
+                <div class="mt-2">
+                    <div class="d-flex justify-content-between mb-2">
+                        <div><span class="badge bg-success">NS OK: {{ ns_status_counts.ok }}</span></div>
+                        <div><span class="badge bg-warning">Mismatch: {{ ns_status_counts.mismatch }}</span></div>
+                        <div><span class="badge bg-secondary">Pending: {{ ns_status_counts.pending }}</span></div>
+                    </div>
+                </div>
                 <a href="{{ url_for('domains.index') }}" class="btn btn-sm btn-outline-primary">Manage Domains</a>
             </div>
         </div>
@@ -74,7 +92,7 @@
                                 </td>
                                 <td>
                                     {% if server.last_check %}
-                                    {{ server.last_check.strftime('%Y-%m-%d %H:%M:%S') }}
+                                    {{ server.last_check|humanize }}
                                     {% else %}
                                     Never
                                     {% endif %}
@@ -85,6 +103,76 @@
                                     </a>
                                     <a href="{{ url_for('proxy.deploy', server_id=server.id) }}" class="btn btn-sm btn-outline-success">
                                         <i class="fas fa-upload"></i> Deploy
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Domain NS Status</h5>
+                <a href="{{ url_for('domains.check_all_ns') }}" class="btn btn-sm btn-outline-info">
+                    <i class="fas fa-sync"></i> Check All NS
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Expected NS</th>
+                                <th>Actual NS</th>
+                                <th>Status</th>
+                                <th>Last Check</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain in domains %}
+                            <tr>
+                                <td>{{ domain.name }}</td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ domain.expected_nameservers|replace(',', '<br>')|safe }}
+                                    </small>
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ domain.actual_nameservers|replace(',', '<br>')|safe }}
+                                    </small>
+                                </td>
+                                <td>
+                                    {% if domain.ns_status == 'ok' %}
+                                    <span class="badge bg-success">OK</span>
+                                    {% elif domain.ns_status == 'mismatch' %}
+                                    <span class="badge bg-warning">Mismatch</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if domain.ns_check_date %}
+                                    {{ domain.ns_check_date|humanize }}
+                                    {% else %}
+                                    Never
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('domains.check_ns', domain_id=domain.id) }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-sync"></i> Check NS
+                                    </a>
+                                    <a href="{{ url_for('domains.nameservers', domain_id=domain.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-cog"></i> Manage NS
                                     </a>
                                 </td>
                             </tr>
@@ -128,7 +216,7 @@
                                     <span class="badge bg-danger">Error</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>{{ log.created_at|humanize }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>

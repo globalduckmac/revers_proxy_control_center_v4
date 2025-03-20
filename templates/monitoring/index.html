@@ -244,7 +244,7 @@
                                                     <i class="fas fa-server text-primary"></i> Last Server Checks
                                                 </h6>
                                                 <ul class="list-group list-group-flush small">
-                                                    {% for server in servers|sort(attribute='last_check', reverse=True)|slice(0, 3) %}
+                                                    {% for server in servers|sort(attribute='last_check', reverse=True)|slice(3) %}
                                                     <li class="list-group-item d-flex justify-content-between align-items-center py-1">
                                                         {{ server.name }}
                                                         <div>

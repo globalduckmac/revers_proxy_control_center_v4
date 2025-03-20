@@ -43,16 +43,20 @@ def register_filters(app):
             return timestamp.strftime("%Y-%m-%d %H:%M")
             
     @app.template_filter('slice')
-    def slice_list(value, slices):
+    def slice_list(value, start, stop=None):
         """
         Возвращает часть списка (аналог slice() в Python)
         
         Args:
             value: список или итерируемый объект
-            slices: кортеж из двух элементов для slice (start, stop)
+            start: начальный индекс или количество элементов (если stop=None)
+            stop: конечный индекс (опционально)
             
         Returns:
             list: Отфильтрованный список
         """
-        start, stop = slices
-        return list(value)[start:stop]
+        if stop is None:
+            # Если stop не указан, то start - это количество элементов
+            return list(value)[:start]
+        else:
+            return list(value)[start:stop]

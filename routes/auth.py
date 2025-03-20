@@ -61,6 +61,24 @@ def dashboard():
     # Get servers for status display
     servers = Server.query.all()
     
+    # Get domains with NS status
+    domains = Domain.query.filter(Domain.expected_nameservers != None).filter(Domain.expected_nameservers != '').all()
+    
+    # Count domains by NS status
+    ns_status_counts = {
+        'ok': 0,
+        'mismatch': 0,
+        'pending': 0
+    }
+    
+    for domain in domains:
+        if domain.ns_status == 'ok':
+            ns_status_counts['ok'] += 1
+        elif domain.ns_status == 'mismatch':
+            ns_status_counts['mismatch'] += 1
+        else:
+            ns_status_counts['pending'] += 1
+    
     # Get recent logs
     recent_logs = ServerLog.query.order_by(ServerLog.created_at.desc()).limit(10).all()
     
@@ -69,4 +87,6 @@ def dashboard():
                          domains_count=domains_count,
                          domain_groups_count=domain_groups_count,
                          servers=servers,
+                         domains=domains,
+                         ns_status_counts=ns_status_counts,
                          recent_logs=recent_logs)
