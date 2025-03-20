@@ -1,6 +1,7 @@
 import logging
 import time
 import threading
+import asyncio
 from datetime import datetime, timedelta
 
 from app import db
@@ -8,6 +9,7 @@ from models import Server, Domain, DomainGroup
 from modules.server_manager import ServerManager
 from modules.domain_manager import DomainManager
 from modules.monitoring import MonitoringManager
+from modules.telegram_notifier import TelegramNotifier
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +20,7 @@ CHECK_SERVER_INTERVAL = 300  # 5 минут
 CHECK_DOMAIN_NS_INTERVAL = 300  # 5 минут
 COLLECT_SERVER_METRICS_INTERVAL = 300  # 5 минут
 COLLECT_DOMAIN_METRICS_INTERVAL = 300  # 5 минут
+DAILY_REPORT_INTERVAL = 86400  # 24 часа
 
 class BackgroundTasks:
     """
@@ -70,6 +73,15 @@ class BackgroundTasks:
         )
         self.threads.append(domain_metrics_thread)
         domain_metrics_thread.start()
+        
+        # Запускаем задачу отправки ежедневных отчетов
+        daily_report_thread = threading.Thread(
+            target=self._run_task,
+            args=(self._send_daily_report, DAILY_REPORT_INTERVAL, "Daily report"),
+            daemon=True
+        )
+        self.threads.append(daily_report_thread)
+        daily_report_thread.start()
         
         logger.info("Background tasks started")
     
@@ -124,7 +136,7 @@ class BackgroundTasks:
                     server.status = 'active' if is_reachable else 'error'
                     server.last_check = datetime.utcnow()
                     
-                    # Если статус изменился, добавляем запись в лог
+                    # Если статус изменился, добавляем запись в лог и отправляем уведомление
                     if old_status != server.status:
                         from models import ServerLog
                         log = ServerLog(
@@ -134,6 +146,24 @@ class BackgroundTasks:
                             message=f"Server status changed from {old_status} to {server.status}"
                         )
                         db.session.add(log)
+                        
+                        # Отправляем уведомление, если настроен Telegram
+                        if TelegramNotifier.is_configured():
+                            try:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                
+                                try:
+                                    loop.run_until_complete(
+                                        TelegramNotifier.notify_server_status_change(
+                                            server, old_status, server.status
+                                        )
+                                    )
+                                    logger.info(f"Server status notification sent for {server.name}")
+                                finally:
+                                    loop.close()
+                            except Exception as e:
+                                logger.error(f"Error sending server status notification: {str(e)}")
                     
                     db.session.commit()
                     
@@ -151,8 +181,33 @@ class BackgroundTasks:
                 
                 for domain in domains:
                     try:
+                        # Запоминаем текущий статус
+                        old_status = domain.ns_status
+                        
                         # Проверяем NS-записи
                         DomainManager.check_domain_ns_status(domain.id)
+                        
+                        # Получаем обновленный домен
+                        domain = Domain.query.get(domain.id)
+                        
+                        # Если статус изменился, отправляем уведомление
+                        if old_status != domain.ns_status and TelegramNotifier.is_configured():
+                            try:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                
+                                try:
+                                    loop.run_until_complete(
+                                        TelegramNotifier.notify_domain_ns_status_change(
+                                            domain, old_status, domain.ns_status
+                                        )
+                                    )
+                                    logger.info(f"Domain NS status notification sent for {domain.name}")
+                                finally:
+                                    loop.close()
+                            except Exception as e:
+                                logger.error(f"Error sending domain NS status notification: {str(e)}")
+                        
                     except Exception as e:
                         logger.error(f"Error checking NS for domain {domain.name}: {str(e)}")
                 
@@ -224,6 +279,61 @@ class BackgroundTasks:
             except Exception as e:
                 logger.error(f"Error in domain metrics collection task: {str(e)}")
                 db.session.rollback()
+    
+    def _send_daily_report(self):
+        """Отправляет ежедневный отчет о состоянии системы."""
+        from app import app
+        
+        # Проверяем, настроены ли Telegram уведомления
+        if not TelegramNotifier.is_configured():
+            logger.warning("Telegram notifications are not configured, skipping daily report")
+            return
+        
+        logger.info("Sending daily report...")
+        
+        with app.app_context():
+            try:
+                # Запускаем асинхронную задачу для отправки отчета
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    loop.run_until_complete(TelegramNotifier.send_daily_report())
+                    logger.info("Daily report sent successfully")
+                finally:
+                    loop.close()
+                
+            except Exception as e:
+                logger.error(f"Error sending daily report: {str(e)}")
+                
+    def _check_high_load_metrics(self, server, metric):
+        """
+        Проверяет метрики сервера на превышение пороговых значений и отправляет уведомления.
+        
+        Args:
+            server (Server): Объект сервера
+            metric (ServerMetric): Объект метрики
+        """
+        if not TelegramNotifier.is_configured():
+            return
+            
+        # Проверяем превышение пороговых значений
+        has_high_load = (metric.cpu_usage and metric.cpu_usage > 80) or \
+                        (metric.memory_usage and metric.memory_usage > 80) or \
+                        (metric.disk_usage and metric.disk_usage > 85)
+        
+        if has_high_load:
+            # Отправляем уведомление о высокой нагрузке
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                loop.run_until_complete(TelegramNotifier.notify_server_high_load(server, metric))
+                logger.info(f"High load notification sent for server {server.name}")
+            except Exception as e:
+                logger.error(f"Error sending high load notification: {str(e)}")
+            finally:
+                loop.close()
 
 # Создаем глобальный экземпляр менеджера задач
 background_tasks = BackgroundTasks()
