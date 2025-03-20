@@ -231,6 +231,9 @@ class BackgroundTasks:
                         
                         if metric:
                             logger.info(f"Collected metrics for server {server.name}: CPU: {metric.cpu_usage}%, Memory: {metric.memory_usage}%, Disk: {metric.disk_usage}%")
+                            
+                            # Проверяем на высокую нагрузку и отправляем уведомление при необходимости
+                            self._check_high_load_metrics(server, metric)
                         else:
                             logger.warning(f"Failed to collect metrics for server {server.name}")
                             
