@@ -51,12 +51,16 @@ def create():
             flash(f'Domain {name} already exists', 'danger')
             return redirect(url_for('domains.create'))
         
+        # Получаем ожидаемые NS-записи
+        expected_nameservers = request.form.get('expected_nameservers', '')
+        
         # Create domain
         domain = Domain(
             name=name,
             target_ip=target_ip,
             target_port=target_port,
-            ssl_enabled=ssl_enabled
+            ssl_enabled=ssl_enabled,
+            expected_nameservers=expected_nameservers
         )
         
         db.session.add(domain)

@@ -1,0 +1,85 @@
+{% extends "layout.html" %}
+
+{% block title %}Управление NS-записями - {{ domain.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('domains.index') }}">Домены</a></li>
+            <li class="breadcrumb-item active">NS-записи {{ domain.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Управление NS-записями для {{ domain.name }}</h5>
+            <form action="{{ url_for('domains.check_ns', domain_id=domain.id) }}" method="post" class="ms-auto">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="fa fa-refresh"></i> Проверить сейчас
+                </button>
+            </form>
+        </div>
+        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Статус NS-записей</h6>
+                        </div>
+                        <div class="card-body">
+                            {% if domain.ns_status == 'ok' %}
+                                <div class="alert alert-success">
+                                    <i class="fa fa-check-circle"></i> NS-записи соответствуют ожидаемым
+                                </div>
+                            {% elif domain.ns_status == 'mismatch' %}
+                                <div class="alert alert-warning">
+                                    <i class="fa fa-exclamation-triangle"></i> Обнаружены несоответствия NS-записей
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">
+                                    <i class="fa fa-info-circle"></i> Проверка не выполнялась или ожидаемые NS-записи не указаны
+                                </div>
+                            {% endif %}
+
+                            {% if domain.ns_check_date %}
+                                <small class="text-muted">Последняя проверка: {{ domain.ns_check_date.strftime('%d.%m.%Y %H:%M:%S') }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Фактические NS-записи</h6>
+                        </div>
+                        <div class="card-body">
+                            {% if actual_ns %}
+                                <ul class="list-group">
+                                    {% for ns in actual_ns %}
+                                        <li class="list-group-item">{{ ns }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="text-muted">Фактические NS-записи еще не получены</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <form action="{{ url_for('domains.nameservers', domain_id=domain.id) }}" method="post">
+                <div class="mb-3">
+                    <label for="expected_nameservers" class="form-label">Ожидаемые NS-записи</label>
+                    <textarea name="expected_nameservers" id="expected_nameservers" class="form-control" rows="4" placeholder="Введите NS-записи, разделенные запятыми (например: ns1.example.com, ns2.example.com)">{{ domain.expected_nameservers or '' }}</textarea>
+                    <small class="form-text text-muted">Укажите NS-записи, разделенные запятыми. Система будет проверять соответствие фактических записей с ожидаемыми.</small>
+                </div>
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <a href="{{ url_for('domains.index') }}" class="btn btn-secondary me-md-2">Отмена</a>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

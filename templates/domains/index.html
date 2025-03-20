@@ -9,6 +9,11 @@
         <p class="lead">Manage your domains for reverse proxying.</p>
     </div>
     <div class="col-auto">
+        <form action="{{ url_for('domains.check_all_ns') }}" method="post" class="d-inline-block me-2">
+            <button type="submit" class="btn btn-outline-info">
+                <i class="fas fa-sync"></i> Проверить NS всех доменов
+            </button>
+        </form>
         <a href="{{ url_for('domains.create') }}" class="btn btn-primary">
             <i class="fas fa-plus"></i> Add Domain
         </a>
@@ -51,6 +56,7 @@
                         <th>Target IP</th>
                         <th>Target Port</th>
                         <th>SSL Enabled</th>
+                        <th>NS Status</th>
                         <th>Groups</th>
                         <th>Created</th>
                         <th>Actions</th>
@@ -70,6 +76,15 @@
                             {% endif %}
                         </td>
                         <td>
+                            {% if domain.ns_status == 'ok' %}
+                            <span class="badge bg-success">OK</span>
+                            {% elif domain.ns_status == 'mismatch' %}
+                            <span class="badge bg-warning">Несоответствие</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Не проверялись</span>
+                            {% endif %}
+                        </td>
+                        <td>
                             {% for group in domain.groups %}
                             <span class="badge bg-info">{{ group.name }}</span>
                             {% else %}
@@ -81,6 +96,9 @@
                             <div class="btn-group" role="group">
                                 <a href="{{ url_for('domains.edit', domain_id=domain.id) }}" class="btn btn-sm btn-outline-primary" title="Edit Domain">
                                     <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{{ url_for('domains.nameservers', domain_id=domain.id) }}" class="btn btn-sm btn-outline-info" title="Manage NS Records">
+                                    <i class="fas fa-server"></i>
                                 </a>
                                 <button type="button" class="btn btn-sm btn-outline-danger" 
                                         data-bs-toggle="modal" 
@@ -114,7 +132,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="text-center">No domains found. <a href="{{ url_for('domains.create') }}">Add your first domain</a>.</td>
+                        <td colspan="8" class="text-center">No domains found. <a href="{{ url_for('domains.create') }}">Add your first domain</a>.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
