@@ -1,9 +1,10 @@
 import logging
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required
-from models import Server, ServerLog, db
+from models import Server, ServerLog, ServerGroup, db
 from modules.server_manager import ServerManager
 from modules.domain_manager import DomainManager
+from sqlalchemy import func
 
 bp = Blueprint('servers', __name__, url_prefix='/servers')
 logger = logging.getLogger(__name__)
@@ -12,7 +13,17 @@ logger = logging.getLogger(__name__)
 @login_required
 def index():
     """Show list of servers."""
-    servers = Server.query.all()
+    group_id = request.args.get('group_id', type=int)
+    
+    # Получаем все группы серверов
+    groups = ServerGroup.query.order_by(ServerGroup.name).all()
+    
+    # Фильтрация серверов по группе, если указана
+    if group_id:
+        group = ServerGroup.query.get_or_404(group_id)
+        servers = group.servers.all()
+    else:
+        servers = Server.query.all()
     
     # Подсчитаем домены для каждого сервера
     server_domains = {}
@@ -20,7 +31,19 @@ def index():
         domains = DomainManager.get_domains_by_server(server.id)
         server_domains[server.id] = len(domains)
     
-    return render_template('servers/index.html', servers=servers, server_domains=server_domains)
+    # Получаем группы для каждого сервера
+    server_groups = {}
+    for server in servers:
+        server_groups[server.id] = [group.name for group in server.groups]
+    
+    return render_template(
+        'servers/index.html', 
+        servers=servers, 
+        server_domains=server_domains,
+        groups=groups,
+        current_group_id=group_id,
+        server_groups=server_groups
+    )
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -160,3 +183,118 @@ def check_connectivity(server_id):
         flash(f'Connectivity check failed for server {server.name}', 'danger')
     
     return redirect(url_for('servers.index'))
+
+@bp.route('/groups/create', methods=['POST'])
+@login_required
+def create_group():
+    """Create a new server group."""
+    name = request.form.get('name')
+    description = request.form.get('description', '')
+    
+    if not name:
+        flash('Group name is required', 'danger')
+        return redirect(url_for('servers.index'))
+    
+    # Check if group already exists
+    existing_group = ServerGroup.query.filter_by(name=name).first()
+    if existing_group:
+        flash(f'Group with name "{name}" already exists', 'danger')
+        return redirect(url_for('servers.index'))
+    
+    group = ServerGroup(name=name, description=description)
+    db.session.add(group)
+    
+    # Add selected servers to the group if any
+    server_ids = request.form.getlist('servers')
+    if server_ids:
+        servers = Server.query.filter(Server.id.in_(server_ids)).all()
+        for server in servers:
+            group.servers.append(server)
+    
+    db.session.commit()
+    flash(f'Server group "{name}" created successfully', 'success')
+    return redirect(url_for('servers.index'))
+
+@bp.route('/groups/<int:group_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_group(group_id):
+    """Edit a server group."""
+    group = ServerGroup.query.get_or_404(group_id)
+    
+    if request.method == 'POST':
+        name = request.form.get('name')
+        description = request.form.get('description', '')
+        
+        if not name:
+            flash('Group name is required', 'danger')
+            return redirect(url_for('servers.edit_group', group_id=group_id))
+        
+        # Check if name is changed and new name already exists
+        if name != group.name:
+            existing_group = ServerGroup.query.filter_by(name=name).first()
+            if existing_group:
+                flash(f'Group with name "{name}" already exists', 'danger')
+                return redirect(url_for('servers.edit_group', group_id=group_id))
+        
+        group.name = name
+        group.description = description
+        
+        # Update servers in the group
+        server_ids = request.form.getlist('servers')
+        
+        # Remove all servers from the group
+        group.servers = []
+        
+        # Add selected servers
+        if server_ids:
+            servers = Server.query.filter(Server.id.in_(server_ids)).all()
+            for server in servers:
+                group.servers.append(server)
+        
+        db.session.commit()
+        flash(f'Server group "{name}" updated successfully', 'success')
+        return redirect(url_for('servers.index'))
+    
+    # Get all servers for selection
+    servers = Server.query.all()
+    return render_template('servers/edit_group.html', group=group, servers=servers)
+
+@bp.route('/groups/<int:group_id>/delete', methods=['POST'])
+@login_required
+def delete_group(group_id):
+    """Delete a server group."""
+    group = ServerGroup.query.get_or_404(group_id)
+    name = group.name
+    
+    # Remove group (the many-to-many relationship will be automatically handled)
+    db.session.delete(group)
+    db.session.commit()
+    
+    flash(f'Server group "{name}" deleted successfully', 'success')
+    return redirect(url_for('servers.index'))
+
+@bp.route('/<int:server_id>/groups', methods=['GET', 'POST'])
+@login_required
+def manage_server_groups(server_id):
+    """Manage groups for a specific server."""
+    server = Server.query.get_or_404(server_id)
+    
+    if request.method == 'POST':
+        # Get selected groups from form
+        group_ids = request.form.getlist('groups')
+        
+        # Clear current groups
+        server.groups = []
+        
+        # Add selected groups
+        if group_ids:
+            groups = ServerGroup.query.filter(ServerGroup.id.in_(group_ids)).all()
+            server.groups = groups
+        
+        db.session.commit()
+        flash(f'Groups for server "{server.name}" updated successfully', 'success')
+        return redirect(url_for('servers.index'))
+    
+    # Get all available groups
+    groups = ServerGroup.query.all()
+    return render_template('servers/manage_groups.html', server=server, groups=groups)
