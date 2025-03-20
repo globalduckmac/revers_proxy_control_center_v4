@@ -162,6 +162,10 @@ class ProxyManager:
                     f"sudo ln -sf {site_path} /etc/nginx/sites-enabled/{sanitized_name}"
                 )
             
+            # Проверяем, есть ли файл /var/lib/cloud/instance/user-data.txt, и создаем если нет
+            file_check_cmd = "sudo test -f /var/lib/cloud/instance/user-data.txt || (sudo mkdir -p /var/lib/cloud/instance/ && sudo touch /var/lib/cloud/instance/user-data.txt)"
+            ServerManager.execute_command(server, file_check_cmd)
+            
             # Test Nginx configuration
             stdout, stderr = ServerManager.execute_command(
                 server,

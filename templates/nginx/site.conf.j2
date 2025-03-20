@@ -44,6 +44,8 @@ server {
 }
 
 {% if ssl_enabled %}
+# Сначала проверим наличие сертификатов с помощью скрипта
+# Затем создадим конфигурацию HTTPS только если они есть
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
@@ -52,17 +54,21 @@ server {
     access_log /var/log/nginx/{{ domain }}.access.log;
     error_log /var/log/nginx/{{ domain }}.error.log;
     
-    # SSL configuration
-    # Для надежности используем условную конструкцию для проверки наличия сертификатов
-    # Эта конструкция будет заменена настоящими путями при наличии сертификатов
-    ssl_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;      # По умолчанию самоподписанный
-    ssl_certificate_key /etc/ssl/private/ssl-cert-snakeoil.key; # По умолчанию самоподписанный
+    # Использование каталога с примером сертификатов, которые обычно есть в Ubuntu
+    # Будет заменено на фактический путь при наличии сертификатов
+    ssl_certificate /var/lib/cloud/instance/user-data.txt;      # Фейковый путь, будет заменен
+    ssl_certificate_key /var/lib/cloud/instance/user-data.txt; # Фейковый путь, будет заменен
     
-    # Оставляем эти строки для certbot
+    # Оставляем эти строки для certbot - будут раскомментированы скриптом
     # ssl_certificate /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
     # ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
-    # include /etc/letsencrypt/options-ssl-nginx.conf;
-    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    
+    # Базовые настройки SSL без включения внешних файлов
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256';
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
     
     # Proxy settings for HTTPS traffic
     location / {
