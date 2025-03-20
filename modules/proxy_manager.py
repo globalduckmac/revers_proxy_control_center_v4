@@ -5,6 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 from models import Server, Domain, DomainGroup, ProxyConfig, ServerLog, db
 from modules.server_manager import ServerManager
+from modules.domain_manager import DomainManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +44,24 @@ class ProxyManager:
             main_template = self.jinja_env.get_template('nginx.conf.j2')
             site_template = self.jinja_env.get_template('site.conf.j2')
             
-            # Get all domain groups for the server
-            domain_groups = DomainGroup.query.filter_by(server_id=server.id).all()
+            # Get domains for the server using DomainManager
+            domains = DomainManager.get_domains_by_server(server.id)
             
-            # Collect all domains from these groups
-            all_domains = []
-            for group in domain_groups:
-                all_domains.extend(group.domains.all())
-            
-            # Remove duplicates
-            domains = list({domain.id: domain for domain in all_domains}.values())
+            # Проверяем, есть ли домены, и логируем для отладки
+            if not domains:
+                logger.warning(f"No domains found for server {server.id} ({server.name})")
+                
+                # Для дополнительной диагностики: проверим, есть ли группы доменов
+                domain_groups = DomainGroup.query.filter_by(server_id=server.id).all()
+                if not domain_groups:
+                    logger.warning(f"No domain groups found for server {server.id}")
+                else:
+                    logger.info(f"Found {len(domain_groups)} domain groups for server {server.id}")
+                    for group in domain_groups:
+                        domain_count = group.domains.count()
+                        logger.info(f"Group {group.id} ({group.name}) has {domain_count} domains")
+            else:
+                logger.info(f"Found {len(domains)} domains for server {server.id}")
             
             # Generate main Nginx config
             main_config = main_template.render(
