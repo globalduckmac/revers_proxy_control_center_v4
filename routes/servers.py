@@ -339,3 +339,39 @@ def manage_server_groups(server_id):
     # Get all available groups
     groups = ServerGroup.query.all()
     return render_template('servers/manage_groups.html', server=server, groups=groups)
+    
+    
+@bp.route('/check_passwords')
+@login_required
+def check_passwords():
+    """Проверка шифрования паролей серверов"""
+    servers = Server.query.order_by(Server.name).all()
+    
+    # Фильтруем серверы по типу аутентификации
+    servers_with_passwords = [s for s in servers if s.ssh_password_hash and not s.ssh_key]
+    servers_with_keys = [s for s in servers if s.ssh_key]
+    servers_with_encrypted = [s for s in servers if s.ssh_encrypted_password]
+    
+    errors = []
+    if servers_with_passwords and not servers_with_encrypted:
+        errors.append("Обнаружены серверы с паролями, но без зашифрованных версий для автоматической проверки")
+    
+    return render_template('servers/check_password.html',
+                           servers=servers,
+                           servers_with_passwords=servers_with_passwords,
+                           servers_with_keys=servers_with_keys,
+                           servers_with_encrypted=servers_with_encrypted,
+                           errors=errors)
+
+
+@bp.route('/migrate_passwords')
+@login_required
+def migrate_passwords():
+    """Запускает миграцию паролей в зашифрованный формат"""
+    from add_encrypted_password import encrypt_existing_passwords
+    
+    # Запускаем миграцию с тестовым паролем (в продакшн-версии нужно запрашивать настоящие пароли)
+    encrypt_existing_passwords()
+    
+    flash('Миграция паролей выполнена успешно. В тестовой версии для всех серверов установлен пароль "test123"', 'success')
+    return redirect(url_for('servers.check_passwords'))
