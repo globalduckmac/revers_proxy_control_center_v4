@@ -189,20 +189,23 @@ class BackgroundTasks:
             
             for server in servers:
                 try:
-                    # Проверяем соединение
+                    # Запоминаем текущий статус перед проверкой
+                    old_status = server.status
+                    
+                    # Выполняем проверку соединения
                     is_reachable = ServerManager.check_connectivity(server)
                     
-                    # Обновляем статус
-                    old_status = server.status
+                    # Обновляем статус и время последней проверки
                     server.status = 'active' if is_reachable else 'error'
                     server.last_check = datetime.utcnow()
                     
                     # Если статус изменился, добавляем запись в лог и отправляем уведомление
                     if old_status != server.status:
+                        # Добавляем дополнительную запись в лог об изменении статуса
                         from models import ServerLog
                         log = ServerLog(
                             server_id=server.id,
-                            action='connectivity_check',
+                            action='status_change',
                             status='success' if is_reachable else 'error',
                             message=f"Server status changed from {old_status} to {server.status}"
                         )
@@ -211,6 +214,8 @@ class BackgroundTasks:
                         # Отправляем уведомление, если настроен Telegram
                         if TelegramNotifier.is_configured():
                             try:
+                                # Используем новый event loop для асинхронной отправки уведомления
+                                logger.info(f"Sending status change notification for server {server.name}")
                                 loop = asyncio.new_event_loop()
                                 asyncio.set_event_loop(loop)
                                 
@@ -226,6 +231,7 @@ class BackgroundTasks:
                             except Exception as e:
                                 logger.error(f"Error sending server status notification: {str(e)}")
                     
+                    # Сохраняем все изменения в базе данных
                     db.session.commit()
                     
                 except Exception as e:

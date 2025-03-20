@@ -50,16 +50,28 @@ class TelegramNotifier:
             logger.warning("Telegram notifications are not configured")
             return False
         
+        # Логирование попытки отправки с частичной информацией
+        token_preview = TELEGRAM_BOT_TOKEN[:5] + "..." + TELEGRAM_BOT_TOKEN[-5:] if TELEGRAM_BOT_TOKEN else "None"
+        chat_id_str = str(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else "None"
+        
+        logger.info(f"Attempting to send Telegram message. Token: {token_preview}, Chat ID: {chat_id_str}")
+        logger.info(f"Message length: {len(text)} chars, parse_mode: {parse_mode}")
+        
         try:
             bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
-            await bot.send_message(
+            result = await bot.send_message(
                 chat_id=TELEGRAM_CHAT_ID,
                 text=text,
                 parse_mode=parse_mode
             )
+            logger.info(f"Telegram message sent successfully. Message ID: {result.message_id}")
             return True
         except TelegramError as e:
             logger.error(f"Failed to send Telegram notification: {str(e)}")
+            logger.error(f"Chat ID type: {type(TELEGRAM_CHAT_ID)}, Token length: {len(TELEGRAM_BOT_TOKEN) if TELEGRAM_BOT_TOKEN else 0}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending Telegram message: {str(e)}")
             return False
     
     @staticmethod

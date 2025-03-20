@@ -247,6 +247,57 @@ def send_daily_report():
     # Перенаправляем обратно на страницу мониторинга
     return redirect(url_for('monitoring.index'))
 
+@bp.route('/test-telegram', methods=['GET', 'POST'])
+@login_required
+def test_telegram():
+    """Отправляет тестовое сообщение в Telegram для проверки работы уведомлений."""
+    import os
+    
+    # Проверяем, настроены ли Telegram уведомления
+    if not TelegramNotifier.is_configured():
+        flash('Telegram notifications are not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.', 'danger')
+        return redirect(url_for('monitoring.index'))
+    
+    try:
+        # Логируем информацию о конфигурации
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', 'Not set')
+        chat_id = os.environ.get('TELEGRAM_CHAT_ID', 'Not set')
+        
+        token_preview = bot_token[:5] + "..." + bot_token[-5:] if len(bot_token) > 10 else bot_token
+        logger.info(f"Telegram test: Token: {token_preview}, Chat ID: {chat_id}")
+        
+        # Запускаем асинхронную задачу для отправки тестового сообщения
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            # Создаем тестовое сообщение
+            test_message = f"""
+🧪 <b>Тестовое уведомление</b>
+
+Это сообщение отправлено вручную для проверки работы системы уведомлений Telegram.
+Если вы видите это сообщение, значит всё настроено правильно!
+
+<b>Информация о системе:</b>
+• Время сервера: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
+• Сервера всего: {Server.query.count()}
+• Активных серверов: {Server.query.filter_by(status='active').count()}
+• Доменов в системе: {Domain.query.count()}
+
+<i>Уведомление отправлено администратором через веб-интерфейс.</i>
+"""
+            
+            loop.run_until_complete(TelegramNotifier.send_message(test_message))
+            flash('Test message sent successfully to Telegram', 'success')
+        finally:
+            loop.close()
+            
+    except Exception as e:
+        flash(f'Error sending test message: {str(e)}', 'danger')
+        logger.error(f"Error in test_telegram route: {str(e)}")
+    
+    return redirect(url_for('monitoring.index'))
+
 @bp.route('/activity-logs', methods=['GET'])
 @login_required
 def activity_logs():

@@ -73,11 +73,10 @@ class ServerManager:
             # Close connection
             client.close()
             
-            # Update server status and last check time
-            server.status = 'active'
-            server.last_check = datetime.utcnow()
+            # НЕ обновляем статус сервера здесь, это будет делать вызывающий код
+            # для правильного формирования уведомлений
             
-            # Log success
+            # Логируем успешность проверки, но не делаем commit, так как статус еще не обновлен
             log = ServerLog(
                 server_id=server.id,
                 action='connectivity_check',
@@ -86,17 +85,16 @@ class ServerManager:
             )
             
             db.session.add(log)
-            db.session.commit()
+            # НЕ делаем commit здесь
             
             logger.info(f"Connectivity check successful for server {server.name}")
             return True
             
         except (paramiko.SSHException, socket.error, Exception) as e:
-            # Update server status
-            server.status = 'error'
-            server.last_check = datetime.utcnow()
+            # НЕ обновляем статус сервера здесь, это будет делать вызывающий код
+            # для правильного формирования уведомлений
             
-            # Log error
+            # Логируем ошибку проверки, но не делаем commit, так как статус еще не обновлен
             log = ServerLog(
                 server_id=server.id,
                 action='connectivity_check',
@@ -105,7 +103,7 @@ class ServerManager:
             )
             
             db.session.add(log)
-            db.session.commit()
+            # НЕ делаем commit здесь
             
             logger.error(f"Connectivity check failed for server {server.name}: {str(e)}")
             return False
