@@ -226,6 +226,11 @@
                                 <h5 class="mb-1">Telegram Notifications</h5>
                                 {% if telegram_configured %}
                                 <p class="mb-0 text-success"><i class="fas fa-check-circle me-1"></i> Connected and active</p>
+                                <form action="{{ url_for('monitoring.send_daily_report') }}" method="post" class="mt-2">
+                                    <button type="submit" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-paper-plane me-1"></i> Send Telegram Report
+                                    </button>
+                                </form>
                                 {% else %}
                                 <p class="mb-0 text-danger"><i class="fas fa-times-circle me-1"></i> Not configured</p>
                                 {% endif %}
