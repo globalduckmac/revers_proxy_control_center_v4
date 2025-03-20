@@ -4,9 +4,10 @@ import threading
 from datetime import datetime, timedelta
 
 from app import db
-from models import Server, Domain
+from models import Server, Domain, DomainGroup
 from modules.server_manager import ServerManager
 from modules.domain_manager import DomainManager
+from modules.monitoring import MonitoringManager
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 # Интервалы выполнения задач (в секундах)
 CHECK_SERVER_INTERVAL = 300  # 5 минут
 CHECK_DOMAIN_NS_INTERVAL = 300  # 5 минут
+COLLECT_SERVER_METRICS_INTERVAL = 300  # 5 минут
+COLLECT_DOMAIN_METRICS_INTERVAL = 300  # 5 минут
 
 class BackgroundTasks:
     """
@@ -49,6 +52,24 @@ class BackgroundTasks:
         )
         self.threads.append(domain_ns_check_thread)
         domain_ns_check_thread.start()
+        
+        # Запускаем задачу сбора метрик серверов
+        server_metrics_thread = threading.Thread(
+            target=self._run_task,
+            args=(self._collect_server_metrics, COLLECT_SERVER_METRICS_INTERVAL, "Server metrics collection"),
+            daemon=True
+        )
+        self.threads.append(server_metrics_thread)
+        server_metrics_thread.start()
+        
+        # Запускаем задачу сбора метрик доменов
+        domain_metrics_thread = threading.Thread(
+            target=self._run_task,
+            args=(self._collect_domain_metrics, COLLECT_DOMAIN_METRICS_INTERVAL, "Domain metrics collection"),
+            daemon=True
+        )
+        self.threads.append(domain_metrics_thread)
+        domain_metrics_thread.start()
         
         logger.info("Background tasks started")
     
@@ -137,6 +158,71 @@ class BackgroundTasks:
                 
             except Exception as e:
                 logger.error(f"Error in domain NS check task: {str(e)}")
+                db.session.rollback()
+    
+    def _collect_server_metrics(self):
+        """Собирает метрики со всех активных серверов."""
+        from app import app
+        with app.app_context():
+            try:
+                # Получаем все активные сервера
+                servers = Server.query.filter_by(status='active').all()
+                
+                for server in servers:
+                    try:
+                        # Собираем и сохраняем метрики сервера
+                        logger.info(f"Collecting metrics for server {server.name}")
+                        metric = MonitoringManager.collect_server_metrics(server)
+                        
+                        if metric:
+                            logger.info(f"Collected metrics for server {server.name}: CPU: {metric.cpu_usage}%, Memory: {metric.memory_usage}%, Disk: {metric.disk_usage}%")
+                        else:
+                            logger.warning(f"Failed to collect metrics for server {server.name}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error collecting metrics for server {server.name}: {str(e)}")
+                
+            except Exception as e:
+                logger.error(f"Error in server metrics collection task: {str(e)}")
+                db.session.rollback()
+    
+    def _collect_domain_metrics(self):
+        """Собирает метрики по всем доменам, связанным с активными серверами."""
+        from app import app
+        with app.app_context():
+            try:
+                # Получаем все активные сервера
+                servers = Server.query.filter_by(status='active').all()
+                
+                for server in servers:
+                    try:
+                        # Получаем все домены, связанные с этим сервером через группы
+                        domains = []
+                        for group in server.domain_groups:
+                            domains.extend(group.domains.all())
+                        
+                        # Удаляем дубликаты
+                        domains = list(set(domains))
+                        
+                        for domain in domains:
+                            try:
+                                # Собираем и сохраняем метрики домена
+                                logger.info(f"Collecting metrics for domain {domain.name}")
+                                metric = MonitoringManager.collect_domain_metrics(server, domain)
+                                
+                                if metric:
+                                    logger.info(f"Collected metrics for domain {domain.name}: Requests: {metric.requests_count}, Bandwidth: {metric.bandwidth_used/1024/1024:.2f}MB")
+                                else:
+                                    logger.warning(f"Failed to collect metrics for domain {domain.name}")
+                                    
+                            except Exception as e:
+                                logger.error(f"Error collecting metrics for domain {domain.name}: {str(e)}")
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing server {server.name} for domain metrics: {str(e)}")
+                
+            except Exception as e:
+                logger.error(f"Error in domain metrics collection task: {str(e)}")
                 db.session.rollback()
 
 # Создаем глобальный экземпляр менеджера задач
