@@ -194,8 +194,13 @@ class MonitoringManager:
                 total_lines = int(stdout.strip()) if stdout.strip().isdigit() else 0
                 
                 if total_lines > 0:
-                    # Есть какие-то логи, но не за последний час
-                    logger.info(f"No requests in the last hour for {domain.name}, but log has {total_lines} entries")
+                    # Есть какие-то логи, но не за последний час. Попробуем собрать все запросы, а не только за последний час
+                    logger.info(f"No requests with '{since_str}' for {domain.name}, but log has {total_lines} entries. Trying to collect all metrics.")
+                    stdout, _ = ServerManager.execute_command(
+                        server,
+                        f"wc -l {log_path}"
+                    )
+                    requests_count = int(stdout.strip().split()[0]) if stdout.strip() else 0
                 else:
                     logger.info(f"Log file exists but is empty for {domain.name}")
                 
@@ -223,11 +228,28 @@ class MonitoringManager:
             )
             logger.info(f"Nginx log format sample for {domain.name}: {stdout.strip()}")
 
-            # Get status code counts - попробуем несколько способов
-            stdout, _ = ServerManager.execute_command(
+            # Get status code counts - используем различные методы извлечения кодов состояния
+            # По умолчанию пытаемся извлечь из формата, где статус-код находится в 9-м поле (обычный формат Nginx)
+            stdout, stderr = ServerManager.execute_command(
                 server,
-                f"grep '{since_str}' {log_path} | grep -o 'HTTP/[0-9.]\\+ [0-9]\\+' | cut -d ' ' -f 2 | sort | uniq -c"
+                f"cat {log_path} | awk '{{print $9}}' | grep -E '^[0-9]+$' | sort | uniq -c"
             )
+            
+            # Если не нашли коды состояния, попробуем альтернативный способ
+            if not stdout.strip():
+                logger.info(f"Trying alternative status code extraction for {domain.name}")
+                stdout, stderr = ServerManager.execute_command(
+                    server,
+                    f"cat {log_path} | grep -o 'HTTP/[0-9.]\\+ [0-9]\\+' | cut -d ' ' -f 2 | sort | uniq -c"
+                )
+                
+            # Если и это не сработало, проверим другие поля
+            if not stdout.strip():
+                logger.info(f"Trying 8th field for status code extraction for {domain.name}")
+                stdout, stderr = ServerManager.execute_command(
+                    server,
+                    f"cat {log_path} | awk '{{print $8}}' | grep -E '^[0-9]+$' | sort | uniq -c"
+                )
             
             # Parse status code counts
             status_2xx_count = 0
