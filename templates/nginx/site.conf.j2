@@ -43,9 +43,8 @@ server {
     }
 }
 
-{% if ssl_enabled %}
-# Сначала проверим наличие сертификатов с помощью скрипта
-# Затем создадим конфигурацию HTTPS только если они есть
+{% if ssl_enabled and ssl_available %}
+# SSL включен и сертификаты доступны
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
@@ -54,14 +53,9 @@ server {
     access_log /var/log/nginx/{{ domain }}.access.log;
     error_log /var/log/nginx/{{ domain }}.error.log;
     
-    # Использование каталога с примером сертификатов, которые обычно есть в Ubuntu
-    # Будет заменено на фактический путь при наличии сертификатов
-    ssl_certificate /var/lib/cloud/instance/user-data.txt;      # Фейковый путь, будет заменен
-    ssl_certificate_key /var/lib/cloud/instance/user-data.txt; # Фейковый путь, будет заменен
-    
-    # Оставляем эти строки для certbot - будут раскомментированы скриптом
-    # ssl_certificate /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
+    # Пути к настоящим сертификатам
+    ssl_certificate /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
     
     # Базовые настройки SSL без включения внешних файлов
     ssl_protocols TLSv1.2 TLSv1.3;

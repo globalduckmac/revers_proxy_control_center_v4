@@ -27,6 +27,34 @@ class ProxyManager:
         # Add datetime function for templates
         self.jinja_env.globals['now'] = datetime.utcnow
     
+    def check_ssl_certificate_exists(self, server, domain_name):
+        """
+        Проверяет наличие SSL-сертификатов для домена на сервере
+        
+        Args:
+            server: Server model instance
+            domain_name: Имя домена для проверки
+            
+        Returns:
+            bool: True если сертификаты существуют и доступны, False в противном случае
+        """
+        try:
+            # Проверяем наличие путей к сертификатам - обратите внимание, что это только проверка наличия, 
+            # но не валидности самих сертификатов
+            cert_check_cmd = f"sudo test -f /etc/letsencrypt/live/{domain_name}/fullchain.pem && sudo test -f /etc/letsencrypt/live/{domain_name}/privkey.pem && echo 'SSL_EXISTS' || echo 'SSL_NOT_FOUND'"
+            result, _ = ServerManager.execute_command(server, cert_check_cmd)
+            
+            if "SSL_EXISTS" in result:
+                logger.info(f"SSL certificates found for domain {domain_name}")
+                return True
+            else:
+                logger.warning(f"SSL certificates not found for domain {domain_name}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error checking SSL certificates for {domain_name}: {str(e)}")
+            return False
+    
     def generate_nginx_config(self, server):
         """
         Generate Nginx configuration for a server based on its domain groups.
@@ -72,11 +100,17 @@ class ProxyManager:
             # Generate site configs for each domain
             site_configs = {}
             for domain in domains:
+                # Проверяем наличие SSL сертификатов для доменов с включенным SSL
+                ssl_available = False
+                if domain.ssl_enabled:
+                    ssl_available = self.check_ssl_certificate_exists(server, domain.name)
+                
                 site_config = site_template.render(
                     domain=domain.name,
                     target_ip=domain.target_ip,
                     target_port=domain.target_port,
-                    ssl_enabled=domain.ssl_enabled
+                    ssl_enabled=domain.ssl_enabled,
+                    ssl_available=ssl_available
                 )
                 site_configs[domain.name] = site_config
             
@@ -162,9 +196,11 @@ class ProxyManager:
                     f"sudo ln -sf {site_path} /etc/nginx/sites-enabled/{sanitized_name}"
                 )
             
-            # Проверяем, есть ли файл /var/lib/cloud/instance/user-data.txt, и создаем если нет
-            file_check_cmd = "sudo test -f /var/lib/cloud/instance/user-data.txt || (sudo mkdir -p /var/lib/cloud/instance/ && sudo touch /var/lib/cloud/instance/user-data.txt)"
-            ServerManager.execute_command(server, file_check_cmd)
+            # Убедимся, что все каталоги для сертификатов существуют
+            ServerManager.execute_command(
+                server,
+                "sudo mkdir -p /etc/letsencrypt/live/ /etc/ssl/certs/ /etc/ssl/private/"
+            )
             
             # Test Nginx configuration
             stdout, stderr = ServerManager.execute_command(
