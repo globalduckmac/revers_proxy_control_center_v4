@@ -40,8 +40,8 @@
                             {% endif %}
                         </td>
                         <td>
-                            {{ group.domains|length }}
-                            {% if group.domains|length > 0 %}
+                            {{ group.domains.count() }}
+                            {% if group.domains.count() > 0 %}
                             <button class="btn btn-sm btn-outline-info ms-2" type="button" data-bs-toggle="collapse" 
                                     data-bs-target="#domainList{{ group.id }}" aria-expanded="false">
                                 View
