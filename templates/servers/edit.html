@@ -74,7 +74,7 @@
                 </div>
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="auth_method" id="auth_password" value="password"
-                           {% if server.ssh_password %}checked{% endif %}>
+                           {% if server.ssh_password_hash %}checked{% endif %}>
                     <label class="form-check-label" for="auth_password">
                         Password
                     </label>
@@ -90,11 +90,12 @@
                 </div>
             </div>
             
-            <div class="mb-3" id="ssh_password_section" {% if not server.ssh_password %}style="display: none;"{% endif %}>
+            <div class="mb-3" id="ssh_password_section" {% if not server.ssh_password_hash %}style="display: none;"{% endif %}>
                 <label for="ssh_password" class="form-label">SSH Password</label>
                 <input type="password" class="form-control" id="ssh_password" name="ssh_password">
                 <div class="form-text">
-                    Password for SSH authentication. Leave blank to keep existing password.
+                    Password for SSH authentication. This will be securely hashed in the database.
+                    Leave blank to keep existing password.
                 </div>
             </div>
             
