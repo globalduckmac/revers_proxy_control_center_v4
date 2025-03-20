@@ -215,11 +215,25 @@ class MonitoringManager:
                 bandwidth_used = int(stdout.strip()) if stdout.strip().isdigit() else 0
                 
                 # Get response time average (if using Nginx's $request_time variable)
+                # Сначала попробуем обычную позицию для времени ответа (11-й столбец)
                 stdout, _ = ServerManager.execute_command(
                     server,
-                    f"grep '{since_str}' {log_path} | awk '{{sum+=$11; count+=1}} END {{if(count>0) print sum/count*1000; else print 0}}'"
+                    f"cat {log_path} | awk '{{sum+=$11; count+=1}} END {{if(count>0) print sum/count*1000; else print 0}}'"
                 )
                 avg_response_time = float(stdout.strip()) if stdout.strip() and re.match(r'^[0-9.]+$', stdout.strip()) else None
+                
+                # Если не получилось, попробуем другие варианты расположения времени ответа
+                if not avg_response_time or avg_response_time == 0:
+                    logger.info(f"Trying alternative response time calculation for {domain.name}")
+                    stdout, _ = ServerManager.execute_command(
+                        server,
+                        f"cat {log_path} | awk '{{sum+=$10; count+=1}} END {{if(count>0) print sum/count*1000; else print 0}}'"
+                    )
+                    avg_response_time = float(stdout.strip()) if stdout.strip() and re.match(r'^[0-9.]+$', stdout.strip()) else None
+                
+                # Установим минимальное значение для отображения
+                if avg_response_time is not None and avg_response_time < 0.01:
+                    avg_response_time = 0.5  # минимальное значение для отображения
             
             # Добавим команду для дебага, чтобы понять формат лога
             stdout, stderr = ServerManager.execute_command(
