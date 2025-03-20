@@ -5,7 +5,7 @@ import telegram
 from telegram.error import TelegramError
 from sqlalchemy import func, desc, and_
 from app import db
-from models import Server, Domain, DomainGroup, ServerMetric, DomainMetric, ServerLog
+from models import Server, Domain, DomainGroup, ServerMetric, DomainMetric, ServerLog, ServerGroup
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -73,11 +73,31 @@ class TelegramNotifier:
             new_status (str): Новый статус
         """
         emoji = "🔴" if new_status == 'error' else "🟢"
+        
+        # Получаем группы, в которые входит сервер
+        groups_text = ""
+        if server.groups:
+            groups_text = "<b>Группы сервера:</b>\n"
+            for group in server.groups:
+                desc = f" - {group.description}" if group.description else ""
+                groups_text += f"• <b>{group.name}</b>{desc}\n"
+                
+                # Получаем статус других серверов в этой группе
+                other_servers = group.servers.filter(Server.id != server.id).all()
+                if other_servers:
+                    active_count = sum(1 for s in other_servers if s.status == 'active')
+                    error_count = len(other_servers) - active_count
+                    groups_text += f"  ✅ {active_count} активных, ❌ {error_count} недоступных серверов в группе\n"
+        
         message = f"{emoji} <b>Изменение статуса сервера</b>\n\n" \
                   f"Сервер: <b>{server.name}</b>\n" \
                   f"IP: {server.ip_address}\n" \
-                  f"Статус: {old_status} → <b>{new_status}</b>\n" \
-                  f"Время: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+                  f"Статус: {old_status} → <b>{new_status}</b>\n"
+                  
+        if groups_text:
+            message += f"\n{groups_text}"
+            
+        message += f"Время: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
         
         await TelegramNotifier.send_message(message)
     
@@ -94,18 +114,31 @@ class TelegramNotifier:
         emoji = "🔴" if new_status == 'mismatch' else "🟢"
         
         # Получаем группы, в которые входит домен
-        groups_text = ""
-        for group in domain.groups:
-            server_name = group.server.name if group.server else "Нет сервера"
-            groups_text += f"- {group.name} (сервер: {server_name})\n"
+        groups_text = "<b>Группы домена:</b>\n"
+        domain_groups = list(domain.groups)
         
-        if not groups_text:
-            groups_text = "Домен не входит ни в одну группу"
+        if not domain_groups:
+            groups_text += "Домен не входит ни в одну группу\n"
+        else:
+            for group in domain_groups:
+                server_name = group.server.name if group.server else "Нет сервера"
+                groups_text += f"• <b>{group.name}</b> (сервер: {server_name})\n"
+                
+                # Добавляем информацию о других доменах в группе
+                other_domains = group.domains.filter(Domain.id != domain.id).all()
+                if other_domains:
+                    ok_count = sum(1 for d in other_domains if d.ns_status == 'ok')
+                    error_count = sum(1 for d in other_domains if d.ns_status == 'mismatch')
+                    pending_count = len(other_domains) - ok_count - error_count
+                    
+                    groups_text += f"  ✅ {ok_count} корректных, " \
+                                   f"❌ {error_count} с ошибками, " \
+                                   f"⏳ {pending_count} ожидающих доменов в группе\n"
         
         message = f"{emoji} <b>Изменение статуса NS-записей домена</b>\n\n" \
                   f"Домен: <b>{domain.name}</b>\n" \
-                  f"Статус: {old_status} → <b>{new_status}</b>\n" \
-                  f"Группы:\n{groups_text}\n" \
+                  f"Статус: {old_status} → <b>{new_status}</b>\n\n" \
+                  f"{groups_text}\n" \
                   f"Время: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
         
         await TelegramNotifier.send_message(message)
@@ -133,11 +166,30 @@ class TelegramNotifier:
         if not alerts:
             return  # Нет превышений порогов
         
+        # Получаем группы, в которые входит сервер
+        groups_text = ""
+        if server.groups:
+            groups_text = "<b>Группы сервера:</b>\n"
+            for group in server.groups:
+                desc = f" - {group.description}" if group.description else ""
+                groups_text += f"• <b>{group.name}</b>{desc}\n"
+                
+                # Получаем статус других серверов в этой группе
+                other_servers = group.servers.filter(Server.id != server.id).all()
+                if other_servers:
+                    active_count = sum(1 for s in other_servers if s.status == 'active')
+                    error_count = len(other_servers) - active_count
+                    groups_text += f"  ✅ {active_count} активных, ❌ {error_count} недоступных серверов в группе\n"
+        
         message = f"⚠️ <b>Высокая нагрузка на сервер</b>\n\n" \
                   f"Сервер: <b>{server.name}</b>\n" \
                   f"IP: {server.ip_address}\n" \
-                  f"Предупреждения:\n- " + "\n- ".join(alerts) + "\n\n" \
-                  f"Время: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+                  f"Предупреждения:\n- " + "\n- ".join(alerts) + "\n"
+                  
+        if groups_text:
+            message += f"\n{groups_text}"
+            
+        message += f"\nВремя: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
         
         await TelegramNotifier.send_message(message)
     
@@ -161,6 +213,27 @@ class TelegramNotifier:
         ok_domains = sum(1 for d in domains if d.ns_status == 'ok')
         mismatch_domains = sum(1 for d in domains if d.ns_status == 'mismatch')
         pending_domains = total_domains - ok_domains - mismatch_domains
+        
+        # Данные по группам серверов
+        server_groups = ServerGroup.query.all()
+        server_groups_data = []
+        
+        for group in server_groups:
+            servers_in_group = group.servers.all()
+            total_in_group = len(servers_in_group)
+            
+            if total_in_group == 0:
+                continue  # Пропускаем пустые группы
+            
+            active_in_group = sum(1 for s in servers_in_group if s.status == 'active')
+            
+            server_groups_data.append({
+                'name': group.name,
+                'description': group.description,
+                'total': total_in_group,
+                'active': active_in_group,
+                'inactive': total_in_group - active_in_group
+            })
         
         # Данные по группам доменов
         domain_groups = DomainGroup.query.all()
@@ -219,6 +292,7 @@ class TelegramNotifier:
             }
         
         # Статистика по доменам с наибольшим трафиком
+        from sqlalchemy import desc
         top_domains_by_traffic = db.session.query(
             Domain.name,
             func.sum(DomainMetric.bandwidth_used).label('total_bandwidth'),
@@ -250,7 +324,17 @@ class TelegramNotifier:
             report += f"⏳ Ожидают проверки: {pending_domains}\n"
         report += "\n"
         
-        # Статистика по группам
+        # Статистика по группам серверов
+        if server_groups_data:
+            report += "<b>Статистика по группам серверов:</b>\n"
+            for group in server_groups_data:
+                desc = f" - {group['description']}" if group['description'] else ""
+                report += f"• <b>{group['name']}</b>{desc}\n" \
+                        f"  ✅ {group['active']}/{group['total']} активны\n" \
+                        f"  ❌ {group['inactive']}/{group['total']} недоступны\n"
+            report += "\n"
+        
+        # Статистика по группам доменов
         if groups_data:
             report += "<b>Статистика по группам доменов:</b>\n"
             for group in groups_data:
