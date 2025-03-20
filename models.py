@@ -31,7 +31,7 @@ def encrypt_password(password):
     key = get_encryption_key(SECRET_KEY)
     f = Fernet(key)
     encrypted = f.encrypt(password.encode())
-    return base64.urlsafe_b64encode(encrypted).decode()
+    return encrypted.decode()
 
 def decrypt_password(encrypted_password):
     """Дешифрует пароль из хранилища"""
@@ -41,7 +41,7 @@ def decrypt_password(encrypted_password):
     key = get_encryption_key(SECRET_KEY)
     f = Fernet(key)
     try:
-        decrypted = f.decrypt(base64.urlsafe_b64decode(encrypted_password.encode()))
+        decrypted = f.decrypt(encrypted_password.encode())
         return decrypted.decode()
     except Exception as e:
         print(f"Ошибка дешифрования: {e}")
