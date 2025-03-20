@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 from models import User, Server, Domain, DomainGroup, ServerLog, db
+from modules.telegram_notifier import TelegramNotifier
 
 bp = Blueprint('auth', __name__)
 logger = logging.getLogger(__name__)
@@ -79,10 +80,14 @@ def dashboard():
         else:
             ns_status_counts['pending'] += 1
     
+    # Check if Telegram notifications are configured
+    telegram_configured = TelegramNotifier.is_configured()
+    
     return render_template('dashboard.html',
                          servers_count=servers_count,
                          domains_count=domains_count,
                          domain_groups_count=domain_groups_count,
                          servers=servers,
                          domains=domains,
-                         ns_status_counts=ns_status_counts)
+                         ns_status_counts=ns_status_counts,
+                         telegram_configured=telegram_configured)
