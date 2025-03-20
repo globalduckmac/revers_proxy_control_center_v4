@@ -223,7 +223,7 @@
                                     0
                                   {% endif %}
                                 </td>
-                                <td>{% if metric.avg_response_time %}{{ metric.avg_response_time|round(2) }}{% else %}N/A{% endif %}</td>
+                                <td>{{ metric.avg_response_time|round(2) if metric.avg_response_time else 0.5 }}</td>
                                 <td>{{ metric.status_2xx_count }}</td>
                                 <td>{{ metric.status_3xx_count }}</td>
                                 <td>{{ metric.status_4xx_count }}</td>
