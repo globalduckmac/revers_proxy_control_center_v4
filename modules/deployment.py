@@ -210,7 +210,7 @@ class DeploymentManager:
             
             # Generate certification command
             domain_args = " ".join([f"-d {d.name}" for d in ssl_domains])
-            cert_command = f"sudo certbot --nginx --non-interactive --agree-tos --email {admin_email} {domain_args}"
+            cert_command = f"sudo certbot --nginx --expand --non-interactive --agree-tos --email {admin_email} {domain_args}"
             
             # Run certification command (can take a long time)
             logger.info(f"Obtaining SSL certificates for {len(ssl_domains)} domains on server {server.name}")
