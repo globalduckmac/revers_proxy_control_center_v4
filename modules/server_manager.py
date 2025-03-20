@@ -112,6 +112,12 @@ class ServerManager:
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
         try:
+            # Get timeout from config or use default
+            from flask import current_app
+            connection_timeout = current_app.config.get('SSH_TIMEOUT', 60)  # Default 1 minute
+            
+            logger.info(f"Connecting to server {server.name} ({server.ip_address}), timeout: {connection_timeout}s")
+            
             if server.ssh_key:
                 key_file = paramiko.RSAKey.from_private_key(server.ssh_key)
                 client.connect(
@@ -119,7 +125,7 @@ class ServerManager:
                     port=server.ssh_port,
                     username=server.ssh_user,
                     pkey=key_file,
-                    timeout=10
+                    timeout=connection_timeout
                 )
             else:
                 # Use password-based authentication
@@ -128,7 +134,7 @@ class ServerManager:
                     port=server.ssh_port,
                     username=server.ssh_user,
                     password=server.ssh_password,
-                    timeout=10
+                    timeout=connection_timeout
                 )
             
             return client

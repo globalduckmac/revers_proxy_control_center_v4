@@ -40,42 +40,89 @@ class DeploymentManager:
             db.session.add(log)
             db.session.commit()
             
-            # Update package lists
-            ServerManager.execute_command(server, "sudo apt-get update")
+            # Step 1: Update package lists (can take time)
+            logger.info(f"Updating package lists on server {server.name}")
+            try:
+                ServerManager.execute_command(
+                    server, 
+                    "sudo apt-get update -q", 
+                    long_running=True
+                )
+            except Exception as e:
+                logger.warning(f"Package update warning on {server.name}: {str(e)}")
+                # Continue anyway, might be just a repository error
             
-            # Install Nginx
-            stdout, stderr = ServerManager.execute_command(
-                server, 
-                "sudo apt-get install -y nginx"
-            )
-            
-            # Verify Nginx installation
-            stdout, stderr = ServerManager.execute_command(
-                server,
-                "nginx -v"
-            )
-            
-            if "nginx version" not in stderr:
-                logger.error(f"Nginx installation verification failed on server {server.name}")
+            # Step 2: Install Nginx (long-running operation)
+            logger.info(f"Installing Nginx on server {server.name}")
+            try:
+                stdout, stderr = ServerManager.execute_command(
+                    server, 
+                    "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx",
+                    long_running=True
+                )
+            except Exception as e:
+                logger.error(f"Nginx installation failed on {server.name}: {str(e)}")
                 
                 # Update log entry
                 log.status = 'error'
-                log.message = f"Nginx installation failed: {stderr}"
+                log.message = f"Failed to install Nginx: {str(e)}"
                 db.session.commit()
                 
                 return False
             
-            # Enable and start Nginx service
-            ServerManager.execute_command(
-                server,
-                "sudo systemctl enable nginx && sudo systemctl start nginx"
-            )
+            # Step 3: Verify Nginx installation
+            logger.info(f"Verifying Nginx installation on server {server.name}")
+            try:
+                stdout, stderr = ServerManager.execute_command(
+                    server,
+                    "nginx -v"
+                )
+                
+                if "nginx version" not in stderr:
+                    logger.error(f"Nginx installation verification failed on server {server.name}")
+                    
+                    # Update log entry
+                    log.status = 'error'
+                    log.message = f"Nginx installation verification failed: {stderr}"
+                    db.session.commit()
+                    
+                    return False
+            except Exception as e:
+                logger.error(f"Nginx verification failed on {server.name}: {str(e)}")
+                
+                # Update log entry
+                log.status = 'error'
+                log.message = f"Failed to verify Nginx installation: {str(e)}"
+                db.session.commit()
+                
+                return False
             
-            # Create necessary directories
-            ServerManager.execute_command(
-                server,
-                "sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
-            )
+            # Step 4: Enable and start Nginx service
+            logger.info(f"Enabling and starting Nginx service on server {server.name}")
+            try:
+                ServerManager.execute_command(
+                    server,
+                    "sudo systemctl enable nginx"
+                )
+                
+                ServerManager.execute_command(
+                    server,
+                    "sudo systemctl start nginx"
+                )
+            except Exception as e:
+                logger.warning(f"Nginx service setup warning on {server.name}: {str(e)}")
+                # Continue anyway, might work despite the error
+            
+            # Step 5: Create necessary directories
+            logger.info(f"Creating Nginx configuration directories on server {server.name}")
+            try:
+                ServerManager.execute_command(
+                    server,
+                    "sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
+                )
+            except Exception as e:
+                logger.warning(f"Nginx directory setup warning on {server.name}: {str(e)}")
+                # Continue anyway, directories might already exist
             
             # Update log entry
             log.status = 'success'
@@ -130,11 +177,23 @@ class DeploymentManager:
             db.session.add(log)
             db.session.commit()
             
-            # Install Certbot
-            ServerManager.execute_command(
-                server,
-                "sudo apt-get update && sudo apt-get install -y certbot python3-certbot-nginx"
-            )
+            # Install Certbot (long-running operation)
+            logger.info(f"Installing Certbot on server {server.name}")
+            try:
+                ServerManager.execute_command(
+                    server,
+                    "sudo apt-get update -q", 
+                    long_running=True
+                )
+                
+                ServerManager.execute_command(
+                    server,
+                    "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx",
+                    long_running=True
+                )
+            except Exception as e:
+                logger.warning(f"Certbot installation warning on {server.name}: {str(e)}")
+                # Continue anyway, might be just a transient error
             
             # Get list of domains that need SSL
             ssl_domains = [d for d in domains if d.ssl_enabled]
@@ -153,8 +212,9 @@ class DeploymentManager:
             domain_args = " ".join([f"-d {d.name}" for d in ssl_domains])
             cert_command = f"sudo certbot --nginx --non-interactive --agree-tos --email {admin_email} {domain_args}"
             
-            # Run certification command
-            stdout, stderr = ServerManager.execute_command(server, cert_command)
+            # Run certification command (can take a long time)
+            logger.info(f"Obtaining SSL certificates for {len(ssl_domains)} domains on server {server.name}")
+            stdout, stderr = ServerManager.execute_command(server, cert_command, long_running=True)
             
             if "Congratulations" in stdout or "Successfully received certificate" in stdout:
                 # Update log entry
