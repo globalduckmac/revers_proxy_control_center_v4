@@ -46,11 +46,7 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% set domain_count = 0 %}
-                            {% for group in server.domain_groups %}
-                                {% set domain_count = domain_count + group.domains.count() %}
-                            {% endfor %}
-                            {{ domain_count }}
+                            {{ server_domains[server.id] }}
                         </td>
                         <td>
                             {% if server.last_check %}

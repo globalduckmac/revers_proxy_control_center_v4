@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required
 from models import Server, ServerLog, db
 from modules.server_manager import ServerManager
+from modules.domain_manager import DomainManager
 
 bp = Blueprint('servers', __name__, url_prefix='/servers')
 logger = logging.getLogger(__name__)
@@ -12,7 +13,14 @@ logger = logging.getLogger(__name__)
 def index():
     """Show list of servers."""
     servers = Server.query.all()
-    return render_template('servers/index.html', servers=servers)
+    
+    # Подсчитаем домены для каждого сервера
+    server_domains = {}
+    for server in servers:
+        domains = DomainManager.get_domains_by_server(server.id)
+        server_domains[server.id] = len(domains)
+    
+    return render_template('servers/index.html', servers=servers, server_domains=server_domains)
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
