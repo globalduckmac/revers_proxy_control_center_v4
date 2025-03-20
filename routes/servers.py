@@ -146,10 +146,13 @@ def edit(server_id):
         if auth_method == 'key':
             if ssh_key:  # Only update if provided (otherwise keep existing)
                 server.ssh_key = ssh_key
-            server.ssh_password = None
+            server.ssh_password_hash = None
         else:
             if ssh_password:  # Only update if provided
-                server.ssh_password = ssh_password
+                server.set_ssh_password(ssh_password)
+                # Временно храним пароль в памяти для проверки соединения
+                if verify_connection:
+                    server._temp_password = ssh_password
             server.ssh_key = None
         
         db.session.commit()
@@ -191,16 +194,34 @@ def delete(server_id):
     flash(f'Server {server.name} deleted successfully', 'success')
     return redirect(url_for('servers.index'))
 
-@bp.route('/<int:server_id>/check', methods=['GET'])
+@bp.route('/<int:server_id>/check', methods=['GET', 'POST'])
 @login_required
 def check_connectivity(server_id):
     """Check server connectivity."""
     server = Server.query.get_or_404(server_id)
     
+    # Для серверов с аутентификацией по паролю нужно предоставить пароль
+    if not server.ssh_key and request.method == 'GET':
+        return render_template('servers/check_password.html', server=server)
+    
+    # Если используется аутентификация по паролю, получаем его из формы
+    if not server.ssh_key and request.method == 'POST':
+        password = request.form.get('ssh_password')
+        if not password:
+            flash('Пароль SSH необходим для проверки подключения', 'warning')
+            return render_template('servers/check_password.html', server=server)
+        
+        # Временно храним пароль только в оперативной памяти
+        server._temp_password = password
+    
     if ServerManager.check_connectivity(server):
         flash(f'Connectivity check successful for server {server.name}', 'success')
     else:
         flash(f'Connectivity check failed for server {server.name}', 'danger')
+    
+    # Очищаем временный пароль
+    if hasattr(server, '_temp_password'):
+        delattr(server, '_temp_password')
     
     return redirect(url_for('servers.index'))
 
