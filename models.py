@@ -43,6 +43,7 @@ class Domain(db.Model):
     target_ip = db.Column(db.String(45), nullable=False)
     target_port = db.Column(db.Integer, default=80)
     ssl_enabled = db.Column(db.Boolean, default=False)
+    ssl_status = db.Column(db.String(20), default='pending')  # pending, active, error
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

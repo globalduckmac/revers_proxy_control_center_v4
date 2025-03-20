@@ -38,7 +38,13 @@
                                 <td>{{ domain.name }}</td>
                                 <td>{{ domain.target_ip }}:{{ domain.target_port }}</td>
                                 <td>
-                                    <span class="badge bg-info">Pending SSL Setup</span>
+                                    {% if domain.ssl_status == 'active' %}
+                                        <span class="badge bg-success">SSL Configured</span>
+                                    {% elif domain.ssl_status == 'error' %}
+                                        <span class="badge bg-danger">Configuration Failed</span>
+                                    {% else %}
+                                        <span class="badge bg-info">Pending SSL Setup</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}

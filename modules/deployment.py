@@ -239,6 +239,25 @@ class DeploymentManager:
                 except Exception as e:
                     logger.warning(f"Could not reload Nginx: {str(e)}")
                 
+                # Обновим статус домена в базе данных
+                for domain in ssl_domains:
+                    # Добавим проверку наличия сертификата, чтобы убедиться, что он установлен
+                    cert_check_cmd = f"sudo ls -la /etc/letsencrypt/live/{domain.name}/fullchain.pem || echo 'Not found'"
+                    cert_result, _ = ServerManager.execute_command(server, cert_check_cmd)
+                    
+                    if "Not found" not in cert_result:
+                        # Сертификат существует - обновляем статус домена
+                        domain_model = Domain.query.get(domain.id)
+                        if domain_model:
+                            # Установленный флаг для отображения в интерфейсе
+                            domain_model.ssl_status = "active"
+                            logger.info(f"Updated SSL status for domain {domain.name} to 'active'")
+                    else:
+                        logger.warning(f"SSL certificate not found for domain {domain.name}")
+                
+                # Сохраним изменения в БД
+                db.session.commit()
+                
                 # Update log entry
                 log.status = 'success'
                 log.message = f"SSL certificates obtained successfully for {len(ssl_domains)} domains"
