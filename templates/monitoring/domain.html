@@ -122,26 +122,26 @@
                                         <tr>
                                             <td>2xx Success</td>
                                             <td>{{ aggregates.total_2xx }}</td>
-                                            <td>{{ ((aggregates.total_2xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                            <td>{{ ((aggregates.total_2xx / (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx)) * 100)|round(1) if (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx) > 0 else 0 }}%</td>
                                         </tr>
                                         <tr>
                                             <td>3xx Redirection</td>
                                             <td>{{ aggregates.total_3xx }}</td>
-                                            <td>{{ ((aggregates.total_3xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                            <td>{{ ((aggregates.total_3xx / (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx)) * 100)|round(1) if (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx) > 0 else 0 }}%</td>
                                         </tr>
                                         <tr>
                                             <td>4xx Client Error</td>
                                             <td>{{ aggregates.total_4xx }}</td>
-                                            <td>{{ ((aggregates.total_4xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                            <td>{{ ((aggregates.total_4xx / (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx)) * 100)|round(1) if (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx) > 0 else 0 }}%</td>
                                         </tr>
                                         <tr>
                                             <td>5xx Server Error</td>
                                             <td>{{ aggregates.total_5xx }}</td>
-                                            <td>{{ ((aggregates.total_5xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                            <td>{{ ((aggregates.total_5xx / (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx)) * 100)|round(1) if (aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx) > 0 else 0 }}%</td>
                                         </tr>
                                         <tr class="table-primary">
                                             <td><strong>Total Requests</strong></td>
-                                            <td colspan="2"><strong>{{ aggregates.total_requests }}</strong></td>
+                                            <td colspan="2"><strong>{{ aggregates.total_2xx + aggregates.total_3xx + aggregates.total_4xx + aggregates.total_5xx }}</strong></td>
                                         </tr>
                                     </tbody>
                                 </table>

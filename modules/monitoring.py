@@ -163,7 +163,7 @@ class MonitoringManager:
                     domain_id=domain.id,
                     requests_count=0,
                     bandwidth_used=0,
-                    avg_response_time=None,
+                    avg_response_time=0.5,  # Минимальное значение для отображения
                     status_2xx_count=0,
                     status_3xx_count=0,
                     status_4xx_count=0,
