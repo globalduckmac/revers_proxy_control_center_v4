@@ -64,6 +64,15 @@
                                 <a href="{{ url_for('proxy.deploy', server_id=server.id) }}" class="btn btn-sm btn-outline-success" title="Deploy Configuration">
                                     <i class="fas fa-upload"></i>
                                 </a>
+                                <a href="{{ url_for('proxy.install_nginx', server_id=server.id) }}" class="btn btn-sm btn-outline-warning" title="Install Nginx">
+                                    <i class="fas fa-server"></i>
+                                </a>
+                                <a href="{{ url_for('proxy.setup_ssl', server_id=server.id) }}" class="btn btn-sm btn-outline-info" title="Setup SSL">
+                                    <i class="fas fa-lock"></i>
+                                </a>
+                                <a href="{{ url_for('proxy.view_configs', server_id=server.id) }}" class="btn btn-sm btn-outline-secondary" title="View Configs">
+                                    <i class="fas fa-file-code"></i>
+                                </a>
                                 <a href="{{ url_for('servers.edit', server_id=server.id) }}" class="btn btn-sm btn-outline-primary" title="Edit Server">
                                     <i class="fas fa-edit"></i>
                                 </a>
