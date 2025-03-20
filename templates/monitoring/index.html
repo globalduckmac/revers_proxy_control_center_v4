@@ -151,7 +151,14 @@
         <div class="card">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">System Information</h5>
-                <div>
+                <div class="d-flex align-items-center">
+                    <!-- Кнопка для отправки ежедневного отчета вручную -->
+                    <form action="{{ url_for('monitoring.send_daily_report') }}" method="post" class="me-3">
+                        <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="fab fa-telegram-plane me-1"></i> 
+                            Отправить отчет в Telegram
+                        </button>
+                    </form>
                     <span class="badge bg-secondary">
                         <i class="fas fa-clock"></i> Auto-Check: 
                         <span class="badge bg-light text-dark">Servers & Domains every 5 min</span>
@@ -229,6 +236,36 @@
                 </div>
                 
                 <!-- Дополнительная информация о последних проверках -->
+                <!-- Карточка статуса Telegram уведомлений -->
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="alert {% if telegram_configured %}alert-success{% else %}alert-warning{% endif %} d-flex align-items-center justify-content-between">
+                            <div>
+                                <i class="fab fa-telegram-plane me-2"></i> 
+                                <strong>Telegram Notifications:</strong> 
+                                {% if telegram_configured %}
+                                    <span class="badge bg-success ms-2">Configured</span>
+                                    <span class="small ms-3 text-muted">
+                                        Daily reports at 9:00 AM (German Time) + Real-time alerts for critical events
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-warning ms-2">Not Configured</span>
+                                    <span class="small ms-3 text-muted">
+                                        Contact administrator to setup Telegram notifications
+                                    </span>
+                                {% endif %}
+                            </div>
+                            {% if telegram_configured %}
+                            <form action="{{ url_for('monitoring.send_daily_report') }}" method="post">
+                                <button type="submit" class="btn btn-sm btn-outline-success">
+                                    <i class="fas fa-paper-plane me-1"></i> Send Test Report
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="row mt-3">
                     <div class="col-md-12">
                         <div class="card border-secondary">

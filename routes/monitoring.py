@@ -33,11 +33,15 @@ def index():
         # Иначе показываем все домены
         domains = Domain.query.all()
     
+    # Проверяем, настроены ли Telegram-уведомления
+    telegram_configured = TelegramNotifier.is_configured()
+    
     return render_template('monitoring/index.html', 
                            servers=servers, 
                            domains=domains,
                            domain_groups=domain_groups,
-                           selected_group_id=group_id)
+                           selected_group_id=group_id,
+                           telegram_configured=telegram_configured)
 
 @bp.route('/collect/<int:server_id>', methods=['POST'])
 @login_required
