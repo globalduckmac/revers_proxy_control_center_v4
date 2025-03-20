@@ -22,6 +22,9 @@ class ProxyManager:
         """
         self.templates_path = templates_path
         self.jinja_env = Environment(loader=FileSystemLoader(templates_path))
+        
+        # Add datetime function for templates
+        self.jinja_env.globals['now'] = datetime.utcnow
     
     def generate_nginx_config(self, server):
         """
