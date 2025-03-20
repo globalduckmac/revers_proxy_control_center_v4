@@ -19,6 +19,12 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
 
+# Таблица связи между серверами и группами серверов
+server_group_association = db.Table('server_group_association',
+    db.Column('server_id', db.Integer, db.ForeignKey('server.id'), primary_key=True),
+    db.Column('server_group_id', db.Integer, db.ForeignKey('server_group.id'), primary_key=True)
+)
+
 class Server(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
@@ -35,6 +41,9 @@ class Server(db.Model):
     # Relationships
     domain_groups = db.relationship('DomainGroup', backref='server', lazy=True)
     logs = db.relationship('ServerLog', backref='server', lazy=True)
+    # Связь многие-ко-многим с группами серверов
+    groups = db.relationship('ServerGroup', secondary=server_group_association, 
+                            backref=db.backref('servers', lazy='dynamic'))
 
 
 class Domain(db.Model):
@@ -108,6 +117,15 @@ class ServerMetric(db.Model):
     
     server = db.relationship('Server', backref=db.backref('metrics', lazy=True))
     
+class ServerGroup(db.Model):
+    """Группы серверов для организации и фильтрации."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class DomainMetric(db.Model):
     """Stores traffic metrics for domains."""
     id = db.Column(db.Integer, primary_key=True)
