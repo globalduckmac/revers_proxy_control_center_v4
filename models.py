@@ -2,6 +2,50 @@ from app import db
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import os
+import base64
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+# Секретный ключ для шифрования (можно получить из переменной окружения)
+SECRET_KEY = os.environ.get("SESSION_SECRET", "default-secret-key-for-encryption")
+
+def get_encryption_key(secret):
+    """Генерирует ключ шифрования на основе секрета"""
+    salt = b'static_salt_for_server_passwords'  # Постоянная соль для консистентности
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(secret.encode()))
+    return key
+
+def encrypt_password(password):
+    """Шифрует пароль для обратимого хранения"""
+    if not password:
+        return None
+    
+    key = get_encryption_key(SECRET_KEY)
+    f = Fernet(key)
+    encrypted = f.encrypt(password.encode())
+    return base64.urlsafe_b64encode(encrypted).decode()
+
+def decrypt_password(encrypted_password):
+    """Дешифрует пароль из хранилища"""
+    if not encrypted_password:
+        return None
+    
+    key = get_encryption_key(SECRET_KEY)
+    f = Fernet(key)
+    try:
+        decrypted = f.decrypt(base64.urlsafe_b64decode(encrypted_password.encode()))
+        return decrypted.decode()
+    except Exception as e:
+        print(f"Ошибка дешифрования: {e}")
+        return None
 
 
 class User(UserMixin, db.Model):
@@ -33,6 +77,7 @@ class Server(db.Model):
     ssh_user = db.Column(db.String(64), nullable=False)
     ssh_key = db.Column(db.Text, nullable=True)  # SSH private key for authentication
     ssh_password_hash = db.Column(db.String(256), nullable=True)  # Hashed password storage
+    ssh_encrypted_password = db.Column(db.Text, nullable=True)  # Encrypted password for automated checks
     status = db.Column(db.String(20), default='pending')  # pending, active, error
     last_check = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -41,14 +86,20 @@ class Server(db.Model):
     def set_ssh_password(self, password):
         """
         Хеширует и сохраняет пароль SSH с использованием werkzeug.security
+        Также сохраняет зашифрованную версию для автоматической проверки
         
         Args:
             password: Пароль в открытом виде
         """
         if password:
+            # Хешируем пароль для безопасного хранения (необратимо)
             self.ssh_password_hash = generate_password_hash(password)
+            
+            # Шифруем пароль для возможности автоматических проверок (обратимо)
+            self.ssh_encrypted_password = encrypt_password(password)
         else:
             self.ssh_password_hash = None
+            self.ssh_encrypted_password = None
             
     def check_ssh_password(self, password):
         """
@@ -64,9 +115,33 @@ class Server(db.Model):
             return False
         return check_password_hash(self.ssh_password_hash, password)
     
+    def get_decrypted_password(self):
+        """
+        Расшифровывает сохраненный пароль для использования в автоматических проверках
+        
+        Returns:
+            str: Расшифрованный пароль или None, если пароля нет
+        """
+        if not self.ssh_encrypted_password:
+            return None
+        return decrypt_password(self.ssh_encrypted_password)
+    
     @property
     def ssh_password(self):
-        raise AttributeError('Пароль не хранится в открытом виде и не может быть прочитан')
+        """
+        Для совместимости с существующим кодом
+        При необходимости расшифровывает пароль для автоматических задач
+        """
+        # Временный пароль для проверки соединения имеет приоритет
+        if hasattr(self, '_temp_password') and self._temp_password:
+            return self._temp_password
+            
+        # Если есть зашифрованный пароль, возвращаем расшифрованную версию
+        if self.ssh_encrypted_password:
+            return self.get_decrypted_password()
+            
+        # Если ничего нет, невозможно получить пароль
+        return None
         
     @ssh_password.setter
     def ssh_password(self, password):

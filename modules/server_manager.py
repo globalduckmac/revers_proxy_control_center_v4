@@ -46,9 +46,13 @@ class ServerManager:
                 # с безопасным хранением пароля в RAM только на момент соединения
                 logger.warning(f"SSH password-based authentication used for server {server.name}")
                 
-                # Для временного хранения пароля используем параметр в сессии, например
-                # или передаем его непосредственно при вызове
+                # Проверяем различные методы получения пароля
+                # 1. Временный пароль, установленный при ручной проверке
                 ssh_password = getattr(server, '_temp_password', None)
+                
+                # 2. Если нет временного пароля, пробуем получить зашифрованный пароль
+                if not ssh_password:
+                    ssh_password = server.ssh_password
                 
                 if not ssh_password:
                     logger.error(f"SSH password not available for server {server.name}")
@@ -143,9 +147,13 @@ class ServerManager:
                 # Для прямого подключения нам нужно получить незашифрованный пароль
                 logger.warning(f"SSH password-based authentication used for server {server.name}")
                 
-                # Для временного хранения пароля используем параметр в сессии, например
-                # или передаем его непосредственно при вызове
+                # Проверяем различные методы получения пароля
+                # 1. Временный пароль, установленный при ручной проверке
                 ssh_password = getattr(server, '_temp_password', None)
+                
+                # 2. Если нет временного пароля, пробуем получить зашифрованный пароль
+                if not ssh_password:
+                    ssh_password = server.ssh_password
                 
                 if not ssh_password:
                     logger.error(f"SSH password not available for server {server.name}")
