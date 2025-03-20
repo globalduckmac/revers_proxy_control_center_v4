@@ -15,6 +15,32 @@
     </div>
 </div>
 
+<div class="row mb-3">
+    <div class="col">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Фильтр по группе доменов</h5>
+                <form method="get" action="{{ url_for('domains.index') }}" class="d-flex align-items-center">
+                    <div class="me-3 flex-grow-1">
+                        <select name="group_id" class="form-select">
+                            <option value="">Все домены</option>
+                            {% for group in domain_groups %}
+                            <option value="{{ group.id }}" {% if selected_group_id == group.id %}selected{% endif %}>
+                                {{ group.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Применить</button>
+                    {% if selected_group_id %}
+                    <a href="{{ url_for('domains.index') }}" class="btn btn-outline-secondary ms-2">Сбросить</a>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-body">
         <div class="table-responsive">

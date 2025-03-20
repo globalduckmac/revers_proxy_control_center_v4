@@ -1,7 +1,7 @@
 import logging
 from flask import Blueprint, render_template, redirect, url_for, request, jsonify, flash, current_app
 from flask_login import login_required
-from models import Server, Domain, ServerMetric, DomainMetric
+from models import Server, Domain, ServerMetric, DomainMetric, DomainGroup
 from modules.monitoring import MonitoringManager
 from modules.domain_manager import DomainManager
 
@@ -12,12 +12,27 @@ logger = logging.getLogger(__name__)
 @login_required
 def index():
     """Show monitoring dashboard."""
+    # Получаем параметр группы из запроса
+    group_id = request.args.get('group_id', type=int)
+    
+    # Получаем все группы доменов для фильтра
+    domain_groups = DomainGroup.query.all()
+    
     servers = Server.query.all()
-    domains = Domain.query.all()
+    
+    if group_id:
+        # Если указана группа, фильтруем домены по этой группе
+        group = DomainGroup.query.get_or_404(group_id)
+        domains = group.domains.all()
+    else:
+        # Иначе показываем все домены
+        domains = Domain.query.all()
     
     return render_template('monitoring/index.html', 
                            servers=servers, 
-                           domains=domains)
+                           domains=domains,
+                           domain_groups=domain_groups,
+                           selected_group_id=group_id)
 
 @bp.route('/collect/<int:server_id>', methods=['POST'])
 @login_required

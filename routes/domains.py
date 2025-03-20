@@ -10,8 +10,24 @@ logger = logging.getLogger(__name__)
 @login_required
 def index():
     """Show list of domains."""
-    domains = Domain.query.all()
-    return render_template('domains/index.html', domains=domains)
+    # Получаем параметр группы из запроса
+    group_id = request.args.get('group_id', type=int)
+    
+    # Получаем все группы доменов для фильтра
+    domain_groups = DomainGroup.query.all()
+    
+    if group_id:
+        # Если указана группа, фильтруем домены по этой группе
+        group = DomainGroup.query.get_or_404(group_id)
+        domains = group.domains.all()
+    else:
+        # Иначе показываем все домены
+        domains = Domain.query.all()
+    
+    return render_template('domains/index.html', 
+                          domains=domains, 
+                          domain_groups=domain_groups,
+                          selected_group_id=group_id)
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
