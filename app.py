@@ -5,6 +5,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from flask_login import LoginManager
+from config import config
 
 
 class Base(DeclarativeBase):
@@ -14,15 +15,19 @@ class Base(DeclarativeBase):
 db = SQLAlchemy(model_class=Base)
 # create the app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
 
-# configure the database
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+# Load configuration
+config_name = os.environ.get('FLASK_CONFIG', 'default')
+app.config.from_object(config[config_name])
+
+# Set secret key
+app.secret_key = os.environ.get("SESSION_SECRET", app.config['SECRET_KEY'])
+
+# Configure database connection pool
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 300,
     "pool_pre_ping": True,
 }
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # Set up login manager
 login_manager = LoginManager()

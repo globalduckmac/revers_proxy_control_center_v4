@@ -8,6 +8,9 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'mysql://root:password@localhost/reverse_proxy_manager')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # Email for SSL certificates
+    ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@example.com')
+    
     # Nginx templates path
     NGINX_TEMPLATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'nginx')
     

@@ -141,9 +141,13 @@ class DeploymentManager:
                 db.session.commit()
                 return True
             
+            # Get admin email from config or use a default
+            from flask import current_app
+            admin_email = current_app.config.get('ADMIN_EMAIL', 'admin@example.com')
+            
             # Generate certification command
             domain_args = " ".join([f"-d {d.name}" for d in ssl_domains])
-            cert_command = f"sudo certbot --nginx --non-interactive --agree-tos --email admin@example.com {domain_args}"
+            cert_command = f"sudo certbot --nginx --non-interactive --agree-tos --email {admin_email} {domain_args}"
             
             # Run certification command
             stdout, stderr = ServerManager.execute_command(server, cert_command)
