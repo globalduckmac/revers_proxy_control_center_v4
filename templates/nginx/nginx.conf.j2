@@ -50,14 +50,15 @@ http {
     include /etc/nginx/conf.d/*.conf;
     include /etc/nginx/sites-enabled/*;
 
-    # Default server block
-    server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
-        server_name _;
-
-        return 444;
-    }
+    # Default server block (will be used if no other server blocks match)
+    # Uncomment this block only if it's the first Nginx config deployment
+    # server {
+    #    listen 80 default_server;
+    #    listen [::]:80 default_server;
+    #    server_name _;
+    #
+    #    return 444;
+    # }
 
     # Server status block
     server {

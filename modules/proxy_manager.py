@@ -169,20 +169,54 @@ class ProxyManager:
             )
             
             if "successful" not in stdout and "successful" not in stderr:
-                logger.error(f"Nginx configuration test failed on server {server.name}: {stderr}")
-                proxy_config.status = 'error'
-                db.session.commit()
-                
-                # Create log entry
-                log = ServerLog(
-                    server_id=server.id,
-                    action='proxy_deployment',
-                    status='error',
-                    message=f"Nginx configuration test failed: {stderr}"
-                )
-                db.session.add(log)
-                db.session.commit()
-                return False
+                # Проверяем, является ли ошибка конфликтом default_server
+                if "duplicate default server for 0.0.0.0:80" in stderr:
+                    logger.warning(f"Detected duplicate default server conflict, trying to fix it")
+                    
+                    # Пытаемся удалить существующие default_server параметры
+                    ServerManager.execute_command(
+                        server,
+                        "sudo sed -i 's/default_server//g' /etc/nginx/sites-enabled/*"
+                    )
+                    
+                    # Повторно проверяем конфигурацию
+                    stdout, stderr = ServerManager.execute_command(
+                        server,
+                        "sudo nginx -t"
+                    )
+                    
+                    if "successful" not in stdout and "successful" not in stderr:
+                        logger.error(f"Still failing after fixing default_server conflict: {stderr}")
+                        proxy_config.status = 'error'
+                        db.session.commit()
+                        
+                        # Create log entry
+                        log = ServerLog(
+                            server_id=server.id,
+                            action='proxy_deployment',
+                            status='error',
+                            message=f"Nginx configuration test failed after trying to fix: {stderr}"
+                        )
+                        db.session.add(log)
+                        db.session.commit()
+                        return False
+                    else:
+                        logger.info("Successfully fixed default_server conflict")
+                else:
+                    logger.error(f"Nginx configuration test failed on server {server.name}: {stderr}")
+                    proxy_config.status = 'error'
+                    db.session.commit()
+                    
+                    # Create log entry
+                    log = ServerLog(
+                        server_id=server.id,
+                        action='proxy_deployment',
+                        status='error',
+                        message=f"Nginx configuration test failed: {stderr}"
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+                    return False
             
             # Reload Nginx to apply changes
             stdout, stderr = ServerManager.execute_command(

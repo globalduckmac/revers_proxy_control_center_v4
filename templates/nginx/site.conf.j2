@@ -5,6 +5,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name {{ domain }};
+    # Важно: не добавляйте здесь default_server, иначе возникнет конфликт с другими конфигурациями
 
     access_log /var/log/nginx/{{ domain }}_access.log;
     error_log /var/log/nginx/{{ domain }}_error.log;
