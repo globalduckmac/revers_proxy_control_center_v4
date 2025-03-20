@@ -80,8 +80,9 @@ def domain_metrics(domain_id):
     # Format metrics for the chart
     timestamps = [m.timestamp.strftime('%Y-%m-%d %H:%M') for m in metrics]
     requests_data = [m.requests_count for m in metrics]
-    bandwidth_data = [m.bandwidth_used / (1024 * 1024) for m in metrics]  # Convert to MB
-    response_time_data = [m.avg_response_time for m in metrics]
+    # Показываем только реальное использование полосы пропускания
+    bandwidth_data = [(m.bandwidth_used / (1024 * 1024)) if m.bandwidth_used > 0 else 0 for m in metrics]  # Convert to MB
+    response_time_data = [m.avg_response_time if m.avg_response_time else 0 for m in metrics]
     
     # Get associated server through domain groups
     server = None
@@ -128,8 +129,8 @@ def api_domain_metrics(domain_id):
     data = {
         'timestamps': [m.timestamp.strftime('%Y-%m-%d %H:%M:%S') for m in metrics],
         'requests': [m.requests_count for m in metrics],
-        'bandwidth': [m.bandwidth_used for m in metrics],
-        'response_time': [m.avg_response_time for m in metrics],
+        'bandwidth': [(m.bandwidth_used / (1024 * 1024)) if m.bandwidth_used > 0 else 0 for m in metrics],  # Convert to MB
+        'response_time': [m.avg_response_time if m.avg_response_time else 0 for m in metrics],
         'status_2xx': [m.status_2xx_count for m in metrics],
         'status_3xx': [m.status_3xx_count for m in metrics],
         'status_4xx': [m.status_4xx_count for m in metrics],
