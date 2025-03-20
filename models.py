@@ -32,11 +32,45 @@ class Server(db.Model):
     ssh_port = db.Column(db.Integer, default=22)
     ssh_user = db.Column(db.String(64), nullable=False)
     ssh_key = db.Column(db.Text, nullable=True)  # SSH private key for authentication
-    ssh_password = db.Column(db.String(256), nullable=True)  # Optional: store encrypted password
+    ssh_password_hash = db.Column(db.String(256), nullable=True)  # Hashed password storage
     status = db.Column(db.String(20), default='pending')  # pending, active, error
     last_check = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def set_ssh_password(self, password):
+        """
+        Хеширует и сохраняет пароль SSH с использованием werkzeug.security
+        
+        Args:
+            password: Пароль в открытом виде
+        """
+        if password:
+            self.ssh_password_hash = generate_password_hash(password)
+        else:
+            self.ssh_password_hash = None
+            
+    def check_ssh_password(self, password):
+        """
+        Проверяет соответствие пароля хешу
+        
+        Args:
+            password: Пароль для проверки
+            
+        Returns:
+            bool: True если пароль правильный, False в противном случае
+        """
+        if not self.ssh_password_hash:
+            return False
+        return check_password_hash(self.ssh_password_hash, password)
+    
+    @property
+    def ssh_password(self):
+        raise AttributeError('Пароль не хранится в открытом виде и не может быть прочитан')
+        
+    @ssh_password.setter
+    def ssh_password(self, password):
+        self.set_ssh_password(password)
     
     # Relationships
     domain_groups = db.relationship('DomainGroup', backref='server', lazy=True)

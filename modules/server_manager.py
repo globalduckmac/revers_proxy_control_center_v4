@@ -41,12 +41,24 @@ class ServerManager:
                     timeout=10
                 )
             else:
-                # Use password-based authentication if no key provided
+                # Для прямого подключения нам нужно получить незашифрованный пароль
+                # Этот метод следует использовать только в контролируемой среде
+                # с безопасным хранением пароля в RAM только на момент соединения
+                logger.warning(f"SSH password-based authentication used for server {server.name}")
+                
+                # Для временного хранения пароля используем параметр в сессии, например
+                # или передаем его непосредственно при вызове
+                ssh_password = getattr(server, '_temp_password', None)
+                
+                if not ssh_password:
+                    logger.error(f"SSH password not available for server {server.name}")
+                    return False
+                
                 client.connect(
                     hostname=server.ip_address,
                     port=server.ssh_port,
                     username=server.ssh_user,
-                    password=server.ssh_password,
+                    password=ssh_password,
                     timeout=10
                 )
             
@@ -128,12 +140,22 @@ class ServerManager:
                     timeout=connection_timeout
                 )
             else:
-                # Use password-based authentication
+                # Для прямого подключения нам нужно получить незашифрованный пароль
+                logger.warning(f"SSH password-based authentication used for server {server.name}")
+                
+                # Для временного хранения пароля используем параметр в сессии, например
+                # или передаем его непосредственно при вызове
+                ssh_password = getattr(server, '_temp_password', None)
+                
+                if not ssh_password:
+                    logger.error(f"SSH password not available for server {server.name}")
+                    raise Exception("SSH password not available")
+                
                 client.connect(
                     hostname=server.ip_address,
                     port=server.ssh_port,
                     username=server.ssh_user,
-                    password=server.ssh_password,
+                    password=ssh_password,
                     timeout=connection_timeout
                 )
             

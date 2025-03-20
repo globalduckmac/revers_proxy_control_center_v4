@@ -86,9 +86,16 @@ def create():
             ssh_user=ssh_user,
             ssh_port=ssh_port,
             ssh_key=ssh_key,
-            ssh_password=ssh_password,
             status='pending'
         )
+        
+        # Устанавливаем пароль если используется аутентификация по паролю
+        if auth_method == 'password' and ssh_password:
+            server.set_ssh_password(ssh_password)
+            
+            # Временно храним пароль в памяти для проверки соединения
+            if verify_connection:
+                server._temp_password = ssh_password
         
         db.session.add(server)
         
