@@ -269,14 +269,7 @@ class TelegramNotifier:
                         f"  Диск: ср. {metrics['avg_disk']:.1f}%, макс. {metrics['max_disk']:.1f}%\n"
             report += "\n"
         
-        # Топ доменов по трафику
-        if top_domains_by_traffic:
-            report += "<b>Топ-5 доменов по трафику:</b>\n"
-            for domain_name, bandwidth, requests in top_domains_by_traffic:
-                bandwidth_mb = bandwidth / 1024 / 1024
-                report += f"• <b>{domain_name}</b>\n" \
-                        f"  Трафик: {bandwidth_mb:.2f} МБ\n" \
-                        f"  Запросы: {requests}\n"
+        # Убрали информацию о Топ-5 доменов по трафику по требованию клиента
         
         # Отправляем отчет
         await TelegramNotifier.send_message(report)

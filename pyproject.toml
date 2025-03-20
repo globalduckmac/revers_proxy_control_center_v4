@@ -19,4 +19,5 @@ dependencies = [
     "flask-wtf>=1.2.2",
     "dnspython>=2.7.0",
     "python-telegram-bot>=22.0",
+    "pytz>=2025.1",
 ]

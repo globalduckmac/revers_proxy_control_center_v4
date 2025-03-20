@@ -1,10 +1,12 @@
 import logging
+import asyncio
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, redirect, url_for, request, jsonify, flash, current_app
 from flask_login import login_required
 from models import Server, Domain, ServerMetric, DomainMetric, DomainGroup, ServerLog
 from modules.monitoring import MonitoringManager
 from modules.domain_manager import DomainManager
+from modules.telegram_notifier import TelegramNotifier
 from sqlalchemy import func, desc
 from app import db
 
@@ -189,6 +191,37 @@ def collect_domain_metrics(domain_id):
     
     return redirect(url_for('monitoring.domain_metrics', domain_id=domain_id))
 
+
+@bp.route('/send-report', methods=['POST'])
+@login_required
+def send_daily_report():
+    """Отправляет ежедневный отчет вручную."""
+    # Проверяем, настроены ли Telegram уведомления
+    if not TelegramNotifier.is_configured():
+        flash('Telegram notifications are not configured', 'danger')
+        return redirect(url_for('monitoring.index'))
+    
+    try:
+        # Создаем и запускаем новый event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            # Отправляем отчет
+            loop.run_until_complete(TelegramNotifier.send_daily_report())
+            flash('Daily report has been sent successfully', 'success')
+            
+            # Записываем в лог
+            logger.info("Daily report sent manually by user")
+        finally:
+            loop.close()
+            
+    except Exception as e:
+        logger.exception("Error sending daily report manually")
+        flash(f'Error sending report: {str(e)}', 'danger')
+    
+    # Перенаправляем обратно на страницу мониторинга
+    return redirect(url_for('monitoring.index'))
 
 @bp.route('/activity-logs', methods=['GET'])
 @login_required

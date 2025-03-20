@@ -2,6 +2,7 @@ import logging
 import time
 import threading
 import asyncio
+import pytz
 from datetime import datetime, timedelta
 
 from app import db
@@ -101,6 +102,11 @@ class BackgroundTasks:
         """
         logger.info(f"Starting {task_name} task, interval: {interval} seconds")
         
+        # Специальная обработка для ежедневного отчета
+        if task_name == "Daily report":
+            self._run_scheduled_task(task_func, task_name)
+            return
+        
         while self.is_running:
             try:
                 # Выполняем задачу
@@ -118,6 +124,61 @@ class BackgroundTasks:
                     
             except Exception as e:
                 logger.error(f"Error in {task_name} task: {str(e)}")
+                time.sleep(60)  # В случае ошибки ждем минуту перед повторной попыткой
+                
+    def _run_scheduled_task(self, task_func, task_name):
+        """
+        Запускает задачу по расписанию (в 9:00 по немецкому времени).
+        
+        Args:
+            task_func: Функция для выполнения
+            task_name: Имя задачи для логирования
+        """
+        logger.info(f"Starting scheduled {task_name} task at 9:00 AM German time")
+        
+        germany_tz = pytz.timezone('Europe/Berlin')
+        
+        while self.is_running:
+            try:
+                # Получаем текущее время в немецкой временной зоне
+                now = datetime.now(germany_tz)
+                
+                # Вычисляем время следующего запуска (9:00 утра)
+                if now.hour < 9:
+                    # Ещё сегодня в 9:00
+                    next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+                else:
+                    # Завтра в 9:00
+                    next_run = now.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                
+                # Вычисляем время до следующего запуска в секундах
+                seconds_until_next_run = (next_run - now).total_seconds()
+                
+                logger.info(f"Next {task_name} scheduled at {next_run.strftime('%Y-%m-%d %H:%M:%S')} "
+                           f"({int(seconds_until_next_run)} seconds from now)")
+                
+                # Ждем до следующего запуска
+                sleep_interval = 60  # Проверяем каждую минуту
+                for _ in range(int(seconds_until_next_run / sleep_interval) + 1):
+                    if not self.is_running:
+                        return
+                    
+                    # Пересчитываем время до запуска, чтобы корректно обрабатывать изменения времени системы
+                    now = datetime.now(germany_tz)
+                    seconds_left = (next_run - now).total_seconds()
+                    
+                    if seconds_left <= 0:
+                        break  # Пора запускать задачу
+                    
+                    time.sleep(min(sleep_interval, seconds_left))
+                
+                # Запускаем задачу
+                logger.info(f"Running scheduled {task_name} task")
+                task_func()
+                logger.info(f"{task_name} task completed")
+                
+            except Exception as e:
+                logger.error(f"Error in scheduled {task_name} task: {str(e)}")
                 time.sleep(60)  # В случае ошибки ждем минуту перед повторной попыткой
     
     def _check_servers(self):
