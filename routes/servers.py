@@ -49,6 +49,9 @@ def index():
 @login_required
 def create():
     """Handle server creation."""
+    # Получаем все группы серверов для выпадающего списка
+    groups = ServerGroup.query.order_by(ServerGroup.name).all()
+    
     if request.method == 'POST':
         name = request.form.get('name')
         ip_address = request.form.get('ip_address')
@@ -59,19 +62,22 @@ def create():
         ssh_password = request.form.get('ssh_password') if auth_method == 'password' else None
         verify_connection = 'verify_connection' in request.form
         
+        # Получаем выбранные группы (может быть несколько)
+        selected_group_ids = request.form.getlist('server_groups')
+        
         # Validate required fields
         if not name or not ip_address or not ssh_user:
-            flash('All required fields must be filled', 'danger')
-            return render_template('servers/create.html')
+            flash('Все обязательные поля должны быть заполнены', 'danger')
+            return render_template('servers/create.html', groups=groups)
         
         # Validate authentication method
         if auth_method == 'key' and not ssh_key and verify_connection:
-            flash('SSH key is required when using key authentication', 'danger')
-            return render_template('servers/create.html')
+            flash('SSH ключ обязателен при использовании аутентификации по ключу', 'danger')
+            return render_template('servers/create.html', groups=groups)
         
         if auth_method == 'password' and not ssh_password and verify_connection:
-            flash('SSH password is required when using password authentication', 'danger')
-            return render_template('servers/create.html')
+            flash('SSH пароль обязателен при использовании аутентификации по паролю', 'danger')
+            return render_template('servers/create.html', groups=groups)
         
         # Create server
         server = Server(
@@ -85,20 +91,27 @@ def create():
         )
         
         db.session.add(server)
+        
+        # Добавляем сервер в выбранные группы
+        if selected_group_ids:
+            selected_groups = ServerGroup.query.filter(ServerGroup.id.in_(selected_group_ids)).all()
+            for group in selected_groups:
+                server.groups.append(group)
+        
         db.session.commit()
         
         # Check connectivity if requested
         if verify_connection:
             if ServerManager.check_connectivity(server):
-                flash(f'Server {name} added successfully and connectivity verified', 'success')
+                flash(f'Сервер {name} успешно добавлен и подключение проверено', 'success')
             else:
-                flash(f'Server {name} added but connectivity check failed', 'warning')
+                flash(f'Сервер {name} добавлен, но проверка подключения не удалась', 'warning')
         else:
-            flash(f'Server {name} added successfully', 'success')
+            flash(f'Сервер {name} успешно добавлен', 'success')
         
         return redirect(url_for('servers.index'))
     
-    return render_template('servers/create.html')
+    return render_template('servers/create.html', groups=groups)
 
 @bp.route('/<int:server_id>/edit', methods=['GET', 'POST'])
 @login_required

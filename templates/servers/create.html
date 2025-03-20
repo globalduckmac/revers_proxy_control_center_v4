@@ -1,16 +1,16 @@
 {% extends 'layout.html' %}
 
-{% block title %}Add Server - Reverse Proxy Manager{% endblock %}
+{% block title %}Добавление сервера - Reverse Proxy Manager{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
     <div class="col">
-        <h1>Add New Server</h1>
-        <p class="lead">Add a new server for deploying a reverse proxy.</p>
+        <h1>Добавление нового сервера</h1>
+        <p class="lead">Добавьте новый сервер для развертывания обратного прокси.</p>
     </div>
     <div class="col-auto">
         <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
-            <i class="fas fa-arrow-left"></i> Back to Servers
+            <i class="fas fa-arrow-left"></i> Назад к серверам
         </a>
     </div>
 </div>
@@ -20,68 +20,78 @@
         <form method="POST" action="{{ url_for('servers.create') }}" id="serverForm">
             <div class="row mb-3">
                 <div class="col-md-6">
-                    <label for="name" class="form-label">Server Name</label>
+                    <label for="name" class="form-label">Название сервера</label>
                     <input type="text" class="form-control" id="name" name="name" required>
-                    <div class="form-text">A descriptive name for the server.</div>
+                    <div class="form-text">Описательное название для сервера.</div>
                 </div>
                 <div class="col-md-6">
-                    <label for="ip_address" class="form-label">IP Address</label>
+                    <label for="ip_address" class="form-label">IP-адрес</label>
                     <input type="text" class="form-control" id="ip_address" name="ip_address" required>
-                    <div class="form-text">The public IP address of the server.</div>
+                    <div class="form-text">Публичный IP-адрес сервера.</div>
                 </div>
             </div>
             
             <div class="row mb-3">
                 <div class="col-md-6">
-                    <label for="ssh_user" class="form-label">SSH User</label>
+                    <label for="ssh_user" class="form-label">SSH Пользователь</label>
                     <input type="text" class="form-control" id="ssh_user" name="ssh_user" required>
-                    <div class="form-text">Username for SSH authentication.</div>
+                    <div class="form-text">Имя пользователя для SSH аутентификации.</div>
                 </div>
                 <div class="col-md-6">
-                    <label for="ssh_port" class="form-label">SSH Port</label>
+                    <label for="ssh_port" class="form-label">SSH Порт</label>
                     <input type="number" class="form-control" id="ssh_port" name="ssh_port" value="22" required>
-                    <div class="form-text">SSH port (default: 22).</div>
+                    <div class="form-text">SSH порт (по умолчанию: 22).</div>
                 </div>
             </div>
             
             <div class="mb-3">
-                <label class="form-label">Authentication Method</label>
+                <label for="server_groups" class="form-label">Группы серверов</label>
+                <select class="form-select" id="server_groups" name="server_groups" multiple>
+                    {% for group in groups %}
+                    <option value="{{ group.id }}">{{ group.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Выберите группы, в которые нужно добавить этот сервер (необязательно).</div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Метод аутентификации</label>
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="auth_method" id="auth_key" value="key" checked>
                     <label class="form-check-label" for="auth_key">
-                        SSH Key (More Secure)
+                        SSH ключ (более безопасно)
                     </label>
                 </div>
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="auth_method" id="auth_password" value="password">
                     <label class="form-check-label" for="auth_password">
-                        Password
+                        Пароль
                     </label>
                 </div>
             </div>
             
             <div class="mb-3" id="ssh_key_section">
-                <label for="ssh_key" class="form-label">SSH Private Key</label>
+                <label for="ssh_key" class="form-label">SSH приватный ключ</label>
                 <textarea class="form-control" id="ssh_key" name="ssh_key" rows="5"></textarea>
-                <div class="form-text">Paste your private SSH key here. This is stored securely in the database.</div>
+                <div class="form-text">Вставьте сюда ваш приватный SSH ключ. Он будет храниться в базе данных в защищенном виде.</div>
             </div>
             
             <div class="mb-3" id="ssh_password_section" style="display: none;">
-                <label for="ssh_password" class="form-label">SSH Password</label>
+                <label for="ssh_password" class="form-label">SSH пароль</label>
                 <input type="password" class="form-control" id="ssh_password" name="ssh_password">
-                <div class="form-text">Password for SSH authentication. This is stored securely in the database.</div>
+                <div class="form-text">Пароль для SSH аутентификации. Он будет храниться в базе данных в защищенном виде.</div>
             </div>
             
             <div class="form-check mb-4">
                 <input class="form-check-input" type="checkbox" id="verify_connection" name="verify_connection" checked>
                 <label class="form-check-label" for="verify_connection">
-                    Verify connectivity before adding
+                    Проверить подключение перед добавлением
                 </label>
             </div>
             
             <div class="d-flex justify-content-between">
-                <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">Cancel</a>
-                <button type="submit" class="btn btn-primary">Add Server</button>
+                <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">Отмена</a>
+                <button type="submit" class="btn btn-primary">Добавить сервер</button>
             </div>
         </form>
     </div>
