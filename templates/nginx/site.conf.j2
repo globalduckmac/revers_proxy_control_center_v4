@@ -52,11 +52,17 @@ server {
     access_log /var/log/nginx/{{ domain }}.access.log;
     error_log /var/log/nginx/{{ domain }}.error.log;
     
-    # SSL configuration - Certbot will populate these
-    ssl_certificate /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    # SSL configuration
+    # Для надежности используем условную конструкцию для проверки наличия сертификатов
+    # Эта конструкция будет заменена настоящими путями при наличии сертификатов
+    ssl_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;      # По умолчанию самоподписанный
+    ssl_certificate_key /etc/ssl/private/ssl-cert-snakeoil.key; # По умолчанию самоподписанный
+    
+    # Оставляем эти строки для certbot
+    # ssl_certificate /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
+    # include /etc/letsencrypt/options-ssl-nginx.conf;
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
     
     # Proxy settings for HTTPS traffic
     location / {

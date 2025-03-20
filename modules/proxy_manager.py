@@ -218,6 +218,37 @@ class ProxyManager:
                     db.session.commit()
                     return False
             
+            # Проверяем наличие SSL сертификатов для каждого домена и обновляем конфигурацию
+            domains = DomainManager.get_domains_by_server(server.id)
+            ssl_domains = [d for d in domains if d.ssl_enabled]
+            
+            # Если есть домены с включенным SSL, проверяем наличие сертификатов
+            if ssl_domains:
+                logger.info(f"Checking SSL certificates for {len(ssl_domains)} domains")
+                for domain in ssl_domains:
+                    domain_safe = domain.name.replace(".", "_")
+                    site_path = f"/etc/nginx/sites-available/{domain_safe}"
+                    
+                    # Проверяем наличие сертификатов
+                    cert_check_cmd = f"sudo ls -la /etc/letsencrypt/live/{domain.name}/fullchain.pem 2>/dev/null || echo 'Not found'"
+                    cert_result, _ = ServerManager.execute_command(server, cert_check_cmd)
+                    
+                    if "Not found" not in cert_result:
+                        # Сертификаты существуют, заменяем самоподписанные на настоящие
+                        logger.info(f"Found SSL certificates for {domain.name}, updating configuration")
+                        
+                        # Команда для замены самоподписанных сертификатов на настоящие в конфигурации
+                        update_cmd = f"""sudo sed -i 's|ssl_certificate .*snakeoil.pem;|ssl_certificate /etc/letsencrypt/live/{domain.name}/fullchain.pem;|' {site_path} && \
+                                        sudo sed -i 's|ssl_certificate_key .*snakeoil.key;|ssl_certificate_key /etc/letsencrypt/live/{domain.name}/privkey.pem;|' {site_path} && \
+                                        sudo sed -i 's|# include /etc/letsencrypt/options-ssl-nginx.conf;|include /etc/letsencrypt/options-ssl-nginx.conf;|' {site_path} && \
+                                        sudo sed -i 's|# ssl_dhparam|ssl_dhparam|' {site_path}"""
+                        
+                        try:
+                            ServerManager.execute_command(server, update_cmd)
+                            logger.info(f"SSL configuration updated for {domain.name}")
+                        except Exception as e:
+                            logger.warning(f"Could not update SSL configuration for {domain.name}: {str(e)}")
+            
             # Reload Nginx to apply changes
             stdout, stderr = ServerManager.execute_command(
                 server,
