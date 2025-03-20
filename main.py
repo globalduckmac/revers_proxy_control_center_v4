@@ -1,8 +1,9 @@
 from app import app
 import logging
 import atexit
-from flask import g
+from flask import g, jsonify
 import os
+import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -21,6 +22,46 @@ if TelegramNotifier.is_configured():
     app.logger.info(f"Telegram chat ID: {os.environ.get('TELEGRAM_CHAT_ID') if os.environ.get('TELEGRAM_CHAT_ID') else 'Not set'}")
 else:
     app.logger.warning("Telegram notifications are not configured! Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.")
+
+# Добавляем тестовый маршрут для проверки конфигурации Telegram
+@app.route('/debug/telegram-test')
+def test_telegram_debug():
+    """Тестовый маршрут для проверки работы Telegram уведомлений."""
+    if not TelegramNotifier.is_configured():
+        return jsonify({
+            'status': 'error',
+            'message': 'Telegram notifications are not configured',
+            'token_exists': bool(os.environ.get('TELEGRAM_BOT_TOKEN')),
+            'chat_id_exists': bool(os.environ.get('TELEGRAM_CHAT_ID')),
+        })
+    
+    try:
+        # Создаем тестовое сообщение
+        test_message = f"""
+🔍 <b>Отладочное сообщение</b>
+
+Это сообщение отправлено через отладочный маршрут для проверки работы Telegram.
+Время сервера: {asyncio.run(TelegramNotifier.get_current_time())}
+
+<i>Если вы видите это сообщение, значит настройка Telegram выполнена корректно!</i>
+"""
+        # Создаем event loop и отправляем сообщение
+        result = asyncio.run(TelegramNotifier.send_message(test_message))
+        
+        return jsonify({
+            'status': 'success' if result else 'error',
+            'message': 'Test message sent successfully' if result else 'Failed to send message',
+            'token_prefix': os.environ.get('TELEGRAM_BOT_TOKEN')[:5] + '...' if os.environ.get('TELEGRAM_BOT_TOKEN') else 'Not set',
+            'chat_id': os.environ.get('TELEGRAM_CHAT_ID') if os.environ.get('TELEGRAM_CHAT_ID') else 'Not set',
+        })
+    
+    except Exception as e:
+        app.logger.error(f"Error sending test Telegram message: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Exception occurred: {str(e)}',
+            'error_type': str(type(e).__name__),
+        })
 
 # Запускаем задачи при первом запросе
 @app.before_request

@@ -6,6 +6,7 @@ from telegram.error import TelegramError
 from sqlalchemy import func, desc, and_
 from app import db
 from models import Server, Domain, DomainGroup, ServerMetric, DomainMetric, ServerLog, ServerGroup
+import asyncio
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -23,6 +24,16 @@ class TelegramNotifier:
     """
     Класс для отправки уведомлений в Telegram
     """
+    
+    @staticmethod
+    async def get_current_time():
+        """
+        Возвращает текущее время в красивом формате для уведомлений
+        
+        Returns:
+            str: Отформатированное время
+        """
+        return datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
     
     @staticmethod
     def is_configured():

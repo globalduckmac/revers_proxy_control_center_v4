@@ -4,9 +4,25 @@
 
 {% block content %}
 <div class="row mb-4">
-    <div class="col">
+    <div class="col-md-9">
         <h1>Monitoring Dashboard</h1>
         <p class="lead">Monitor your servers and domains</p>
+    </div>
+    <div class="col-md-3 text-end">
+        {% if telegram_configured %}
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('monitoring.send_daily_report') }}" class="btn btn-outline-primary">
+                <i class="fas fa-chart-bar"></i> Отчет
+            </a>
+            <a href="{{ url_for('monitoring.test_telegram') }}" class="btn btn-outline-info">
+                <i class="fas fa-paper-plane"></i> Тест Telegram
+            </a>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <small>Telegram уведомления не настроены</small>
+        </div>
+        {% endif %}
     </div>
 </div>
 
