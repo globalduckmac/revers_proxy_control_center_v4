@@ -1,0 +1,73 @@
+{% extends 'layout.html' %}
+
+{% block title %}Add Domain Group - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Add New Domain Group</h1>
+        <p class="lead">Create a new group to organize domains.</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('domain_groups.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Groups
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('domain_groups.create') }}">
+            <div class="mb-3">
+                <label for="name" class="form-label">Group Name</label>
+                <input type="text" class="form-control" id="name" name="name" required>
+                <div class="form-text">A descriptive name for the domain group.</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="server_id" class="form-label">Assign to Server</label>
+                <select class="form-select" id="server_id" name="server_id">
+                    <option value="">-- Select a Server (Optional) --</option>
+                    {% for server in servers %}
+                    <option value="{{ server.id }}">{{ server.name }} ({{ server.ip_address }})</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Optional: Assign this group to a server for deployment.</div>
+            </div>
+            
+            {% if domains %}
+            <div class="mb-3">
+                <label class="form-label">Assign Domains</label>
+                <div class="row">
+                    {% for domain in domains %}
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="domains[]" id="domain{{ domain.id }}" value="{{ domain.id }}">
+                            <label class="form-check-label" for="domain{{ domain.id }}">
+                                {{ domain.name }}
+                                <small class="text-muted">({{ domain.target_ip }})</small>
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="form-text mt-2">
+                    Optional: Assign domains to this group.
+                    <a href="{{ url_for('domains.create') }}">Create a new domain</a>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <strong>Note:</strong> You haven't created any domains yet. 
+                <a href="{{ url_for('domains.create') }}">Create a domain</a> to add to this group.
+            </div>
+            {% endif %}
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('domain_groups.index') }}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Create Group</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

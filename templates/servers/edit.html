@@ -1,0 +1,153 @@
+{% extends 'layout.html' %}
+
+{% block title %}Edit Server - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Edit Server</h1>
+        <p class="lead">Update server configuration for {{ server.name }}</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Servers
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('servers.edit', server_id=server.id) }}" id="serverForm">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="name" class="form-label">Server Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ server.name }}" required>
+                    <div class="form-text">A descriptive name for the server.</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="ip_address" class="form-label">IP Address</label>
+                    <input type="text" class="form-control" id="ip_address" name="ip_address" value="{{ server.ip_address }}" required>
+                    <div class="form-text">The public IP address of the server.</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="ssh_user" class="form-label">SSH User</label>
+                    <input type="text" class="form-control" id="ssh_user" name="ssh_user" value="{{ server.ssh_user }}" required>
+                    <div class="form-text">Username for SSH authentication.</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="ssh_port" class="form-label">SSH Port</label>
+                    <input type="number" class="form-control" id="ssh_port" name="ssh_port" value="{{ server.ssh_port }}" required>
+                    <div class="form-text">SSH port (default: 22).</div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Authentication Method</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="auth_method" id="auth_key" value="key" 
+                           {% if server.ssh_key %}checked{% endif %}>
+                    <label class="form-check-label" for="auth_key">
+                        SSH Key (More Secure)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="auth_method" id="auth_password" value="password"
+                           {% if server.ssh_password %}checked{% endif %}>
+                    <label class="form-check-label" for="auth_password">
+                        Password
+                    </label>
+                </div>
+            </div>
+            
+            <div class="mb-3" id="ssh_key_section" {% if not server.ssh_key %}style="display: none;"{% endif %}>
+                <label for="ssh_key" class="form-label">SSH Private Key</label>
+                <textarea class="form-control" id="ssh_key" name="ssh_key" rows="5">{{ server.ssh_key }}</textarea>
+                <div class="form-text">
+                    Paste your private SSH key here. This is stored securely in the database.
+                    Leave blank to keep existing key.
+                </div>
+            </div>
+            
+            <div class="mb-3" id="ssh_password_section" {% if not server.ssh_password %}style="display: none;"{% endif %}>
+                <label for="ssh_password" class="form-label">SSH Password</label>
+                <input type="password" class="form-control" id="ssh_password" name="ssh_password">
+                <div class="form-text">
+                    Password for SSH authentication. Leave blank to keep existing password.
+                </div>
+            </div>
+            
+            <div class="form-check mb-4">
+                <input class="form-check-input" type="checkbox" id="verify_connection" name="verify_connection" checked>
+                <label class="form-check-label" for="verify_connection">
+                    Verify connectivity before updating
+                </label>
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Update Server</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Server Logs Section -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5>Server Logs</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ log.action }}</td>
+                        <td>
+                            {% if log.status == 'success' %}
+                            <span class="badge bg-success">Success</span>
+                            {% elif log.status == 'pending' %}
+                            <span class="badge bg-warning">Pending</span>
+                            {% else %}
+                            <span class="badge bg-danger">Error</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#logMessage{{ log.id }}" aria-expanded="false">
+                                View Details
+                            </button>
+                            <div class="collapse mt-2" id="logMessage{{ log.id }}">
+                                <div class="card card-body">
+                                    <pre>{{ log.message }}</pre>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center">No logs found for this server.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/server-validation.js') }}"></script>
+{% endblock %}

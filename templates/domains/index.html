@@ -1,0 +1,99 @@
+{% extends 'layout.html' %}
+
+{% block title %}Domains - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Domains</h1>
+        <p class="lead">Manage your domains for reverse proxying.</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('domains.create') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add Domain
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Domain Name</th>
+                        <th>Target IP</th>
+                        <th>Target Port</th>
+                        <th>SSL Enabled</th>
+                        <th>Groups</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for domain in domains %}
+                    <tr>
+                        <td>{{ domain.name }}</td>
+                        <td>{{ domain.target_ip }}</td>
+                        <td>{{ domain.target_port }}</td>
+                        <td>
+                            {% if domain.ssl_enabled %}
+                            <span class="badge bg-success">Enabled</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Disabled</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% for group in domain.groups %}
+                            <span class="badge bg-info">{{ group.name }}</span>
+                            {% else %}
+                            <span class="badge bg-warning">No Groups</span>
+                            {% endfor %}
+                        </td>
+                        <td>{{ domain.created_at.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('domains.edit', domain_id=domain.id) }}" class="btn btn-sm btn-outline-primary" title="Edit Domain">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#deleteDomainModal{{ domain.id }}" 
+                                        title="Delete Domain">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Delete Domain Modal -->
+                            <div class="modal fade" id="deleteDomainModal{{ domain.id }}" tabindex="-1" aria-labelledby="deleteDomainModalLabel{{ domain.id }}" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="deleteDomainModalLabel{{ domain.id }}">Confirm Deletion</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            Are you sure you want to delete domain <strong>{{ domain.name }}</strong>? This action cannot be undone.
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <form action="{{ url_for('domains.delete', domain_id=domain.id) }}" method="POST">
+                                                <button type="submit" class="btn btn-danger">Delete Domain</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center">No domains found. <a href="{{ url_for('domains.create') }}">Add your first domain</a>.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

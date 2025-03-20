@@ -1,0 +1,110 @@
+{% extends 'layout.html' %}
+
+{% block title %}Servers - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Servers</h1>
+        <p class="lead">Manage your proxy servers.</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('servers.create') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add Server
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>IP Address</th>
+                        <th>SSH User</th>
+                        <th>Status</th>
+                        <th>Domains</th>
+                        <th>Last Check</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for server in servers %}
+                    <tr>
+                        <td>{{ server.name }}</td>
+                        <td>{{ server.ip_address }}</td>
+                        <td>{{ server.ssh_user }}</td>
+                        <td>
+                            {% if server.status == 'active' %}
+                            <span class="badge bg-success">Active</span>
+                            {% elif server.status == 'pending' %}
+                            <span class="badge bg-warning">Pending</span>
+                            {% else %}
+                            <span class="badge bg-danger">Error</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set domain_count = server.domain_groups|map(attribute='domains')|map('length')|sum %}
+                            {{ domain_count }}
+                        </td>
+                        <td>
+                            {% if server.last_check %}
+                            {{ server.last_check.strftime('%Y-%m-%d %H:%M:%S') }}
+                            {% else %}
+                            Never
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('servers.check_connectivity', server_id=server.id) }}" class="btn btn-sm btn-outline-info" title="Check Connectivity">
+                                    <i class="fas fa-sync"></i>
+                                </a>
+                                <a href="{{ url_for('proxy.deploy', server_id=server.id) }}" class="btn btn-sm btn-outline-success" title="Deploy Configuration">
+                                    <i class="fas fa-upload"></i>
+                                </a>
+                                <a href="{{ url_for('servers.edit', server_id=server.id) }}" class="btn btn-sm btn-outline-primary" title="Edit Server">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#deleteServerModal{{ server.id }}" 
+                                        title="Delete Server">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Delete Server Modal -->
+                            <div class="modal fade" id="deleteServerModal{{ server.id }}" tabindex="-1" aria-labelledby="deleteServerModalLabel{{ server.id }}" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="deleteServerModalLabel{{ server.id }}">Confirm Deletion</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            Are you sure you want to delete server <strong>{{ server.name }}</strong>? This action cannot be undone.
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <form action="{{ url_for('servers.delete', server_id=server.id) }}" method="POST">
+                                                <button type="submit" class="btn btn-danger">Delete Server</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center">No servers found. <a href="{{ url_for('servers.create') }}">Add your first server</a>.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends 'layout.html' %}
+
+{% block title %}Edit Domain - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Edit Domain</h1>
+        <p class="lead">Update configuration for {{ domain.name }}</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Domains
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('domains.edit', domain_id=domain.id) }}">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="name" class="form-label">Domain Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ domain.name }}" required>
+                    <div class="form-text">The domain name, e.g., example.com</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="target_ip" class="form-label">Target IP Address</label>
+                    <input type="text" class="form-control" id="target_ip" name="target_ip" value="{{ domain.target_ip }}" required>
+                    <div class="form-text">The IP address to route traffic to</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="target_port" class="form-label">Target Port</label>
+                    <input type="number" class="form-control" id="target_port" name="target_port" value="{{ domain.target_port }}" required>
+                    <div class="form-text">The port to route traffic to</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" id="ssl_enabled" name="ssl_enabled" {% if domain.ssl_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="ssl_enabled">
+                            Enable SSL/HTTPS
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            {% if domain_groups %}
+            <div class="mb-3">
+                <label class="form-label">Assign to Domain Groups</label>
+                <div class="row">
+                    {% for group in domain_groups %}
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="groups[]" id="group{{ group.id }}" value="{{ group.id }}"
+                                  {% if group in domain.groups %}checked{% endif %}>
+                            <label class="form-check-label" for="group{{ group.id }}">
+                                {{ group.name }}
+                                {% if group.server %}
+                                <small class="text-muted">({{ group.server.name }})</small>
+                                {% endif %}
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="form-text mt-2">
+                    Optional: Assign this domain to one or more domain groups.
+                    <a href="{{ url_for('domain_groups.create') }}">Create a new group</a>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <strong>Note:</strong> You haven't created any domain groups yet. 
+                <a href="{{ url_for('domain_groups.create') }}">Create a domain group</a> to organize your domains.
+            </div>
+            {% endif %}
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Update Domain</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

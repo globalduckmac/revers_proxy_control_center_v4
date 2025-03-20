@@ -1,0 +1,109 @@
+{% extends 'layout.html' %}
+
+{% block title %}Domain Groups - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Domain Groups</h1>
+        <p class="lead">Organize domains into groups and assign them to servers.</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('domain_groups.create') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add Group
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Group Name</th>
+                        <th>Server</th>
+                        <th>Domains</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in domain_groups %}
+                    <tr>
+                        <td>{{ group.name }}</td>
+                        <td>
+                            {% if group.server %}
+                            <a href="{{ url_for('servers.edit', server_id=group.server.id) }}">{{ group.server.name }}</a>
+                            {% else %}
+                            <span class="badge bg-warning">Not Assigned</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ group.domains|length }}
+                            {% if group.domains|length > 0 %}
+                            <button class="btn btn-sm btn-outline-info ms-2" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#domainList{{ group.id }}" aria-expanded="false">
+                                View
+                            </button>
+                            <div class="collapse mt-2" id="domainList{{ group.id }}">
+                                <div class="card card-body">
+                                    <ul class="list-group">
+                                        {% for domain in group.domains %}
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            {{ domain.name }}
+                                            <span class="badge bg-primary">{{ domain.target_ip }}:{{ domain.target_port }}</span>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>{{ group.created_at.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('domain_groups.edit', group_id=group.id) }}" class="btn btn-sm btn-outline-primary" title="Edit Group">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#deleteGroupModal{{ group.id }}" 
+                                        title="Delete Group">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Delete Group Modal -->
+                            <div class="modal fade" id="deleteGroupModal{{ group.id }}" tabindex="-1" aria-labelledby="deleteGroupModalLabel{{ group.id }}" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="deleteGroupModalLabel{{ group.id }}">Confirm Deletion</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            Are you sure you want to delete domain group <strong>{{ group.name }}</strong>? This will not delete the domains in this group, but will remove them from the group.
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <form action="{{ url_for('domain_groups.delete', group_id=group.id) }}" method="POST">
+                                                <button type="submit" class="btn btn-danger">Delete Group</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center">No domain groups found. <a href="{{ url_for('domain_groups.create') }}">Create your first group</a>.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
