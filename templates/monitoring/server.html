@@ -1,0 +1,235 @@
+{% extends 'layout.html' %}
+
+{% block title %}Server Metrics - {{ server.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Server Metrics</h1>
+        <p class="lead">Server: {{ server.name }} ({{ server.ip_address }})</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('monitoring.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Monitoring
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Current Status</h5>
+                <div>
+                    <form action="{{ url_for('monitoring.collect_server_metrics', server_id=server.id) }}" method="post" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-light">
+                            <i class="fas fa-sync"></i> Collect Metrics
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if latest_metric %}
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-info text-white">
+                            <div class="card-body text-center">
+                                <h4>{{ latest_metric.cpu_usage|round(1) }}%</h4>
+                                <p>CPU Usage</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-success text-white">
+                            <div class="card-body text-center">
+                                <h4>{{ latest_metric.memory_usage|round(1) }}%</h4>
+                                <p>Memory Usage</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-warning text-dark">
+                            <div class="card-body text-center">
+                                <h4>{{ latest_metric.disk_usage|round(1) }}%</h4>
+                                <p>Disk Usage</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-secondary text-white">
+                            <div class="card-body text-center">
+                                <h4>{{ latest_metric.load_average }}</h4>
+                                <p>Load Average</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-12">
+                        <p class="text-muted">Last updated: {{ latest_metric.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                    </div>
+                    {% else %}
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <p>No metrics available for this server yet.</p>
+                            <form action="{{ url_for('monitoring.collect_server_metrics', server_id=server.id) }}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-sync"></i> Collect Metrics Now
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Performance Metrics</h5>
+            </div>
+            <div class="card-body">
+                <div class="btn-group mb-3" role="group">
+                    <a href="{{ url_for('monitoring.server_metrics', server_id=server.id, period='hour') }}" class="btn btn-sm btn-outline-primary {% if period == 'hour' %}active{% endif %}">Last Hour</a>
+                    <a href="{{ url_for('monitoring.server_metrics', server_id=server.id, period='day') }}" class="btn btn-sm btn-outline-primary {% if period == 'day' %}active{% endif %}">Last Day</a>
+                    <a href="{{ url_for('monitoring.server_metrics', server_id=server.id, period='week') }}" class="btn btn-sm btn-outline-primary {% if period == 'week' %}active{% endif %}">Last Week</a>
+                    <a href="{{ url_for('monitoring.server_metrics', server_id=server.id, period='month') }}" class="btn btn-sm btn-outline-primary {% if period == 'month' %}active{% endif %}">Last Month</a>
+                </div>
+                
+                {% if metrics|length > 0 %}
+                <div class="chart-container" style="position: relative; height:40vh;">
+                    <canvas id="resourceUsageChart"></canvas>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <p>No metrics data available for the selected time period.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if metrics|length > 0 %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Metric History</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>CPU (%)</th>
+                                <th>Memory (%)</th>
+                                <th>Disk (%)</th>
+                                <th>Load Average</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for metric in metrics|reverse %}
+                            <tr>
+                                <td>{{ metric.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>{{ metric.cpu_usage|round(1) }}%</td>
+                                <td>{{ metric.memory_usage|round(1) }}%</td>
+                                <td>{{ metric.disk_usage|round(1) }}%</td>
+                                <td>{{ metric.load_average }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if metrics|length > 0 %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('resourceUsageChart').getContext('2d');
+    
+    const timestamps = {{ timestamps|tojson }};
+    const cpuData = {{ cpu_data|tojson }};
+    const memoryData = {{ memory_data|tojson }};
+    const diskData = {{ disk_data|tojson }};
+    
+    const resourceUsageChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: timestamps,
+            datasets: [
+                {
+                    label: 'CPU Usage (%)',
+                    data: cpuData,
+                    borderColor: 'rgba(23, 162, 184, 1)',
+                    backgroundColor: 'rgba(23, 162, 184, 0.2)',
+                    tension: 0.2,
+                    fill: true
+                },
+                {
+                    label: 'Memory Usage (%)',
+                    data: memoryData,
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                    tension: 0.2,
+                    fill: true
+                },
+                {
+                    label: 'Disk Usage (%)',
+                    data: diskData,
+                    borderColor: 'rgba(255, 193, 7, 1)',
+                    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                    tension: 0.2,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Percentage (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                }
+            }
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

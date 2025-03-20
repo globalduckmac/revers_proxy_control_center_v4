@@ -1,0 +1,388 @@
+{% extends 'layout.html' %}
+
+{% block title %}Domain Metrics - {{ domain.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Domain Traffic Metrics</h1>
+        <p class="lead">Domain: {{ domain.name }} ({{ domain.target_ip }}:{{ domain.target_port }})</p>
+        {% if server %}
+        <p class="mb-0">Server: {{ server.name }} ({{ server.ip_address }})</p>
+        {% endif %}
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('monitoring.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Monitoring
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Traffic Summary</h5>
+                <div>
+                    {% if server %}
+                    <form action="{{ url_for('monitoring.collect_domain_metrics', domain_id=domain.id) }}" method="post" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-light">
+                            <i class="fas fa-sync"></i> Collect Metrics
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if aggregates and aggregates.total_requests > 0 %}
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-info text-white">
+                            <div class="card-body text-center">
+                                <h4>{{ aggregates.total_requests }}</h4>
+                                <p>Total Requests</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-success text-white">
+                            <div class="card-body text-center">
+                                <h4>{{ (aggregates.total_bandwidth / (1024 * 1024))|round(2) }} MB</h4>
+                                <p>Bandwidth Used</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-warning text-dark">
+                            <div class="card-body text-center">
+                                <h4>{{ aggregates.avg_response_time|round(2) if aggregates.avg_response_time else 'N/A' }} ms</h4>
+                                <p>Avg Response Time</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card mb-3 bg-danger text-white">
+                            <div class="card-body text-center">
+                                <h4>{{ aggregates.total_5xx }}</h4>
+                                <p>5xx Errors</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <p>No traffic metrics available for this domain yet.</p>
+                            {% if server %}
+                            <form action="{{ url_for('monitoring.collect_domain_metrics', domain_id=domain.id) }}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-sync"></i> Collect Metrics Now
+                                </button>
+                            </form>
+                            {% else %}
+                            <div class="alert alert-warning mt-3">
+                                <p>
+                                    This domain is not associated with any server. To collect metrics, 
+                                    you need to add this domain to a group and assign the group to a server.
+                                </p>
+                                <a href="{{ url_for('domain_groups.index') }}" class="btn btn-primary">
+                                    <i class="fas fa-object-group"></i> Manage Domain Groups
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if aggregates and aggregates.total_requests > 0 %}
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-dark text-white">
+                                <h6 class="mb-0">HTTP Status Codes</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="statusCodeChart" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header bg-dark text-white">
+                                <h6 class="mb-0">Traffic Statistics</h6>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td>2xx Success</td>
+                                            <td>{{ aggregates.total_2xx }}</td>
+                                            <td>{{ ((aggregates.total_2xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td>3xx Redirection</td>
+                                            <td>{{ aggregates.total_3xx }}</td>
+                                            <td>{{ ((aggregates.total_3xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td>4xx Client Error</td>
+                                            <td>{{ aggregates.total_4xx }}</td>
+                                            <td>{{ ((aggregates.total_4xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                        </tr>
+                                        <tr>
+                                            <td>5xx Server Error</td>
+                                            <td>{{ aggregates.total_5xx }}</td>
+                                            <td>{{ ((aggregates.total_5xx / aggregates.total_requests) * 100)|round(1) }}%</td>
+                                        </tr>
+                                        <tr class="table-primary">
+                                            <td><strong>Total Requests</strong></td>
+                                            <td colspan="2"><strong>{{ aggregates.total_requests }}</strong></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Traffic Over Time</h5>
+            </div>
+            <div class="card-body">
+                <div class="btn-group mb-3" role="group">
+                    <a href="{{ url_for('monitoring.domain_metrics', domain_id=domain.id, period='hour') }}" class="btn btn-sm btn-outline-primary {% if period == 'hour' %}active{% endif %}">Last Hour</a>
+                    <a href="{{ url_for('monitoring.domain_metrics', domain_id=domain.id, period='day') }}" class="btn btn-sm btn-outline-primary {% if period == 'day' %}active{% endif %}">Last Day</a>
+                    <a href="{{ url_for('monitoring.domain_metrics', domain_id=domain.id, period='week') }}" class="btn btn-sm btn-outline-primary {% if period == 'week' %}active{% endif %}">Last Week</a>
+                    <a href="{{ url_for('monitoring.domain_metrics', domain_id=domain.id, period='month') }}" class="btn btn-sm btn-outline-primary {% if period == 'month' %}active{% endif %}">Last Month</a>
+                </div>
+                
+                {% if metrics|length > 0 %}
+                <div class="chart-container" style="position: relative; height:40vh;">
+                    <canvas id="trafficChart"></canvas>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <p>No metrics data available for the selected time period.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if metrics|length > 0 %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Metric History</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Requests</th>
+                                <th>Bandwidth (MB)</th>
+                                <th>Avg Response (ms)</th>
+                                <th>Success (2xx)</th>
+                                <th>Redirects (3xx)</th>
+                                <th>Client Errors (4xx)</th>
+                                <th>Server Errors (5xx)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for metric in metrics|reverse %}
+                            <tr>
+                                <td>{{ metric.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>{{ metric.requests_count }}</td>
+                                <td>{{ (metric.bandwidth_used / (1024 * 1024))|round(2) }}</td>
+                                <td>{{ metric.avg_response_time|round(2) if metric.avg_response_time else 'N/A' }}</td>
+                                <td>{{ metric.status_2xx_count }}</td>
+                                <td>{{ metric.status_3xx_count }}</td>
+                                <td>{{ metric.status_4xx_count }}</td>
+                                <td>{{ metric.status_5xx_count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if metrics|length > 0 %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('trafficChart').getContext('2d');
+    
+    const timestamps = {{ timestamps|tojson }};
+    const requestsData = {{ requests_data|tojson }};
+    const bandwidthData = {{ bandwidth_data|tojson }};
+    const responseTimeData = {{ response_time_data|tojson }};
+    
+    const trafficChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: timestamps,
+            datasets: [
+                {
+                    label: 'Requests',
+                    data: requestsData,
+                    borderColor: 'rgba(23, 162, 184, 1)',
+                    backgroundColor: 'rgba(23, 162, 184, 0.2)',
+                    tension: 0.2,
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Bandwidth (MB)',
+                    data: bandwidthData,
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                    tension: 0.2,
+                    fill: true,
+                    yAxisID: 'y1'
+                },
+                {
+                    label: 'Avg Response Time (ms)',
+                    data: responseTimeData,
+                    borderColor: 'rgba(255, 193, 7, 1)',
+                    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                    tension: 0.2,
+                    fill: true,
+                    yAxisID: 'y2'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Requests'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    beginAtZero: true,
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                    title: {
+                        display: true,
+                        text: 'Bandwidth (MB)'
+                    }
+                },
+                y2: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    beginAtZero: true,
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                    title: {
+                        display: true,
+                        text: 'Response Time (ms)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                }
+            }
+        }
+    });
+    
+    {% if aggregates and aggregates.total_requests > 0 %}
+    const statusCtx = document.getElementById('statusCodeChart').getContext('2d');
+    const statusCodeChart = new Chart(statusCtx, {
+        type: 'pie',
+        data: {
+            labels: ['2xx Success', '3xx Redirect', '4xx Client Error', '5xx Server Error'],
+            datasets: [{
+                data: [
+                    {{ aggregates.total_2xx }},
+                    {{ aggregates.total_3xx }},
+                    {{ aggregates.total_4xx }},
+                    {{ aggregates.total_5xx }}
+                ],
+                backgroundColor: [
+                    'rgba(40, 167, 69, 0.8)',
+                    'rgba(23, 162, 184, 0.8)',
+                    'rgba(255, 193, 7, 0.8)',
+                    'rgba(220, 53, 69, 0.8)'
+                ],
+                borderColor: [
+                    'rgba(40, 167, 69, 1)',
+                    'rgba(23, 162, 184, 1)',
+                    'rgba(255, 193, 7, 1)',
+                    'rgba(220, 53, 69, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.formattedValue;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = Math.round((context.raw / total) * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+});
+</script>
+{% endif %}
+{% endblock %}

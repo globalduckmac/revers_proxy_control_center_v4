@@ -1,0 +1,173 @@
+{% extends 'layout.html' %}
+
+{% block title %}Monitoring Dashboard - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Monitoring Dashboard</h1>
+        <p class="lead">Monitor your servers and domains</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Servers</h5>
+            </div>
+            <div class="card-body">
+                {% if servers %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for server in servers %}
+                            <tr>
+                                <td>{{ server.name }}</td>
+                                <td>
+                                    {% if server.status == 'active' %}
+                                    <span class="badge bg-success">Active</span>
+                                    {% elif server.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('monitoring.server_metrics', server_id=server.id) }}" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-chart-line"></i> View Metrics
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <p>No servers have been added yet.</p>
+                    <a href="{{ url_for('servers.create') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Server
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Domains</h5>
+            </div>
+            <div class="card-body">
+                {% if domains %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Target</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain in domains %}
+                            <tr>
+                                <td>{{ domain.name }}</td>
+                                <td>{{ domain.target_ip }}:{{ domain.target_port }}</td>
+                                <td>
+                                    <a href="{{ url_for('monitoring.domain_metrics', domain_id=domain.id) }}" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-chart-line"></i> View Metrics
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <p>No domains have been added yet.</p>
+                    <a href="{{ url_for('domains.create') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Domain
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">System Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card mb-3 bg-info text-white">
+                            <div class="card-body text-center">
+                                <h3 class="display-4">{{ servers|length }}</h3>
+                                <p class="lead">Total Servers</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-3 bg-success text-white">
+                            <div class="card-body text-center">
+                                <h3 class="display-4">{{ domains|length }}</h3>
+                                <p class="lead">Total Domains</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-3 bg-warning text-dark">
+                            <div class="card-body text-center">
+                                <h3 class="display-4">{{ servers|selectattr('status', 'equalto', 'active')|list|length }}</h3>
+                                <p class="lead">Active Servers</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-3">
+                    <h5>Monitoring Information</h5>
+                    <p>
+                        The monitoring dashboard provides real-time insights into your servers and domain traffic.
+                        To collect server metrics, click on "View Metrics" for a specific server, then use the "Collect Metrics" button.
+                    </p>
+                    <p>
+                        Server metrics include:
+                    </p>
+                    <ul>
+                        <li>CPU Usage</li>
+                        <li>Memory Usage</li>
+                        <li>Disk Usage</li>
+                        <li>System Load</li>
+                    </ul>
+                    
+                    <p>
+                        Domain metrics include:
+                    </p>
+                    <ul>
+                        <li>Request Volume</li>
+                        <li>Bandwidth Usage</li>
+                        <li>Response Times</li>
+                        <li>HTTP Status Code Distribution</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

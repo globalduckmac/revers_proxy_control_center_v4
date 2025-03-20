@@ -85,3 +85,30 @@ class ServerLog(db.Model):
     status = db.Column(db.String(20), nullable=False)  # success, error
     message = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+class ServerMetric(db.Model):
+    """Stores monitoring metrics for servers."""
+    id = db.Column(db.Integer, primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    cpu_usage = db.Column(db.Float, nullable=True)
+    memory_usage = db.Column(db.Float, nullable=True)
+    disk_usage = db.Column(db.Float, nullable=True)
+    load_average = db.Column(db.String(30), nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    server = db.relationship('Server', backref=db.backref('metrics', lazy=True))
+    
+class DomainMetric(db.Model):
+    """Stores traffic metrics for domains."""
+    id = db.Column(db.Integer, primary_key=True)
+    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
+    requests_count = db.Column(db.Integer, default=0)
+    bandwidth_used = db.Column(db.BigInteger, default=0)  # in bytes
+    avg_response_time = db.Column(db.Float, nullable=True)  # in milliseconds
+    status_2xx_count = db.Column(db.Integer, default=0)
+    status_3xx_count = db.Column(db.Integer, default=0)
+    status_4xx_count = db.Column(db.Integer, default=0)
+    status_5xx_count = db.Column(db.Integer, default=0)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    domain = db.relationship('Domain', backref=db.backref('metrics', lazy=True))
