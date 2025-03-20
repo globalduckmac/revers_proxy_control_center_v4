@@ -138,13 +138,15 @@ class ServerManager:
             raise
     
     @staticmethod
-    def execute_command(server, command):
+    def execute_command(server, command, timeout=None, long_running=False):
         """
         Execute a command on the server.
         
         Args:
             server: Server model instance
             command: String command to execute
+            timeout: Override default timeout value (in seconds)
+            long_running: If True, use the extended command timeout
             
         Returns:
             tuple: (stdout, stderr) output from command
@@ -152,13 +154,28 @@ class ServerManager:
         Raises:
             Exception: If command execution fails
         """
+        # Load the appropriate timeout value
+        from flask import current_app
+        if timeout is None:
+            if long_running:
+                timeout = current_app.config.get('SSH_COMMAND_TIMEOUT', 300)  # Default 5 minutes for long commands
+            else:
+                timeout = current_app.config.get('SSH_TIMEOUT', 60)  # Default 1 minute
+        
+        logger.info(f"Executing command on {server.name} ({server.ip_address}): {command} (timeout: {timeout}s)")
+        
         try:
             client = ServerManager.get_ssh_client(server)
-            stdin, stdout, stderr = client.exec_command(command)
+            # Set timeout for this command
+            stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
             
             # Get command output
             stdout_str = stdout.read().decode('utf-8')
             stderr_str = stderr.read().decode('utf-8')
+            
+            # Check exit status
+            exit_status = stdout.channel.recv_exit_status()
+            status = 'success' if exit_status == 0 else 'warning'
             
             # Close connection
             client.close()
@@ -167,8 +184,8 @@ class ServerManager:
             log = ServerLog(
                 server_id=server.id,
                 action='command_execution',
-                status='success' if not stderr_str else 'warning',
-                message=f"Command: {command}\nOutput: {stdout_str}\nErrors: {stderr_str}"
+                status=status,
+                message=f"Command: {command}\nExit Status: {exit_status}\nOutput: {stdout_str}\nErrors: {stderr_str}"
             )
             
             db.session.add(log)
@@ -177,6 +194,7 @@ class ServerManager:
             return stdout_str, stderr_str
             
         except Exception as e:
+            logger.exception(f"Error executing command on {server.name}: {command}")
             # Log error
             log = ServerLog(
                 server_id=server.id,

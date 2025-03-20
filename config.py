@@ -16,7 +16,8 @@ class Config:
     
     # Default SSH settings
     DEFAULT_SSH_PORT = 22
-    SSH_TIMEOUT = 10  # seconds
+    SSH_TIMEOUT = 60  # seconds
+    SSH_COMMAND_TIMEOUT = 300  # seconds for long-running commands
 
 
 class DevelopmentConfig(Config):
