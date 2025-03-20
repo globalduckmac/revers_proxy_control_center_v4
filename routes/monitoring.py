@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, redirect, url_for, request, jsonify, flash, current_app
 from flask_login import login_required
-from models import Server, Domain, ServerMetric, DomainMetric, DomainGroup, ServerLog
+from models import Server, Domain, ServerMetric, DomainMetric, DomainGroup, ServerLog, ServerGroup
 from modules.monitoring import MonitoringManager
 from modules.domain_manager import DomainManager
 from modules.telegram_notifier import TelegramNotifier
@@ -17,30 +17,50 @@ logger = logging.getLogger(__name__)
 @login_required
 def index():
     """Show monitoring dashboard."""
-    # Получаем параметр группы из запроса
+    # Получаем параметры группы из запроса
     group_id = request.args.get('group_id', type=int)
+    server_group_id = request.args.get('server_group_id', type=int)
     
-    # Получаем все группы доменов для фильтра
+    # Получаем все группы доменов и серверов для фильтра
     domain_groups = DomainGroup.query.all()
+    server_groups = ServerGroup.query.order_by(ServerGroup.name).all()
     
-    servers = Server.query.all()
+    # Фильтруем серверы по группе, если указана
+    if server_group_id:
+        server_group = ServerGroup.query.get_or_404(server_group_id)
+        servers = server_group.servers.all()
+    else:
+        servers = Server.query.all()
     
+    # Фильтруем домены по группе, если указана
     if group_id:
-        # Если указана группа, фильтруем домены по этой группе
         group = DomainGroup.query.get_or_404(group_id)
         domains = group.domains.all()
     else:
-        # Иначе показываем все домены
         domains = Domain.query.all()
     
     # Проверяем, настроены ли Telegram-уведомления
     telegram_configured = TelegramNotifier.is_configured()
     
+    # Добавляем информацию о группах серверов для дашборда
+    server_group_info = {}
+    for group in server_groups:
+        active_count = sum(1 for s in group.servers if s.status == 'active')
+        total_count = group.servers.count()
+        server_group_info[group.id] = {
+            'name': group.name,
+            'active': active_count,
+            'total': total_count
+        }
+    
     return render_template('monitoring/index.html', 
                            servers=servers, 
                            domains=domains,
                            domain_groups=domain_groups,
+                           server_groups=server_groups,
+                           server_group_info=server_group_info,
                            selected_group_id=group_id,
+                           selected_server_group_id=server_group_id,
                            telegram_configured=telegram_configured)
 
 @bp.route('/collect/<int:server_id>', methods=['POST'])
