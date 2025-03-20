@@ -86,14 +86,18 @@ class DeploymentManager:
             return True
             
         except Exception as e:
-            # Update log entry if it exists
+            # Create error log entry
             try:
-                if log:
-                    log.status = 'error'
-                    log.message = f"Nginx deployment error: {str(e)}"
-                    db.session.commit()
-            except:
-                pass
+                error_log = ServerLog(
+                    server_id=server.id,
+                    action='nginx_deployment',
+                    status='error',
+                    message=f"Nginx deployment error: {str(e)}"
+                )
+                db.session.add(error_log)
+                db.session.commit()
+            except Exception as log_error:
+                logger.error(f"Failed to create error log: {str(log_error)}")
                 
             logger.error(f"Error deploying Nginx to server {server.name}: {str(e)}")
             return False
@@ -170,14 +174,18 @@ class DeploymentManager:
                 return False
                 
         except Exception as e:
-            # Update log entry if it exists
+            # Create error log entry for SSL setup
             try:
-                if log:
-                    log.status = 'error'
-                    log.message = f"SSL setup error: {str(e)}"
-                    db.session.commit()
-            except:
-                pass
+                error_log = ServerLog(
+                    server_id=server.id,
+                    action='ssl_setup',
+                    status='error',
+                    message=f"SSL setup error: {str(e)}"
+                )
+                db.session.add(error_log)
+                db.session.commit()
+            except Exception as log_error:
+                logger.error(f"Failed to create SSL error log: {str(log_error)}")
                 
             logger.error(f"Error setting up SSL on server {server.name}: {str(e)}")
             return False

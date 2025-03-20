@@ -1,0 +1,132 @@
+{% extends 'layout.html' %}
+
+{% block title %}SSL Setup - {{ server.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>SSL Certificate Setup</h1>
+        <p class="lead">Server: {{ server.name }} ({{ server.ip_address }})</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Servers
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">SSL Enabled Domains</h5>
+            </div>
+            <div class="card-body">
+                {% if ssl_domains %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Target</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain in ssl_domains %}
+                            <tr>
+                                <td>{{ domain.name }}</td>
+                                <td>{{ domain.target_ip }}:{{ domain.target_port }}</td>
+                                <td>
+                                    <span class="badge bg-info">Pending SSL Setup</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="alert alert-info mt-3">
+                    <h5>Important Information</h5>
+                    <p>
+                        Setting up SSL certificates requires the following:
+                    </p>
+                    <ul>
+                        <li>The domain names must be properly configured with DNS records pointing to this server's IP address ({{ server.ip_address }}).</li>
+                        <li>Nginx must be installed and properly configured on the server.</li>
+                        <li>Port 80 and 443 must be open on the server for the certificate validation process.</li>
+                    </ul>
+                </div>
+                
+                <form action="{{ url_for('proxy.setup_ssl', server_id=server.id) }}" method="POST" class="mt-3">
+                    <div class="form-group mb-3">
+                        <label for="admin_email">Email Address for Certificate Notifications</label>
+                        <input type="email" class="form-control" id="admin_email" name="admin_email" 
+                               value="{{ admin_email }}" required>
+                        <small class="form-text text-muted">This email will be used for important notifications about your certificates.</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fas fa-lock"></i> Set Up SSL Certificates
+                    </button>
+                </form>
+                {% else %}
+                <div class="alert alert-warning">
+                    <h5>No SSL-Enabled Domains Found</h5>
+                    <p>
+                        There are no domains with SSL enabled associated with this server. To enable SSL for domains:
+                    </p>
+                    <ol>
+                        <li>Go to the <a href="{{ url_for('domains.index') }}">Domains</a> section</li>
+                        <li>Edit a domain and check the "Enable SSL" option</li>
+                        <li>Ensure the domain is assigned to a group associated with this server</li>
+                    </ol>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if logs %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">SSL Setup History</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs %}
+                            <tr>
+                                <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>
+                                    {% if log.status == 'success' %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% elif log.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ log.message }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

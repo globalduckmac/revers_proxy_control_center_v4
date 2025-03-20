@@ -1,0 +1,107 @@
+{% extends 'layout.html' %}
+
+{% block title %}Install Nginx - {{ server.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Install Nginx</h1>
+        <p class="lead">Server: {{ server.name }} ({{ server.ip_address }})</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Servers
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Nginx Installation</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <h5>Important Information</h5>
+                    <p>
+                        Installing Nginx on the server will:
+                    </p>
+                    <ul>
+                        <li>Update the package repositories</li>
+                        <li>Install Nginx using the system package manager</li>
+                        <li>Configure Nginx to start automatically when the server boots</li>
+                        <li>Create necessary directory structure for configurations</li>
+                    </ul>
+                    <p>
+                        <strong>Note:</strong> This operation requires sudo privileges on the server.
+                    </p>
+                </div>
+                
+                {% if server_status == 'active' %}
+                <div class="d-grid gap-2 col-md-6 mx-auto mt-4">
+                    <form action="{{ url_for('proxy.install_nginx', server_id=server.id) }}" method="POST">
+                        <button type="submit" class="btn btn-warning btn-lg">
+                            <i class="fas fa-server"></i> Install Nginx
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="alert alert-danger mt-3">
+                    <h5>Server Not Reachable</h5>
+                    <p>
+                        Cannot install Nginx because the server is not reachable. Please check the server's connectivity
+                        before proceeding with the installation.
+                    </p>
+                    <a href="{{ url_for('servers.check_connectivity', server_id=server.id) }}" class="btn btn-outline-info">
+                        <i class="fas fa-sync"></i> Check Connectivity
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if logs %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Installation History</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs %}
+                            <tr>
+                                <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>
+                                    {% if log.status == 'success' %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% elif log.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ log.message }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
