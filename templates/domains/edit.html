@@ -47,6 +47,12 @@
                 </div>
             </div>
             
+            <div class="mb-3">
+                <label for="expected_nameservers" class="form-label">Ожидаемые NS-записи</label>
+                <textarea class="form-control" id="expected_nameservers" name="expected_nameservers" rows="2">{{ domain.expected_nameservers or '' }}</textarea>
+                <div class="form-text">Введите ожидаемые NS-серверы, разделенные запятыми (например: ns1.example.com, ns2.example.com)</div>
+            </div>
+            
             {% if domain_groups %}
             <div class="mb-3">
                 <label class="form-label">Assign to Domain Groups</label>

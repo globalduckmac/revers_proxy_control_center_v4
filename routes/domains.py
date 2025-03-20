@@ -110,11 +110,15 @@ def edit(domain_id):
                 flash(f'Domain {name} already exists', 'danger')
                 return redirect(url_for('domains.edit', domain_id=domain_id))
         
+        # Получаем ожидаемые NS-записи
+        expected_nameservers = request.form.get('expected_nameservers', '')
+        
         # Update domain
         domain.name = name
         domain.target_ip = target_ip
         domain.target_port = target_port
         domain.ssl_enabled = ssl_enabled
+        domain.expected_nameservers = expected_nameservers
         
         # Update domain groups
         domain.groups = []
