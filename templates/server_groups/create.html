@@ -1,0 +1,81 @@
+{% extends 'layout.html' %}
+
+{% block title %}Создание группы серверов{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('server_groups.index') }}">Группы серверов</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Создание группы</li>
+                </ol>
+            </nav>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Создание новой группы серверов</h5>
+                </div>
+                <div class="card-body">
+                    {% include 'partials/flash_messages.html' %}
+                    
+                    <form method="POST" action="{{ url_for('server_groups.create') }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Название группы <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                            <div class="form-text">Введите уникальное название для группы серверов.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Описание</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                            <div class="form-text">Добавьте дополнительную информацию о группе серверов (необязательно).</div>
+                        </div>
+                        
+                        {% if servers %}
+                        <div class="mb-4">
+                            <label class="form-label">Серверы в группе</label>
+                            <div class="card">
+                                <div class="card-body p-3">
+                                    <div class="row">
+                                        {% for server in servers %}
+                                        <div class="col-md-4 mb-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="server-{{ server.id }}" name="servers" value="{{ server.id }}">
+                                                <label class="form-check-label" for="server-{{ server.id }}">
+                                                    {{ server.name }}
+                                                    <small class="text-muted d-block">{{ server.ip_address }}</small>
+                                                    <span class="badge {% if server.status == 'active' %}bg-success{% elif server.status == 'pending' %}bg-warning{% else %}bg-danger{% endif %}">
+                                                        {{ server.status }}
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-text">Выберите серверы, которые должны входить в эту группу.</div>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i> Серверы отсутствуют. Сначала добавьте серверы в систему.
+                        </div>
+                        {% endif %}
+                        
+                        <div class="d-flex mt-4">
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="fas fa-save me-1"></i> Сохранить
+                            </button>
+                            <a href="{{ url_for('server_groups.index') }}" class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i> Отменить
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

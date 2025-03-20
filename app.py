@@ -50,6 +50,7 @@ def register_blueprints(app):
     from routes.domain_groups import bp as domain_groups_bp
     from routes.proxy import bp as proxy_bp
     from routes.monitoring import bp as monitoring_bp
+    from routes.server_groups import server_groups_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(servers_bp)
@@ -57,6 +58,7 @@ def register_blueprints(app):
     app.register_blueprint(domain_groups_bp)
     app.register_blueprint(proxy_bp)
     app.register_blueprint(monitoring_bp)
+    app.register_blueprint(server_groups_bp, url_prefix='/server-groups')
 
 # Register template filters
 from filters import register_filters
