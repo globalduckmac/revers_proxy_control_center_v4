@@ -143,6 +143,36 @@ class MonitoringManager:
             since = datetime.utcnow() - timedelta(hours=1)
             since_str = since.strftime("%Y:%H:%M:%S")
             
+            # Проверим размер файла лога
+            stdout, _ = ServerManager.execute_command(
+                server,
+                f"stat -c %s {log_path}"
+            )
+            file_size = int(stdout.strip()) if stdout.strip().isdigit() else 0
+            
+            # Если файл пустой или почти пустой, значит, логов еще нет
+            if file_size < 100:  # Примерный размер пустого файла или файла с 1-2 заголовками
+                logger.info(f"Log file for {domain.name} is empty or almost empty (size: {file_size} bytes)")
+                
+                # Создаем метрику с нулевыми значениями
+                metric = DomainMetric(
+                    domain_id=domain.id,
+                    requests_count=0,
+                    bandwidth_used=0,
+                    avg_response_time=None,
+                    status_2xx_count=0,
+                    status_3xx_count=0,
+                    status_4xx_count=0,
+                    status_5xx_count=0,
+                    timestamp=datetime.utcnow()
+                )
+                
+                db.session.add(metric)
+                db.session.commit()
+                
+                logger.info(f"Created empty domain metrics for {domain.name}")
+                return metric
+            
             # Extract metrics from logs (using awk for efficiency)
             # Get request count
             stdout, _ = ServerManager.execute_command(
@@ -151,18 +181,35 @@ class MonitoringManager:
             )
             requests_count = int(stdout.strip()) if stdout.strip().isdigit() else 0
             
-            # Get bandwidth used (sum of response sizes)
-            stdout, _ = ServerManager.execute_command(
-                server,
-                f"awk '{{sum+=$10}} END {{print sum}}' {log_path}"
-            )
-            bandwidth_used = int(stdout.strip()) if stdout.strip().isdigit() else 0
-            
-            # Get response time average (if using Nginx's $request_time variable)
-            stdout, _ = ServerManager.execute_command(
-                server,
-                f"awk '{{sum+=$11; count+=1}} END {{if(count>0) print sum/count*1000; else print 0}}' {log_path}"
-            )
+            # Если нет запросов, значит нет смысла считать остальные метрики
+            if requests_count == 0:
+                stdout, _ = ServerManager.execute_command(
+                    server,
+                    f"wc -l {log_path} | cut -d ' ' -f 1"
+                )
+                total_lines = int(stdout.strip()) if stdout.strip().isdigit() else 0
+                
+                if total_lines > 0:
+                    # Есть какие-то логи, но не за последний час
+                    logger.info(f"No requests in the last hour for {domain.name}, but log has {total_lines} entries")
+                else:
+                    logger.info(f"Log file exists but is empty for {domain.name}")
+                
+                bandwidth_used = 0
+                avg_response_time = None
+            else:
+                # Get bandwidth used (sum of response sizes)
+                stdout, _ = ServerManager.execute_command(
+                    server,
+                    f"grep '{since_str}' {log_path} | awk '{{sum+=$10}} END {{print sum}}'"
+                )
+                bandwidth_used = int(stdout.strip()) if stdout.strip().isdigit() else 0
+                
+                # Get response time average (if using Nginx's $request_time variable)
+                stdout, _ = ServerManager.execute_command(
+                    server,
+                    f"grep '{since_str}' {log_path} | awk '{{sum+=$11; count+=1}} END {{if(count>0) print sum/count*1000; else print 0}}'"
+                )
             avg_response_time = float(stdout.strip()) if stdout.strip() and re.match(r'^[0-9.]+$', stdout.strip()) else None
             
             # Get status code counts

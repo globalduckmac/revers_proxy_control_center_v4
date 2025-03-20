@@ -210,7 +210,13 @@
                             <tr>
                                 <td>{{ metric.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                 <td>{{ metric.requests_count }}</td>
-                                <td>{{ (metric.bandwidth_used / (1024 * 1024))|round(2) }}</td>
+                                <td>
+                                  {% if metric.bandwidth_used > 0 %}
+                                    {{ (metric.bandwidth_used / (1024 * 1024))|round(2) }}
+                                  {% else %}
+                                    0
+                                  {% endif %}
+                                </td>
                                 <td>{{ metric.avg_response_time|round(2) if metric.avg_response_time else 'N/A' }}</td>
                                 <td>{{ metric.status_2xx_count }}</td>
                                 <td>{{ metric.status_3xx_count }}</td>
