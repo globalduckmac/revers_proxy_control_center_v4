@@ -196,7 +196,7 @@ class MonitoringManager:
                     logger.info(f"Log file exists but is empty for {domain.name}")
                 
                 bandwidth_used = 0
-                avg_response_time = None
+                avg_response_time = None  # Если нет запросов, то нет и времени отклика
             else:
                 # Get bandwidth used (sum of response sizes)
                 stdout, _ = ServerManager.execute_command(
@@ -210,7 +210,7 @@ class MonitoringManager:
                     server,
                     f"grep '{since_str}' {log_path} | awk '{{sum+=$11; count+=1}} END {{if(count>0) print sum/count*1000; else print 0}}'"
                 )
-            avg_response_time = float(stdout.strip()) if stdout.strip() and re.match(r'^[0-9.]+$', stdout.strip()) else None
+                avg_response_time = float(stdout.strip()) if stdout.strip() and re.match(r'^[0-9.]+$', stdout.strip()) else None
             
             # Get status code counts
             stdout, _ = ServerManager.execute_command(
