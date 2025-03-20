@@ -39,8 +39,8 @@
                 </div>
             </div>
             <div class="card-body">
-                <div class="row">
-                    {% if aggregates and aggregates.total_requests > 0 %}
+                <div class="row mb-4">
+                    {% if aggregates %}
                     <div class="col-md-3">
                         <div class="card mb-3 bg-info text-white">
                             <div class="card-body text-center">
@@ -60,7 +60,7 @@
                     <div class="col-md-3">
                         <div class="card mb-3 bg-warning text-dark">
                             <div class="card-body text-center">
-                                <h4>{{ aggregates.avg_response_time|round(2) if aggregates.avg_response_time else 'N/A' }} ms</h4>
+                                <h4>{% if aggregates.avg_response_time %}{{ aggregates.avg_response_time|round(2) }} ms{% else %}N/A{% endif %}</h4>
                                 <p>Avg Response Time</p>
                             </div>
                         </div>
@@ -169,15 +169,21 @@
                     <a href="{{ url_for('monitoring.domain_metrics', domain_id=domain.id, period='month') }}" class="btn btn-sm btn-outline-primary {% if period == 'month' %}active{% endif %}">Last Month</a>
                 </div>
                 
-                {% if metrics|length > 0 %}
-                <div class="chart-container" style="position: relative; height:40vh;">
-                    <canvas id="trafficChart"></canvas>
+                <div class="row mb-4">
+                    {% if metrics|length > 0 %}
+                    <div class="col-md-12">
+                        <div class="chart-container" style="position: relative; height:40vh;">
+                            <canvas id="trafficChart"></canvas>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-md-12">
+                        <div class="alert alert-warning">
+                            <p>No metrics data available for the selected time period.</p>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div class="alert alert-warning">
-                    <p>No metrics data available for the selected time period.</p>
-                </div>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -217,7 +223,7 @@
                                     0
                                   {% endif %}
                                 </td>
-                                <td>{{ metric.avg_response_time|round(2) if metric.avg_response_time else 'N/A' }}</td>
+                                <td>{% if metric.avg_response_time %}{{ metric.avg_response_time|round(2) }}{% else %}N/A{% endif %}</td>
                                 <td>{{ metric.status_2xx_count }}</td>
                                 <td>{{ metric.status_3xx_count }}</td>
                                 <td>{{ metric.status_4xx_count }}</td>
