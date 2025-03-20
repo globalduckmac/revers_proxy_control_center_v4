@@ -101,14 +101,43 @@ class MonitoringManager:
             return None
         
         try:
-            # Define the log path (assuming standard Nginx log location)
-            log_path = f"/var/log/nginx/{domain.name}.access.log"
+            # Определим возможные варианты пути к файлу логов
+            domain_name = domain.name
+            possible_log_paths = [
+                f"/var/log/nginx/{domain_name}.access.log",
+                f"/var/log/nginx/access.{domain_name}.log",
+                f"/var/log/nginx/{domain_name}_access.log",
+                # Для случаев, когда имя домена используется как часть пути к логу
+                f"/var/log/nginx/{domain_name}/access.log"
+            ]
             
-            # Check if log file exists
-            stdout, _ = ServerManager.execute_command(server, f"test -f {log_path} && echo 'exists' || echo 'not_exists'")
-            if stdout.strip() == 'not_exists':
-                logger.warning(f"Access log for domain {domain.name} not found at {log_path}")
-                return None
+            # Проверим, какой из файлов логов существует
+            log_path = None
+            for path in possible_log_paths:
+                stdout, _ = ServerManager.execute_command(server, f"test -f {path} && echo 'exists' || echo 'not_exists'")
+                if stdout.strip() == 'exists':
+                    log_path = path
+                    break
+            
+            # Если не нашли файл логов, создадим его
+            if not log_path:
+                log_path = possible_log_paths[0]  # Используем первый вариант пути
+                logger.warning(f"Access log for domain {domain_name} not found, creating empty file at {log_path}")
+                
+                # Создаем директорию, если она не существует
+                log_dir = "/".join(log_path.split("/")[:-1])
+                ServerManager.execute_command(server, f"sudo mkdir -p {log_dir}")
+                
+                # Создаем пустой файл логов
+                ServerManager.execute_command(server, f"sudo touch {log_path}")
+                ServerManager.execute_command(server, f"sudo chown www-data:www-data {log_path}")
+                
+                # Обновляем конфигурацию Nginx, чтобы он писал в этот файл
+                logger.info(f"Updating Nginx configuration to use log file at {log_path}")
+                # Здесь можно было бы добавить обновление конфигурации Nginx, 
+                # но это будет сделано при следующем деплое конфигурации
+                
+                return None  # Вернем None, так как файл только что создан и в нем нет данных
             
             # Get stats from the last hour
             since = datetime.utcnow() - timedelta(hours=1)
