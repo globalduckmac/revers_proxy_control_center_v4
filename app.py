@@ -58,6 +58,10 @@ def register_blueprints(app):
     app.register_blueprint(proxy_bp)
     app.register_blueprint(monitoring_bp)
 
+# Register template filters
+from filters import register_filters
+register_filters(app)
+
 with app.app_context():
     # Import models to ensure they're registered with SQLAlchemy
     import models  # noqa: F401
