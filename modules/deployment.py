@@ -217,6 +217,28 @@ class DeploymentManager:
             stdout, stderr = ServerManager.execute_command(server, cert_command, long_running=True)
             
             if "Congratulations" in stdout or "Successfully received certificate" in stdout:
+                # Certbot автоматически добавляет редирект с HTTP на HTTPS, даже если наш шаблон этого не делает
+                # Удалим редирект для каждого домена
+                for domain in ssl_domains:
+                    domain_safe = domain.name.replace(".", "_")
+                    config_path = f"/etc/nginx/sites-available/{domain_safe}"
+                    
+                    # Команда удаляет редирект - ищет return 301 и заменяет весь блок location на правильный
+                    cmd = f'''sudo grep -l "return 301" {config_path} && sudo sed -i '/location \\/ {{/,/}}/c\\    location / {{\\n        proxy_pass http:\\/\\/{domain.target_ip}:{domain.target_port};\\n        proxy_set_header Host $host;\\n        proxy_set_header X-Real-IP $remote_addr;\\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\\n        proxy_set_header X-Forwarded-Proto $scheme;\\n        proxy_http_version 1.1;\\n        proxy_set_header Upgrade $http_upgrade;\\n        proxy_set_header Connection "upgrade";\\n        proxy_connect_timeout 60s;\\n        proxy_send_timeout 60s;\\n        proxy_read_timeout 60s;\\n    }}' {config_path} || echo "No redirect found"'''
+                    
+                    try:
+                        ServerManager.execute_command(server, cmd)
+                        logger.info(f"Removed automatic HTTPS redirect for domain {domain.name}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove HTTPS redirect for {domain.name}: {str(e)}")
+                
+                # Перезагрузим nginx чтобы применить изменения
+                try:
+                    ServerManager.execute_command(server, "sudo systemctl reload nginx")
+                    logger.info(f"Reloaded Nginx after removing HTTPS redirects")
+                except Exception as e:
+                    logger.warning(f"Could not reload Nginx: {str(e)}")
+                
                 # Update log entry
                 log.status = 'success'
                 log.message = f"SSL certificates obtained successfully for {len(ssl_domains)} domains"
