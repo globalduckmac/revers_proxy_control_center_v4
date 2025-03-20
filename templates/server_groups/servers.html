@@ -62,7 +62,7 @@
                                     </td>
                                     <td>
                                         {% if server.last_check %}
-                                        {{ server.last_check|humanize_timestamp }}
+                                        {{ server.last_check|humanize }}
                                         {% else %}
                                         <span class="text-muted">Не проверялся</span>
                                         {% endif %}
