@@ -200,24 +200,51 @@ def check_connectivity(server_id):
     """Check server connectivity."""
     server = Server.query.get_or_404(server_id)
     
-    # Для серверов с аутентификацией по паролю нужно предоставить пароль
-    if not server.ssh_key and request.method == 'GET':
-        return render_template('servers/check_password.html', server=server)
+    # Для серверов с шифрованным паролем используем его для проверки
+    if server.ssh_encrypted_password:
+        try:
+            # Если пароль уже зашифрован, используем его
+            if ServerManager.check_connectivity(server):
+                flash(f'Подключение к серверу {server.name} успешно проверено', 'success')
+            else:
+                flash(f'Ошибка подключения к серверу {server.name}', 'danger')
+            return redirect(url_for('servers.index'))
+        except Exception as e:
+            flash(f'Ошибка проверки подключения: {str(e)}', 'danger')
+            return redirect(url_for('servers.index'))
+    
+    # Для серверов с аутентификацией по паролю без зашифрованного пароля
+    if not server.ssh_key and not server.ssh_encrypted_password and request.method == 'GET':
+        # Отображаем форму ввода пароля
+        servers = Server.query.all()
+        password_servers = [s for s in servers if not s.ssh_key and not s.ssh_encrypted_password]
+        key_servers = [s for s in servers if s.ssh_key]
+        encrypted_servers = [s for s in servers if s.ssh_encrypted_password]
+        
+        return render_template('servers/check_password.html', 
+                               server=server, 
+                               servers=servers,
+                               password_servers=password_servers,
+                               key_servers=key_servers,
+                               encrypted_servers=encrypted_servers)
     
     # Если используется аутентификация по паролю, получаем его из формы
-    if not server.ssh_key and request.method == 'POST':
+    if not server.ssh_key and not server.ssh_encrypted_password and request.method == 'POST':
         password = request.form.get('ssh_password')
         if not password:
             flash('Пароль SSH необходим для проверки подключения', 'warning')
-            return render_template('servers/check_password.html', server=server)
+            return redirect(url_for('servers.check_connectivity', server_id=server_id))
         
         # Временно храним пароль только в оперативной памяти
         server._temp_password = password
     
-    if ServerManager.check_connectivity(server):
-        flash(f'Connectivity check successful for server {server.name}', 'success')
-    else:
-        flash(f'Connectivity check failed for server {server.name}', 'danger')
+    try:
+        if ServerManager.check_connectivity(server):
+            flash(f'Подключение к серверу {server.name} успешно проверено', 'success')
+        else:
+            flash(f'Ошибка подключения к серверу {server.name}', 'danger')
+    except Exception as e:
+        flash(f'Ошибка проверки подключения: {str(e)}', 'danger')
     
     # Очищаем временный пароль
     if hasattr(server, '_temp_password'):
