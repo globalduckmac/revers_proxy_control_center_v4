@@ -42,6 +42,22 @@ db.init_app(app)
 def inject_now():
     return {'now': datetime.utcnow}
 
+# Register blueprints
+def register_blueprints(app):
+    from routes.auth import bp as auth_bp
+    from routes.servers import bp as servers_bp
+    from routes.domains import bp as domains_bp
+    from routes.domain_groups import bp as domain_groups_bp
+    from routes.proxy import bp as proxy_bp
+    from routes.monitoring import bp as monitoring_bp
+    
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(servers_bp)
+    app.register_blueprint(domains_bp)
+    app.register_blueprint(domain_groups_bp)
+    app.register_blueprint(proxy_bp)
+    app.register_blueprint(monitoring_bp)
+
 with app.app_context():
     # Import models to ensure they're registered with SQLAlchemy
     import models  # noqa: F401
@@ -53,3 +69,6 @@ with app.app_context():
     
     # Create database tables if they don't exist
     db.create_all()
+    
+    # Register blueprints
+    register_blueprints(app)
