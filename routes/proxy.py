@@ -116,6 +116,13 @@ def install_nginx(server_id):
         action='install_nginx'
     ).order_by(ServerLog.created_at.desc()).limit(10).all()
     
+    # Get the latest successful installation log, if any
+    latest_log = ServerLog.query.filter_by(
+        server_id=server.id,
+        action='install_nginx',
+        status='success'
+    ).order_by(ServerLog.created_at.desc()).first()
+    
     # Check server connectivity status
     from modules.server_manager import ServerManager
     server_status = 'active' if ServerManager.check_connectivity(server) else 'error'
@@ -126,6 +133,7 @@ def install_nginx(server_id):
             'proxy/install_nginx.html',
             server=server,
             logs=logs,
+            latest_log=latest_log,
             server_status=server_status
         )
     
@@ -154,7 +162,8 @@ def install_nginx(server_id):
             log.message = f'Nginx successfully installed on server {server.name}'
             db.session.commit()
             
-            flash(f'Nginx successfully installed on server {server.name}', 'success')
+            # Do not flash the message as it will be shown on the page
+            # flash(f'Nginx successfully installed on server {server.name}', 'success')
         else:
             # Update log entry
             log.status = 'error'
@@ -172,6 +181,7 @@ def install_nginx(server_id):
         
         flash(f'Error installing Nginx: {str(e)}', 'danger')
     
+    # Refresh the page to show the new state
     return redirect(url_for('proxy.install_nginx', server_id=server_id))
 
 @bp.route('/configs/<int:server_id>', methods=['GET'])
