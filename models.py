@@ -83,6 +83,14 @@ class Server(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Новые поля для биллинга и оплаты
+    comment = db.Column(db.Text, nullable=True)  # Комментарий к серверу
+    billing_provider = db.Column(db.String(128), nullable=True)  # Где был куплен сервер
+    billing_login = db.Column(db.String(128), nullable=True)  # Логин от биллинга
+    billing_password_encrypted = db.Column(db.Text, nullable=True)  # Зашифрованный пароль от биллинга
+    payment_date = db.Column(db.Date, nullable=False)  # Дата оплаты сервера (обязательное поле)
+    payment_reminder_sent = db.Column(db.Boolean, default=False)  # Флаг отправки напоминания
+    
     def set_ssh_password(self, password):
         """
         Хеширует и сохраняет пароль SSH с использованием werkzeug.security
@@ -146,6 +154,51 @@ class Server(db.Model):
     @ssh_password.setter
     def ssh_password(self, password):
         self.set_ssh_password(password)
+    
+    def set_billing_password(self, password):
+        """
+        Шифрует и сохраняет пароль биллинга для обратимого хранения
+        
+        Args:
+            password: Пароль от биллинга в открытом виде
+        """
+        if password:
+            self.billing_password_encrypted = encrypt_password(password)
+        else:
+            self.billing_password_encrypted = None
+    
+    def get_billing_password(self):
+        """
+        Расшифровывает пароль от биллинга
+        
+        Returns:
+            str: Расшифрованный пароль или None, если пароля нет
+        """
+        if not self.billing_password_encrypted:
+            return None
+        return decrypt_password(self.billing_password_encrypted)
+    
+    # Метод для проверки, нужно ли отправить напоминание об оплате
+    def check_payment_reminder_needed(self):
+        """
+        Проверяет, нужно ли отправить напоминание об оплате
+        (за два дня до даты оплаты)
+        
+        Returns:
+            bool: True, если напоминание нужно отправить, False - если нет
+        """
+        if not self.payment_date:
+            return False
+        
+        today = datetime.now().date()
+        reminder_date = self.payment_date - timedelta(days=2)
+        
+        # Если уже отправляли напоминание
+        if self.payment_reminder_sent:
+            return False
+            
+        # Если сегодня или позже дня напоминания (за 2 дня до оплаты)
+        return today >= reminder_date and today < self.payment_date
     
     # Relationships
     domain_groups = db.relationship('DomainGroup', backref='server', lazy=True)

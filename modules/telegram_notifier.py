@@ -215,6 +215,66 @@ class TelegramNotifier:
         await TelegramNotifier.send_message(message)
     
     @staticmethod
+    async def notify_server_payment_reminder(server):
+        """
+        Отправляет напоминание об оплате сервера
+        
+        Args:
+            server (Server): Объект сервера для которого нужно отправить напоминание
+        """
+        if not server.payment_date:
+            return
+            
+        days_left = (server.payment_date - datetime.now().date()).days
+        emoji = "💸"
+        
+        # Получаем информацию о биллинге
+        billing_info = []
+        if server.billing_provider:
+            billing_info.append(f"Провайдер: <b>{server.billing_provider}</b>")
+        if server.billing_login:
+            billing_info.append(f"Логин: <b>{server.billing_login}</b>")
+            
+        billing_text = "\n".join(billing_info) if billing_info else "Данные биллинга не указаны"
+        
+        # Детали сервера
+        server_groups = []
+        if server.groups:
+            for group in server.groups:
+                server_groups.append(f"• {group.name}")
+        
+        groups_text = "\n".join(server_groups) if server_groups else "Сервер не входит ни в одну группу"
+        
+        message = f"{emoji} <b>Напоминание об оплате сервера</b>\n\n" \
+                  f"Сервер: <b>{server.name}</b>\n" \
+                  f"Дата оплаты: <b>{server.payment_date.strftime('%d.%m.%Y')}</b>\n" \
+                  f"Осталось дней: <b>{days_left}</b>\n\n" \
+                  f"<b>Данные биллинга:</b>\n{billing_text}\n\n" \
+                  f"<b>Группы сервера:</b>\n{groups_text}\n\n" \
+                  f"Время: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        await TelegramNotifier.send_message(message)
+        
+        # Помечаем, что уведомление отправлено
+        server.payment_reminder_sent = True
+        db.session.commit()
+    
+    @staticmethod
+    async def check_server_payment_reminders():
+        """
+        Проверяет и отправляет напоминания об оплате серверов
+        """
+        servers = Server.query.filter(Server.payment_date.isnot(None)).all()
+        reminder_count = 0
+        
+        for server in servers:
+            if server.check_payment_reminder_needed():
+                await TelegramNotifier.notify_server_payment_reminder(server)
+                reminder_count += 1
+        
+        return reminder_count
+    
+    @staticmethod
     async def send_daily_report():
         """
         Отправляет ежедневный отчет о состоянии системы
@@ -334,7 +394,7 @@ class TelegramNotifier:
             report += "❌ <b>Недоступные серверы:</b>\n"
             for server in servers:
                 if server.status != 'active':
-                    report += f"- {server.name} ({server.ip_address})\n"
+                    report += f"- {server.name}\n"
         report += "\n"
         
         # Состояние доменов
