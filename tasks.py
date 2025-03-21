@@ -75,6 +75,15 @@ class BackgroundTasks:
         self.threads.append(domain_metrics_thread)
         domain_metrics_thread.start()
         
+        # Запускаем задачу проверки напоминаний об оплате серверов
+        payment_reminder_thread = threading.Thread(
+            target=self._run_task,
+            args=(self._check_payment_reminders, CHECK_SERVER_INTERVAL, "Payment reminder check"),
+            daemon=True
+        )
+        self.threads.append(payment_reminder_thread)
+        payment_reminder_thread.start()
+        
         # Запускаем задачу отправки ежедневных отчетов
         daily_report_thread = threading.Thread(
             target=self._run_task,
@@ -376,6 +385,35 @@ class BackgroundTasks:
             except Exception as e:
                 logger.error(f"Error sending daily report: {str(e)}")
                 
+    def _check_payment_reminders(self):
+        """Проверяет необходимость отправки напоминаний об оплате серверов."""
+        from app import app
+        
+        # Проверяем, настроены ли Telegram уведомления
+        if not TelegramNotifier.is_configured():
+            logger.warning("Telegram notifications are not configured, skipping payment reminders check")
+            return
+        
+        logger.info("Checking server payment reminders...")
+        
+        with app.app_context():
+            try:
+                # Запускаем асинхронную задачу для проверки и отправки напоминаний
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    reminder_count = loop.run_until_complete(TelegramNotifier.check_server_payment_reminders())
+                    if reminder_count > 0:
+                        logger.info(f"Sent {reminder_count} payment reminders")
+                    else:
+                        logger.info("No payment reminders needed at this time")
+                finally:
+                    loop.close()
+                
+            except Exception as e:
+                logger.error(f"Error checking payment reminders: {str(e)}")
+    
     def _check_high_load_metrics(self, server, metric):
         """
         Проверяет метрики сервера на превышение пороговых значений и отправляет уведомления.

@@ -99,6 +99,49 @@
                 </div>
             </div>
             
+            <!-- Billing Information Section -->
+            <h4 class="mt-4 mb-3">Данные биллинга и оплаты</h4>
+            
+            <div class="mb-3">
+                <label for="comment" class="form-label">Комментарий</label>
+                <textarea class="form-control" id="comment" name="comment" rows="2">{{ server.comment or '' }}</textarea>
+                <div class="form-text">
+                    Дополнительная информация о сервере (необязательно).
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="billing_provider" class="form-label">Провайдер биллинга</label>
+                    <input type="text" class="form-control" id="billing_provider" name="billing_provider" value="{{ server.billing_provider or '' }}">
+                    <div class="form-text">Название сервиса, где был куплен сервер (необязательно).</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="payment_date" class="form-label">Дата оплаты</label>
+                    <input type="date" class="form-control" id="payment_date" name="payment_date" 
+                           value="{{ server.payment_date.strftime('%Y-%m-%d') if server.payment_date else '' }}" required>
+                    <div class="form-text">Дата следующей оплаты сервера (обязательно).</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="billing_login" class="form-label">Логин биллинга</label>
+                    <input type="text" class="form-control" id="billing_login" name="billing_login" value="{{ server.billing_login or '' }}">
+                    <div class="form-text">Логин для входа в панель биллинга (необязательно).</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="billing_password" class="form-label">Пароль биллинга</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="billing_password" name="billing_password">
+                        <button class="btn btn-outline-secondary" type="button" id="toggle_billing_password">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Пароль для входа в панель биллинга. Оставьте пустым, чтобы сохранить текущий пароль (необязательно).</div>
+                </div>
+            </div>
+            
             <div class="form-check mb-4">
                 <input class="form-check-input" type="checkbox" id="verify_connection" name="verify_connection" checked>
                 <label class="form-check-label" for="verify_connection">
@@ -170,4 +213,28 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/server-validation.js') }}"></script>
+<script>
+    // Функция для переключения видимости пароля биллинга
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggleBillingPasswordBtn = document.getElementById('toggle_billing_password');
+        const billingPasswordInput = document.getElementById('billing_password');
+        
+        if (toggleBillingPasswordBtn && billingPasswordInput) {
+            toggleBillingPasswordBtn.addEventListener('click', function() {
+                const type = billingPasswordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                billingPasswordInput.setAttribute('type', type);
+                
+                // Изменение иконки
+                const icon = toggleBillingPasswordBtn.querySelector('i');
+                if (type === 'text') {
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        }
+    });
+</script>
 {% endblock %}
