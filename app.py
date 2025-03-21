@@ -40,7 +40,7 @@ db.init_app(app)
 # Add template globals
 @app.context_processor
 def inject_now():
-    return {'now': datetime.utcnow}
+    return {'now': datetime.utcnow()}
 
 # Register blueprints
 def register_blueprints(app):
