@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from app import db
 from models import User
@@ -123,6 +123,44 @@ def edit(user_id):
         return redirect(url_for('users.index'))
     
     return render_template('users/edit.html', user=user)
+
+@bp.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Изменение собственного пароля пользователя."""
+    if request.method == 'POST':
+        current_password = request.form.get('current_password')
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Валидация полей
+        if not current_password or not new_password or not confirm_password:
+            flash('Все поля обязательны для заполнения', 'danger')
+            return render_template('users/change_password.html')
+        
+        # Проверка текущего пароля
+        if not current_user.check_password(current_password):
+            flash('Текущий пароль введен неверно', 'danger')
+            return render_template('users/change_password.html')
+        
+        # Проверка совпадения нового пароля и подтверждения
+        if new_password != confirm_password:
+            flash('Новый пароль и подтверждение не совпадают', 'danger')
+            return render_template('users/change_password.html')
+        
+        # Проверка сложности пароля (минимум 8 символов)
+        if len(new_password) < 8:
+            flash('Новый пароль должен содержать минимум 8 символов', 'danger')
+            return render_template('users/change_password.html')
+        
+        # Установка нового пароля
+        current_user.set_password(new_password)
+        db.session.commit()
+        
+        flash('Ваш пароль успешно изменен', 'success')
+        return redirect(url_for('auth.dashboard'))
+    
+    return render_template('users/change_password.html')
 
 @bp.route('/<int:user_id>/delete', methods=['POST'])
 @login_required
