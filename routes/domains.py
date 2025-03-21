@@ -213,28 +213,56 @@ def nameservers(domain_id):
 def check_ns(domain_id):
     """Проверка NS-записей домена."""
     import logging
+    import traceback
+    
     logger = logging.getLogger(__name__)
     
     try:
-        domain = Domain.query.get_or_404(domain_id)
-        
-        try:
-            if DomainManager.check_domain_ns_status(domain_id):
-                flash('Проверка NS-записей завершена успешно', 'success')
-            else:
-                # Повторно получаем домен после проверки, так как его статус мог измениться
-                domain = Domain.query.get(domain_id)
-                if domain and domain.ns_status == 'mismatch':
-                    flash('Ожидаемые NS-записи не все обнаружены в фактическом списке NS. Убедитесь, что все NS-серверы настроены правильно.', 'warning')
-                else:
-                    flash('Произошла ошибка при проверке NS-записей', 'danger')
-        except Exception as e:
-            logger.error(f"Error checking NS status for domain {domain_id}: {str(e)}")
-            db.session.rollback()  # Откатываем транзакцию в случае ошибки
-            flash(f'Ошибка при проверке NS-записей: {str(e)}', 'danger')
+        # Оборачиваем весь блок получения домена в отдельную сессию
+        with db.session.begin_nested():
+            domain = Domain.query.get(domain_id)
+            if not domain:
+                flash(f'Домен с ID {domain_id} не найден', 'danger')
+                return redirect(url_for('domains.index'))
+            
+            # Для логирования используем маскированное имя
+            from modules.telegram_notifier import mask_domain_name
+            masked_domain = mask_domain_name(domain.name)
+            logger.info(f"Начинаем проверку NS для домена {masked_domain} (ID: {domain_id})")
     except Exception as e:
-        logger.error(f"Failed to retrieve domain {domain_id}: {str(e)}")
-        flash(f'Не удалось найти домен: {str(e)}', 'danger')
+        logger.error(f"Ошибка при получении домена {domain_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        db.session.rollback()
+        flash(f'Не удалось получить информацию о домене: {str(e)}', 'danger')
+        return redirect(url_for('domains.index'))
+    
+    try:
+        # Выполняем проверку в отдельном блоке
+        result = DomainManager.check_domain_ns_status(domain_id)
+        
+        # После проверки получаем обновленный статус
+        try:
+            updated_domain = Domain.query.get(domain_id)
+            if result:
+                flash('Проверка NS-записей завершена успешно', 'success')
+            elif updated_domain and updated_domain.ns_status == 'mismatch':
+                flash('Ожидаемые NS-записи не все обнаружены в фактическом списке NS. Убедитесь, что все NS-серверы настроены правильно.', 'warning')
+            else:
+                flash('Произошла ошибка при проверке NS-записей или статус не определен', 'danger')
+                
+        except Exception as db_error:
+            logger.error(f"Ошибка при получении обновленного статуса домена {domain_id}: {str(db_error)}")
+            logger.error(traceback.format_exc())
+            db.session.rollback()
+            flash('Ошибка при получении обновленного статуса домена', 'danger')
+    except Exception as e:
+        logger.error(f"Ошибка при проверке NS для домена {domain_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        try:
+            db.session.rollback()
+        except Exception as rollback_error:
+            logger.error(f"Ошибка при откате транзакции: {str(rollback_error)}")
+        flash(f'Ошибка при проверке NS-записей: {str(e)}', 'danger')
     
     return redirect(url_for('domains.nameservers', domain_id=domain_id))
 
@@ -243,29 +271,53 @@ def check_ns(domain_id):
 def check_all_ns():
     """Проверка NS-записей всех доменов."""
     import logging
+    import traceback
     logger = logging.getLogger(__name__)
     
+    logger.info("Начинаем проверку NS-записей всех доменов")
+    
     try:
-        results = DomainManager.check_all_domains_ns_status()
-        
-        if results['ok'] > 0:
-            message_success = f"{results['ok']} доменов с корректными NS-записями"
-            flash(message_success, 'success')
+        # Выполняем проверку с отельной обработкой отката транзакций
+        try:
+            results = DomainManager.check_all_domains_ns_status()
+            logger.info(f"Результаты проверки всех NS-записей: {results}")
             
-        if results['mismatch'] > 0:
-            message_warning = f"{results['mismatch']} доменов имеют несоответствие NS-записей. Проверьте настройки NS-серверов."
-            flash(message_warning, 'warning')
+            if results['ok'] > 0:
+                message_success = f"{results['ok']} доменов с корректными NS-записями"
+                flash(message_success, 'success')
+                
+            if results['mismatch'] > 0:
+                message_warning = f"{results['mismatch']} доменов имеют несоответствие NS-записей. Проверьте настройки NS-серверов."
+                flash(message_warning, 'warning')
+                
+            if results['error'] > 0:
+                message_error = f"{results['error']} доменов имеют ошибки при проверке NS-записей"
+                flash(message_error, 'danger')
             
-        if results['error'] > 0:
-            message_error = f"{results['error']} доменов имеют ошибки при проверке NS-записей"
-            flash(message_error, 'danger')
-        
-        if results['ok'] + results['mismatch'] + results['error'] == 0:
-            flash("Нет доменов с указанными ожидаемыми NS-записями для проверки", 'info')
+            if results['ok'] + results['mismatch'] + results['error'] == 0:
+                flash("Нет доменов с указанными ожидаемыми NS-записями для проверки", 'info')
+                
+        except Exception as inner_error:
+            logger.error(f"Ошибка при выполнении проверки всех NS-записей: {str(inner_error)}")
+            logger.error(traceback.format_exc())
+            try:
+                db.session.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Ошибка при откате транзакции: {str(rollback_error)}")
+            raise  # Передаем ошибку во внешний блок try/except
     except Exception as e:
-        logger.error(f"Failed to check all NS records: {str(e)}")
-        db.session.rollback()  # Откатываем транзакцию в случае ошибки
-        flash(f'Ошибка при проверке всех NS-записей: {str(e)}', 'danger')
+        logger.error(f"Критическая ошибка при проверке всех NS-записей: {str(e)}")
+        logger.error(traceback.format_exc())
+        try:
+            db.session.rollback()
+        except Exception as rollback_error:
+            logger.error(f"Критическая ошибка при откате транзакции: {str(rollback_error)}")
+        # Отображаем более информативное сообщение
+        error_message = str(e)
+        if 'database' in error_message.lower() or 'db' in error_message.lower() or 'sql' in error_message.lower():
+            flash('Ошибка соединения с базой данных при проверке NS-записей. Пожалуйста, попробуйте позже.', 'danger')
+        else:
+            flash(f'Ошибка при проверке всех NS-записей: {error_message}', 'danger')
     
     return redirect(url_for('domains.index'))
 
