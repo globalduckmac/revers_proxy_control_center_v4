@@ -110,8 +110,16 @@ def edit(domain_id):
     if request.method == 'POST':
         name = request.form.get('name')
         target_ip = request.form.get('target_ip')
+        server_id = request.form.get('server_id')
         target_port = request.form.get('target_port', 80, type=int)
         ssl_enabled = 'ssl_enabled' in request.form
+        
+        # Если выбран сервер, используем его IP-адрес
+        if server_id and not target_ip:
+            from models import Server
+            server = Server.query.get(server_id)
+            if server:
+                target_ip = server.ip_address
         
         # Validate required fields
         if not name or not target_ip:
