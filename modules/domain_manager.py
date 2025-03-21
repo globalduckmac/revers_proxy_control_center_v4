@@ -43,7 +43,10 @@ class DomainManager:
                 return nameservers
                 
             except Exception as e:
-                error_msg = f"Error checking nameservers for domain {domain_name} (attempt {attempt}/{max_attempts}): {str(e)}"
+                # Маскируем имя домена в сообщениях об ошибках для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain_name)
+                error_msg = f"Error checking nameservers for domain {masked_domain_name} (attempt {attempt}/{max_attempts}): {str(e)}"
                 
                 if attempt < max_attempts:
                     logger.warning(f"{error_msg}. Retrying in {retry_delay} seconds...")
@@ -145,7 +148,10 @@ class DomainManager:
             domain.ns_status = 'pending'  # Сбрасываем статус для следующей проверки
             db.session.commit()
             
-            logger.info(f"Updated expected nameservers for domain {domain.name}: {expected_nameservers}")
+            # Маскируем имя домена в логах для безопасности
+            from modules.telegram_notifier import mask_domain_name
+            masked_domain_name = mask_domain_name(domain.name)
+            logger.info(f"Updated expected nameservers for domain {masked_domain_name}: {expected_nameservers}")
             return True
             
         except Exception as e:
@@ -177,7 +183,10 @@ class DomainManager:
                         else:
                             results['error'] += 1
                 except Exception as e:
-                    logger.error(f"Error checking domain {domain.name}: {str(e)}")
+                    # Маскируем имя домена в логах для безопасности
+                    from modules.telegram_notifier import mask_domain_name
+                    masked_domain_name = mask_domain_name(domain.name)
+                    logger.error(f"Error checking domain {masked_domain_name}: {str(e)}")
                     results['error'] += 1
                     
             logger.info(f"Checked NS status for {len(domains)} domains. Results: {results}")
@@ -302,14 +311,20 @@ class DomainManager:
                 
             # Check if domain is already in the group
             if domain in group.domains:
-                logger.warning(f"Domain {domain.name} is already in group {group.name}")
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                logger.warning(f"Domain {masked_domain_name} is already in group {group.name}")
                 return True
                 
             # Add domain to group
             group.domains.append(domain)
             db.session.commit()
             
-            logger.info(f"Added domain {domain.name} to group {group.name}")
+            # Маскируем имя домена в логах для безопасности
+            from modules.telegram_notifier import mask_domain_name
+            masked_domain_name = mask_domain_name(domain.name)
+            logger.info(f"Added domain {masked_domain_name} to group {group.name}")
             return True
             
         except Exception as e:
@@ -342,14 +357,20 @@ class DomainManager:
                 
             # Check if domain is in the group
             if domain not in group.domains:
-                logger.warning(f"Domain {domain.name} is not in group {group.name}")
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                logger.warning(f"Domain {masked_domain_name} is not in group {group.name}")
                 return True
                 
             # Remove domain from group
             group.domains.remove(domain)
             db.session.commit()
             
-            logger.info(f"Removed domain {domain.name} from group {group.name}")
+            # Маскируем имя домена в логах для безопасности
+            from modules.telegram_notifier import mask_domain_name
+            masked_domain_name = mask_domain_name(domain.name)
+            logger.info(f"Removed domain {masked_domain_name} from group {group.name}")
             return True
             
         except Exception as e:
@@ -487,12 +508,20 @@ class DomainManager:
                     domain.ffpanel_status = 'synced'
                     domain.ffpanel_last_sync = datetime.utcnow()
                     db.session.commit()
-                    logger.info(f"Successfully updated domain {domain.name} in FFPanel (ID: {domain.ffpanel_id})")
+                    
+                    # Маскируем имя домена в логах для безопасности
+                    from modules.telegram_notifier import mask_domain_name
+                    masked_domain_name = mask_domain_name(domain.name)
+                    logger.info(f"Successfully updated domain {masked_domain_name} in FFPanel (ID: {domain.ffpanel_id})")
                     return {'success': True, 'message': 'Домен успешно обновлен в FFPanel'}
                 else:
                     domain.ffpanel_status = 'error'
                     db.session.commit()
-                    logger.error(f"Error updating domain {domain.name} in FFPanel: {result['message']}")
+                    
+                    # Маскируем имя домена в логах для безопасности
+                    from modules.telegram_notifier import mask_domain_name
+                    masked_domain_name = mask_domain_name(domain.name)
+                    logger.error(f"Error updating domain {masked_domain_name} in FFPanel: {result['message']}")
                     return {'success': False, 'message': f"Ошибка обновления в FFPanel: {result['message']}"}
             else:
                 # Создаем новый домен в FFPanel
@@ -509,12 +538,20 @@ class DomainManager:
                     domain.ffpanel_status = 'synced'
                     domain.ffpanel_last_sync = datetime.utcnow()
                     db.session.commit()
-                    logger.info(f"Successfully created domain {domain.name} in FFPanel (ID: {result['id']})")
+                    
+                    # Маскируем имя домена в логах для безопасности
+                    from modules.telegram_notifier import mask_domain_name
+                    masked_domain_name = mask_domain_name(domain.name)
+                    logger.info(f"Successfully created domain {masked_domain_name} in FFPanel (ID: {result['id']})")
                     return {'success': True, 'message': 'Домен успешно создан в FFPanel'}
                 else:
                     domain.ffpanel_status = 'error'
                     db.session.commit()
-                    logger.error(f"Error creating domain {domain.name} in FFPanel: {result['message']}")
+                    
+                    # Маскируем имя домена в логах для безопасности
+                    from modules.telegram_notifier import mask_domain_name
+                    masked_domain_name = mask_domain_name(domain.name)
+                    logger.error(f"Error creating domain {masked_domain_name} in FFPanel: {result['message']}")
                     return {'success': False, 'message': f"Ошибка создания в FFPanel: {result['message']}"}
                     
         except Exception as e:
@@ -541,7 +578,10 @@ class DomainManager:
             
             # Если домен не синхронизирован с FFPanel, просто успешно завершаем
             if not domain.ffpanel_id:
-                logger.warning(f"Domain {domain.name} is not synced with FFPanel, nothing to delete")
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                logger.warning(f"Domain {masked_domain_name} is not synced with FFPanel, nothing to delete")
                 return {'success': True, 'message': 'Домен не был синхронизирован с FFPanel'}
             
             # Инициализируем API
@@ -556,10 +596,17 @@ class DomainManager:
                 domain.ffpanel_status = 'not_synced'
                 domain.ffpanel_last_sync = datetime.utcnow()
                 db.session.commit()
-                logger.info(f"Successfully deleted domain {domain.name} from FFPanel")
+                
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                logger.info(f"Successfully deleted domain {masked_domain_name} from FFPanel")
                 return {'success': True, 'message': 'Домен успешно удален из FFPanel'}
             else:
-                logger.error(f"Error deleting domain {domain.name} from FFPanel: {result['message']}")
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                logger.error(f"Error deleting domain {masked_domain_name} from FFPanel: {result['message']}")
                 return {'success': False, 'message': f"Ошибка удаления из FFPanel: {result['message']}"}
                 
         except Exception as e:
