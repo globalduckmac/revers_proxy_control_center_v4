@@ -577,12 +577,18 @@ class DomainManager:
                         # Если у нас не установлен target_ip, добавим его из FFPanel
                         if not existing_domain.target_ip:
                             existing_domain.target_ip = ff_domain.get('ip', '')
+                            
+                        # Если у нас не установлены ожидаемые NS-записи, но они есть в FFPanel,
+                        # добавляем их в expected_nameservers
+                        if not existing_domain.expected_nameservers and ff_domain.get('dns'):
+                            existing_domain.expected_nameservers = ff_domain.get('dns')
                         
                         db.session.commit()
                         logger.info(f"Updated domain {domain_name} from FFPanel (ID: {existing_domain.ffpanel_id})")
                         stats['updated'] += 1
                     else:
                         # Если домен не существует, создаем новый
+                        ffpanel_dns = ff_domain.get('dns', '')
                         new_domain = Domain(
                             name=domain_name,
                             target_ip=ff_domain.get('ip', ''),
@@ -593,7 +599,8 @@ class DomainManager:
                             ffpanel_port_out=ff_domain.get('port_out', '80'),
                             ffpanel_port_ssl=ff_domain.get('port_ssl', '443'),
                             ffpanel_port_out_ssl=ff_domain.get('port_out_ssl', '443'),
-                            ffpanel_dns=ff_domain.get('dns', ''),
+                            ffpanel_dns=ffpanel_dns,
+                            expected_nameservers=ffpanel_dns,  # Заполняем ожидаемые NS-записи из FFPanel
                             ffpanel_last_sync=datetime.utcnow()
                         )
                         
