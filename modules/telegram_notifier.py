@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from datetime import datetime, timedelta
 import telegram
 from telegram.error import TelegramError
@@ -19,6 +20,41 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 CPU_THRESHOLD = 80  # % CPU
 MEMORY_THRESHOLD = 80  # % памяти
 DISK_THRESHOLD = 85  # % дискового пространства
+
+def mask_domain_name(domain_name):
+    """
+    Маскирует часть доменного имени для обеспечения безопасности в уведомлениях.
+    Например, example.com превращается в exa****.com
+    
+    ВНИМАНИЕ: Эта функция является критически важной для безопасности!
+    Отображение полных доменных имен в уведомлениях может представлять угрозу 
+    безопасности, поскольку раскрывает используемые домены.
+    
+    Args:
+        domain_name (str): Полное имя домена
+        
+    Returns:
+        str: Замаскированное имя домена
+    """
+    if not domain_name:
+        return "unknown"
+    
+    parts = domain_name.split('.')
+    if len(parts) < 2:
+        return domain_name
+    
+    # Маскируем основную часть домена, оставляя несколько первых символов
+    main_part = parts[0]
+    if len(main_part) <= 3:
+        # Если имя короткое, оставляем первый символ
+        masked_main = main_part[0] + '*' * (len(main_part) - 1)
+    else:
+        # Оставляем первые 3 символа и заменяем остальные звездочками
+        masked_main = main_part[:3] + '*' * (len(main_part) - 3)
+    
+    # Собираем замаскированное имя
+    parts[0] = masked_main
+    return '.'.join(parts)
 
 class TelegramNotifier:
     """
@@ -157,8 +193,11 @@ class TelegramNotifier:
                                    f"❌ {error_count} с ошибками, " \
                                    f"⏳ {pending_count} ожидающих доменов в группе\n"
         
+        # Маскируем имя домена для обеспечения безопасности
+        masked_domain_name = mask_domain_name(domain.name)
+        
         message = f"{emoji} <b>Изменение статуса NS-записей домена</b>\n\n" \
-                  f"Домен: <b>{domain.name}</b>\n" \
+                  f"Домен: <b>{masked_domain_name}</b>\n" \
                   f"Статус: {old_status} → <b>{new_status}</b>\n\n" \
                   f"{groups_text}\n" \
                   f"Время: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
@@ -373,8 +412,9 @@ class TelegramNotifier:
             }
         
         # Статистика по доменам с наибольшим трафиком
+        # Соберем данные, но используем маскированные имена доменов
         from sqlalchemy import desc
-        top_domains_by_traffic = db.session.query(
+        top_domains_by_traffic_raw = db.session.query(
             Domain.name,
             func.sum(DomainMetric.bandwidth_used).label('total_bandwidth'),
             func.sum(DomainMetric.requests_count).label('total_requests')
@@ -383,6 +423,12 @@ class TelegramNotifier:
         ).group_by(Domain.name).order_by(
             desc('total_bandwidth')
         ).limit(5).all()
+        
+        # Создаем список с замаскированными именами доменов
+        top_domains_by_traffic = []
+        for domain_name, bandwidth, requests in top_domains_by_traffic_raw:
+            masked_name = mask_domain_name(domain_name)
+            top_domains_by_traffic.append((masked_name, bandwidth, requests))
         
         # Формируем отчет
         report = f"📊 <b>Ежедневный отчет о состоянии системы</b>\n" \
@@ -401,6 +447,7 @@ class TelegramNotifier:
         report += f"<b>Домены:</b> {ok_domains}/{total_domains} работают корректно\n"
         if mismatch_domains > 0:
             report += f"⚠️ Несоответствие NS: {mismatch_domains}\n"
+            # Не включаем конкретные имена доменов с ошибками из соображений безопасности
         if pending_domains > 0:
             report += f"⏳ Ожидают проверки: {pending_domains}\n"
         report += "\n"

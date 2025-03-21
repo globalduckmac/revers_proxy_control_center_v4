@@ -12,23 +12,48 @@ class DomainManager:
     """
     
     @staticmethod
-    def check_nameservers(domain_name):
+    def check_nameservers(domain_name, max_attempts=3, retry_delay=5):
         """
         Получает список актуальных NS-записей для домена
+        Делает несколько попыток при возникновении ошибок для более надежной проверки.
         
         Args:
             domain_name: Имя домена для проверки
+            max_attempts: Максимальное количество попыток (по умолчанию 3)
+            retry_delay: Задержка между попытками в секундах (по умолчанию 5)
             
         Returns:
             list: Список NS-записей
         """
-        try:
-            answers = dns.resolver.resolve(domain_name, 'NS')
-            nameservers = [ns.target.to_text().rstrip('.').lower() for ns in answers]
-            return nameservers
-        except Exception as e:
-            logger.error(f"Error checking nameservers for {domain_name}: {str(e)}")
-            return []
+        import time
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Используем публичный DNS-сервер Google для надежности
+                resolver = dns.resolver.Resolver()
+                resolver.nameservers = ['8.8.8.8', '8.8.4.4']
+                resolver.timeout = 10  # Увеличиваем таймаут до 10 секунд для более стабильной проверки
+                
+                # Запрашиваем NS-записи
+                answers = resolver.resolve(domain_name, 'NS')
+                nameservers = [ns.target.to_text().rstrip('.').lower() for ns in answers]
+                
+                # Если успешно получили результат, возвращаем его
+                logger.info(f"Successfully retrieved NS records for {domain_name} on attempt {attempt}: {nameservers}")
+                return nameservers
+                
+            except Exception as e:
+                error_msg = f"Error checking nameservers for domain {domain_name} (attempt {attempt}/{max_attempts}): {str(e)}"
+                
+                if attempt < max_attempts:
+                    logger.warning(f"{error_msg}. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    # Это была последняя попытка
+                    logger.error(f"{error_msg}. Giving up after {max_attempts} attempts.")
+        
+        # Если все попытки завершились ошибкой, возвращаем пустой список
+        return []
             
     @staticmethod
     def check_domain_ns_status(domain_id):

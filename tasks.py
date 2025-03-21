@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Интервалы выполнения задач (в секундах)
 CHECK_SERVER_INTERVAL = 300  # 5 минут
-CHECK_DOMAIN_NS_INTERVAL = 300  # 5 минут
+CHECK_DOMAIN_NS_INTERVAL = 3600  # 1 час (было 5 минут)
 COLLECT_SERVER_METRICS_INTERVAL = 300  # 5 минут
 COLLECT_DOMAIN_METRICS_INTERVAL = 300  # 5 минут
 DAILY_REPORT_INTERVAL = 86400  # 24 часа
