@@ -14,6 +14,7 @@ def index():
     """Show list of domains."""
     # Получаем параметр группы из запроса
     group_id = request.args.get('group_id', type=int)
+    show_ungrouped = request.args.get('show_ungrouped') == '1'
     
     # Получаем все группы доменов для фильтра
     domain_groups = DomainGroup.query.all()
@@ -22,6 +23,20 @@ def index():
         # Если указана группа, фильтруем домены по этой группе
         group = DomainGroup.query.get_or_404(group_id)
         domains = group.domains.all()
+    elif show_ungrouped:
+        # Показываем только домены без групп
+        # Используем подзапрос для определения доменов с группами
+        from sqlalchemy import select, and_, not_, exists
+        from sqlalchemy.orm import aliased
+        
+        # Подзапрос для поиска доменов, которые находятся в группах
+        domain_group_assoc = db.Table('domain_group_association', db.metadata, autoload_with=db.engine)
+        domains_with_groups = select(domain_group_assoc.c.domain_id).distinct()
+        
+        # Основной запрос: находим домены, которых нет в подзапросе
+        domains = Domain.query.filter(not_(exists().where(
+            Domain.id == domain_group_assoc.c.domain_id
+        ))).all()
     else:
         # Иначе показываем все домены
         domains = Domain.query.all()
@@ -29,7 +44,8 @@ def index():
     return render_template('domains/index.html', 
                           domains=domains, 
                           domain_groups=domain_groups,
-                          selected_group_id=group_id)
+                          selected_group_id=group_id,
+                          show_ungrouped=show_ungrouped)
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required

@@ -28,9 +28,9 @@
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title">Фильтр по группе доменов</h5>
-                <form method="get" action="{{ url_for('domains.index') }}" class="d-flex align-items-center">
+                <form method="get" action="{{ url_for('domains.index') }}" class="d-flex align-items-center flex-wrap">
                     <div class="me-3 flex-grow-1">
-                        <select name="group_id" class="form-select">
+                        <select name="group_id" class="form-select" {% if show_ungrouped %}disabled{% endif %}>
                             <option value="">Все домены</option>
                             {% for group in domain_groups %}
                             <option value="{{ group.id }}" {% if selected_group_id == group.id %}selected{% endif %}>
@@ -39,8 +39,15 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="form-check me-3">
+                        <input class="form-check-input" type="checkbox" id="show_ungrouped" name="show_ungrouped" value="1" 
+                               {% if show_ungrouped %}checked{% endif %} onchange="toggleGroupSelect(this)">
+                        <label class="form-check-label" for="show_ungrouped">
+                            Только домены без групп
+                        </label>
+                    </div>
                     <button type="submit" class="btn btn-primary">Применить</button>
-                    {% if selected_group_id %}
+                    {% if selected_group_id or show_ungrouped %}
                     <a href="{{ url_for('domains.index') }}" class="btn btn-outline-secondary ms-2">Сбросить</a>
                     {% endif %}
                 </form>
@@ -159,4 +166,19 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleGroupSelect(checkbox) {
+    // Получаем элемент select
+    const groupSelect = document.querySelector('select[name="group_id"]');
+    
+    // Если чекбокс отмечен, отключаем select
+    if (checkbox.checked) {
+        groupSelect.disabled = true;
+        groupSelect.value = '';  // Сбрасываем значение
+    } else {
+        groupSelect.disabled = false;
+    }
+}
+</script>
 {% endblock %}
