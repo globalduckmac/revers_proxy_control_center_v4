@@ -181,31 +181,50 @@ class DomainManager:
         Returns:
             dict: Словарь с результатами проверки: {'ok': count, 'mismatch': count, 'error': count}
         """
+        import traceback
+        import sys
+        import html
+        
         results = {'ok': 0, 'mismatch': 0, 'error': 0}
         
         try:
             # Получаем все домены с указанными ожидаемыми NS
             domains = []
             try:
+                # Безопасное получение списка доменов с защитой от ошибок кодировки
                 domains = Domain.query.filter(Domain.expected_nameservers.isnot(None)).all()
+                logger.info(f"Found {len(domains)} domains with expected NS records to check")
             except Exception as db_error:
-                logger.error(f"Database error fetching domains with expected NS: {str(db_error)}")
-                db.session.rollback()
+                error_text = str(db_error)
+                # Безопасное логирование ошибки с экранированием специальных символов
+                logger.error(f"Database error fetching domains with expected NS: {html.escape(error_text)}")
+                logger.error(traceback.format_exc())
+                try:
+                    db.session.rollback()
+                except:
+                    logger.error("Failed to rollback session after database error")
                 raise
             
+            # Проходим по каждому домену и безопасно обрабатываем его
             for domain in domains:
-                # Маскируем имя домена в логах для безопасности
-                from modules.telegram_notifier import mask_domain_name
-                masked_domain_name = mask_domain_name(domain.name)
+                domain_id = domain.id
+                domain_name = ""
                 
                 try:
-                    if DomainManager.check_domain_ns_status(domain.id):
+                    # Получаем имя домена с защитой от ошибок кодировки
+                    domain_name = domain.name if domain.name else ""
+                    # Маскируем имя домена в логах для безопасности
+                    from modules.telegram_notifier import mask_domain_name
+                    masked_domain_name = mask_domain_name(domain_name)
+                    
+                    # Проверяем домен с дополнительной обработкой ошибок
+                    if DomainManager.check_domain_ns_status(domain_id):
                         results['ok'] += 1
                         logger.debug(f"Domain {masked_domain_name} NS check: OK")
                     else:
                         # Получаем обновленный домен после проверки
                         try:
-                            updated_domain = Domain.query.get(domain.id)
+                            updated_domain = Domain.query.get(domain_id)
                             if updated_domain and updated_domain.ns_status == 'mismatch':
                                 results['mismatch'] += 1
                                 logger.debug(f"Domain {masked_domain_name} NS check: Mismatch")
@@ -213,26 +232,43 @@ class DomainManager:
                                 results['error'] += 1
                                 logger.debug(f"Domain {masked_domain_name} NS check: Error or unknown status")
                         except Exception as db_error:
-                            logger.error(f"Database error retrieving updated domain {masked_domain_name}: {str(db_error)}")
-                            db.session.rollback()
+                            # Безопасное логирование ошибки базы данных
+                            error_msg = html.escape(str(db_error))
+                            logger.error(f"Database error retrieving updated domain {masked_domain_name}: {error_msg}")
+                            try:
+                                db.session.rollback()
+                            except:
+                                logger.error("Failed to rollback session after update error")
                             results['error'] += 1
+                except UnicodeEncodeError as unicode_error:
+                    # Специальная обработка ошибок кодировки Unicode
+                    logger.error(f"Unicode error with domain ID {domain_id}: {html.escape(str(unicode_error))}")
+                    results['error'] += 1
                 except Exception as e:
-                    logger.error(f"Error checking domain {masked_domain_name}: {str(e)}")
+                    # Безопасное логирование общих ошибок с экранированием специальных символов
+                    error_text = html.escape(str(e))
+                    logger.error(f"Error checking domain ID {domain_id}: {error_text}")
+                    logger.error(traceback.format_exc())
                     results['error'] += 1
                     try:
                         db.session.rollback()  # Откатываем транзакцию в случае ошибки
                     except:
                         pass  # Игнорируем ошибки при откате транзакции
-                    
-            logger.info(f"Checked NS status for {len(domains)} domains. Results: {results}")
+                
+            # Безопасное логирование результатов      
+            logger.info(f"Checked NS status for {len(domains)} domains. Results: ok={results['ok']}, mismatch={results['mismatch']}, error={results['error']}")
             return results
             
         except Exception as e:
-            logger.error(f"Error in bulk NS check: {str(e)}")
+            # Обработка критических ошибок
+            error_text = html.escape(str(e))
+            logger.error(f"Critical error in bulk NS check: {error_text}")
+            logger.error(traceback.format_exc())
             try:
                 db.session.rollback()  # Откатываем транзакцию в случае ошибки
             except:
-                pass  # Игнорируем ошибки при откате транзакции
+                logger.error("Failed to rollback session after critical error")
+            # Возвращаем безопасный результат
             return results
     
     @staticmethod

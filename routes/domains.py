@@ -272,6 +272,8 @@ def check_all_ns():
     """Проверка NS-записей всех доменов."""
     import logging
     import traceback
+    import html
+    
     logger = logging.getLogger(__name__)
     
     logger.info("Начинаем проверку NS-записей всех доменов")
@@ -282,42 +284,66 @@ def check_all_ns():
             results = DomainManager.check_all_domains_ns_status()
             logger.info(f"Результаты проверки всех NS-записей: {results}")
             
-            if results['ok'] > 0:
-                message_success = f"{results['ok']} доменов с корректными NS-записями"
+            # Дополнительная проверка на валидность результатов
+            if not isinstance(results, dict):
+                logger.error(f"Неверный формат результатов: {type(results)}")
+                raise ValueError("Результаты проверки имеют неверный формат")
+                
+            # Безопасно получаем количество проверенных доменов 
+            ok_count = results.get('ok', 0)
+            mismatch_count = results.get('mismatch', 0)
+            error_count = results.get('error', 0)
+            
+            # Формируем сообщения для пользователя
+            if ok_count > 0:
+                message_success = f"{ok_count} доменов с корректными NS-записями"
                 flash(message_success, 'success')
                 
-            if results['mismatch'] > 0:
-                message_warning = f"{results['mismatch']} доменов имеют несоответствие NS-записей. Проверьте настройки NS-серверов."
+            if mismatch_count > 0:
+                message_warning = f"{mismatch_count} доменов имеют несоответствие NS-записей. Проверьте настройки NS-серверов."
                 flash(message_warning, 'warning')
                 
-            if results['error'] > 0:
-                message_error = f"{results['error']} доменов имеют ошибки при проверке NS-записей"
+            if error_count > 0:
+                message_error = f"{error_count} доменов имеют ошибки при проверке NS-записей"
                 flash(message_error, 'danger')
             
-            if results['ok'] + results['mismatch'] + results['error'] == 0:
+            total_count = ok_count + mismatch_count + error_count
+            if total_count == 0:
                 flash("Нет доменов с указанными ожидаемыми NS-записями для проверки", 'info')
                 
         except Exception as inner_error:
-            logger.error(f"Ошибка при выполнении проверки всех NS-записей: {str(inner_error)}")
+            error_str = html.escape(str(inner_error))
+            logger.error(f"Ошибка при выполнении проверки всех NS-записей: {error_str}")
             logger.error(traceback.format_exc())
+            
             try:
                 db.session.rollback()
             except Exception as rollback_error:
-                logger.error(f"Ошибка при откате транзакции: {str(rollback_error)}")
-            raise  # Передаем ошибку во внешний блок try/except
+                logger.error(f"Ошибка при откате транзакции: {html.escape(str(rollback_error))}")
+                
+            # Создаем безопасное сообщение об ошибке для пользователя
+            flash('Произошла ошибка при проверке NS-записей доменов. Пожалуйста, попробуйте позже.', 'danger')
+            return redirect(url_for('domains.index'))
+            
     except Exception as e:
-        logger.error(f"Критическая ошибка при проверке всех NS-записей: {str(e)}")
+        # Обработка и экранирование возможных ошибок
+        error_message = html.escape(str(e))
+        logger.error(f"Критическая ошибка при проверке всех NS-записей: {error_message}")
         logger.error(traceback.format_exc())
+        
         try:
             db.session.rollback()
         except Exception as rollback_error:
-            logger.error(f"Критическая ошибка при откате транзакции: {str(rollback_error)}")
+            logger.error(f"Критическая ошибка при откате транзакции: {html.escape(str(rollback_error))}")
+            
         # Отображаем более информативное сообщение
-        error_message = str(e)
         if 'database' in error_message.lower() or 'db' in error_message.lower() or 'sql' in error_message.lower():
             flash('Ошибка соединения с базой данных при проверке NS-записей. Пожалуйста, попробуйте позже.', 'danger')
+        elif 'unicode' in error_message.lower() or 'encode' in error_message.lower() or 'decode' in error_message.lower():
+            flash('Ошибка кодировки при проверке NS-записей. Возможно, в именах доменов используются специальные символы.', 'danger')
         else:
-            flash(f'Ошибка при проверке всех NS-записей: {error_message}', 'danger')
+            # Безопасно отображаем только общее сообщение без технических деталей
+            flash('Произошла ошибка при проверке NS-записей. Пожалуйста, попробуйте позже.', 'danger')
     
     return redirect(url_for('domains.index'))
 
@@ -325,35 +351,81 @@ def check_all_ns():
 @login_required
 def api_check_nameservers(domain_name):
     """API для проверки NS-записей по имени домена."""
+    import traceback
+    import html
+    
+    # Создаем безопасную строку имени домена для логирования
     from modules.telegram_notifier import mask_domain_name
-    masked_domain_name = mask_domain_name(domain_name)
     
     try:
-        nameservers = DomainManager.check_nameservers(domain_name)
-        logger.info(f"API successfully checked nameservers for {masked_domain_name}: {nameservers}")
-        return jsonify({
-            'success': True,
-            'nameservers': nameservers
-        })
+        # Безопасно обрабатываем имя домена, экранируя возможные проблемные символы
+        masked_domain_name = mask_domain_name(domain_name.strip())
+        
+        # Проверяем допустимость имени домена
+        if not domain_name or len(domain_name.strip()) == 0:
+            logger.error("API error: Empty domain name provided")
+            return jsonify({
+                'success': False,
+                'error': 'Необходимо указать имя домена'
+            }), 400
+        
+        # Выполняем проверку NS-записей с расширенным логированием
+        try:
+            logger.info(f"API checking nameservers for domain: {masked_domain_name}")
+            nameservers = DomainManager.check_nameservers(domain_name)
+            
+            # Проверка результатов
+            if not isinstance(nameservers, list):
+                raise ValueError(f"Unexpected nameservers format: {type(nameservers)}")
+                
+            logger.info(f"API successfully checked nameservers for {masked_domain_name}: {nameservers}")
+            return jsonify({
+                'success': True,
+                'nameservers': nameservers
+            })
+            
+        except Exception as dns_error:
+            # Детальное логирование ошибки DNS-проверки
+            error_text = html.escape(str(dns_error))
+            logger.error(f"DNS error checking nameservers for {masked_domain_name}: {error_text}")
+            logger.error(traceback.format_exc())
+            
+            return jsonify({
+                'success': False,
+                'error': 'Ошибка при проверке NS-записей. Проверьте правильность имени домена.'
+            }), 400
+            
     except Exception as e:
-        logger.error(f"API error checking nameservers for {masked_domain_name}: {str(e)}")
+        # Логируем общую ошибку, но не показываем технические детали пользователю
+        error_text = html.escape(str(e))
+        logger.error(f"API critical error checking nameservers: {error_text}")
+        logger.error(traceback.format_exc())
+        
         # Проверка наличия ошибки соединения с базой данных
-        if 'database' in str(e).lower() or 'db' in str(e).lower() or 'sql' in str(e).lower():
+        if 'database' in error_text.lower() or 'db' in error_text.lower() or 'sql' in error_text.lower():
             logger.error(f"Database connection error during nameserver check")
             try:
                 db.session.rollback()
-            except:
-                pass  # Игнорируем ошибки при откате транзакции
+            except Exception as rollback_error:
+                logger.error(f"Failed to rollback: {html.escape(str(rollback_error))}")
             
             return jsonify({
                 'success': False,
                 'error': 'Ошибка соединения с базой данных. Пожалуйста, попробуйте позже.'
             }), 500
+        
+        # Ошибки кодировки Unicode
+        elif 'unicode' in error_text.lower() or 'encode' in error_text.lower() or 'decode' in error_text.lower():
+            return jsonify({
+                'success': False,
+                'error': 'Ошибка кодировки при проверке домена. Проверьте, что имя домена не содержит специальных символов.'
+            }), 400
             
+        # Для остальных ошибок возвращаем универсальное сообщение
         return jsonify({
             'success': False,
-            'error': str(e)
-        }), 400
+            'error': 'Ошибка при проверке NS-записей. Пожалуйста, попробуйте позже.'
+        }), 500
 
 @bp.route('/<int:domain_id>/ffpanel', methods=['GET', 'POST'])
 @login_required
