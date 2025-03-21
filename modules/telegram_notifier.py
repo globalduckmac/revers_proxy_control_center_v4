@@ -114,7 +114,6 @@ class TelegramNotifier:
         
         message = f"{emoji} <b>Изменение статуса сервера</b>\n\n" \
                   f"Сервер: <b>{server.name}</b>\n" \
-                  f"IP: {server.ip_address}\n" \
                   f"Статус: {old_status} → <b>{new_status}</b>\n"
                   
         if groups_text:
@@ -206,7 +205,6 @@ class TelegramNotifier:
         
         message = f"⚠️ <b>Высокая нагрузка на сервер</b>\n\n" \
                   f"Сервер: <b>{server.name}</b>\n" \
-                  f"IP: {server.ip_address}\n" \
                   f"Предупреждения:\n- " + "\n- ".join(alerts) + "\n"
                   
         if groups_text:
