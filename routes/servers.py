@@ -136,11 +136,40 @@ def edit(server_id):
         ssh_password = request.form.get('ssh_password') if auth_method == 'password' else None
         verify_connection = 'verify_connection' in request.form
         
+        # Получаем данные биллинга
+        comment = request.form.get('comment')
+        billing_provider = request.form.get('billing_provider')
+        billing_login = request.form.get('billing_login')
+        billing_password = request.form.get('billing_password')
+        payment_date_str = request.form.get('payment_date')
+        
+        # Преобразуем строку даты в объект Date
+        from datetime import datetime
+        payment_date = None
+        if payment_date_str:
+            try:
+                payment_date = datetime.strptime(payment_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Неверный формат даты оплаты. Используйте формат ГГГГ-ММ-ДД', 'danger')
+                return render_template('servers/edit.html', server=server, logs=[])
+        
         # Update server information
         server.name = name
         server.ip_address = ip_address
         server.ssh_user = ssh_user
         server.ssh_port = ssh_port
+        
+        # Обновляем данные биллинга
+        server.comment = comment
+        server.billing_provider = billing_provider
+        server.billing_login = billing_login
+        if billing_password:
+            server.set_billing_password(billing_password)
+        
+        # Обновляем дату оплаты и сбрасываем флаг отправки напоминания при изменении даты
+        if payment_date and (not server.payment_date or server.payment_date != payment_date):
+            server.payment_date = payment_date
+            server.payment_reminder_sent = False
         
         # Update authentication based on method
         if auth_method == 'key':

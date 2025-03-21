@@ -70,6 +70,7 @@
                         <th>Группы</th>
                         <th>Статус</th>
                         <th>Домены</th>
+                        <th>Оплата</th>
                         <th>Последняя проверка</th>
                         <th>Действия</th>
                     </tr>
@@ -100,6 +101,26 @@
                         </td>
                         <td>
                             {{ server_domains[server.id] }}
+                        </td>
+                        <td>
+                            {% if server.payment_date %}
+                                {% set days_until = (server.payment_date - now.date()).days %}
+                                {% if days_until <= 0 %}
+                                    <span class="badge bg-danger" title="Требуется оплата">
+                                        Просрочено ({{ server.payment_date.strftime('%d.%m.%Y') }})
+                                    </span>
+                                {% elif days_until <= 2 %}
+                                    <span class="badge bg-warning" title="Скоро потребуется оплата">
+                                        {{ days_until }} дн. ({{ server.payment_date.strftime('%d.%m.%Y') }})
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-success" title="Дата следующей оплаты">
+                                        {{ days_until }} дн. ({{ server.payment_date.strftime('%d.%m.%Y') }})
+                                    </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary">Не указана</span>
+                            {% endif %}
                         </td>
                         <td>
                             {% if server.last_check %}
