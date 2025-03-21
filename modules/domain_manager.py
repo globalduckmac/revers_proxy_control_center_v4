@@ -75,10 +75,19 @@ class DomainManager:
                 logger.error(f"Domain with ID {domain_id} not found")
                 return False
                 
+            # Для безопасности логирования сразу получаем маскированное имя
+            from modules.telegram_notifier import mask_domain_name
+            masked_domain_name = mask_domain_name(domain.name)
+                
             # Если ожидаемые NS не указаны, пропускаем проверку
             if not domain.expected_nameservers:
                 domain.ns_status = 'pending'
-                db.session.commit()
+                try:
+                    db.session.commit()
+                except Exception as db_error:
+                    logger.error(f"Database error when updating domain {masked_domain_name} status to pending: {str(db_error)}")
+                    db.session.rollback()
+                    raise
                 return True
                 
             # Получаем текущие NS записи
@@ -108,22 +117,27 @@ class DomainManager:
             
             if all_expected_found or is_special_match:
                 domain.ns_status = 'ok'
-                # Маскируем имя домена в логах для безопасности
-                from modules.telegram_notifier import mask_domain_name
-                masked_domain_name = mask_domain_name(domain.name)
                 logger.info(f"Domain {masked_domain_name} NS check: OK. All expected NS found in actual NS list.")
             else:
                 domain.ns_status = 'mismatch'
-                # Маскируем имя домена в логах для безопасности
-                from modules.telegram_notifier import mask_domain_name
-                masked_domain_name = mask_domain_name(domain.name)
                 logger.warning(f"Domain {masked_domain_name} NS mismatch. Expected (any of): {expected_ns}, Actual: {actual_ns}")
+            
+            # Обработка возможных ошибок базы данных
+            try:
+                db.session.commit()
+            except Exception as db_error:
+                logger.error(f"Database error updating NS status for domain {masked_domain_name}: {str(db_error)}")
+                db.session.rollback()
+                raise
                 
-            db.session.commit()
             return domain.ns_status == 'ok'
             
         except Exception as e:
             logger.error(f"Error checking NS status for domain {domain_id}: {str(e)}")
+            try:
+                db.session.rollback()  # На всякий случай откатываем транзакцию
+            except:
+                pass  # Игнорируем ошибки при откате транзакции
             return False
             
     @staticmethod
@@ -171,29 +185,54 @@ class DomainManager:
         
         try:
             # Получаем все домены с указанными ожидаемыми NS
-            domains = Domain.query.filter(Domain.expected_nameservers.isnot(None)).all()
+            domains = []
+            try:
+                domains = Domain.query.filter(Domain.expected_nameservers.isnot(None)).all()
+            except Exception as db_error:
+                logger.error(f"Database error fetching domains with expected NS: {str(db_error)}")
+                db.session.rollback()
+                raise
             
             for domain in domains:
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                
                 try:
                     if DomainManager.check_domain_ns_status(domain.id):
                         results['ok'] += 1
+                        logger.debug(f"Domain {masked_domain_name} NS check: OK")
                     else:
-                        if domain.ns_status == 'mismatch':
-                            results['mismatch'] += 1
-                        else:
+                        # Получаем обновленный домен после проверки
+                        try:
+                            updated_domain = Domain.query.get(domain.id)
+                            if updated_domain and updated_domain.ns_status == 'mismatch':
+                                results['mismatch'] += 1
+                                logger.debug(f"Domain {masked_domain_name} NS check: Mismatch")
+                            else:
+                                results['error'] += 1
+                                logger.debug(f"Domain {masked_domain_name} NS check: Error or unknown status")
+                        except Exception as db_error:
+                            logger.error(f"Database error retrieving updated domain {masked_domain_name}: {str(db_error)}")
+                            db.session.rollback()
                             results['error'] += 1
                 except Exception as e:
-                    # Маскируем имя домена в логах для безопасности
-                    from modules.telegram_notifier import mask_domain_name
-                    masked_domain_name = mask_domain_name(domain.name)
                     logger.error(f"Error checking domain {masked_domain_name}: {str(e)}")
                     results['error'] += 1
+                    try:
+                        db.session.rollback()  # Откатываем транзакцию в случае ошибки
+                    except:
+                        pass  # Игнорируем ошибки при откате транзакции
                     
             logger.info(f"Checked NS status for {len(domains)} domains. Results: {results}")
             return results
             
         except Exception as e:
             logger.error(f"Error in bulk NS check: {str(e)}")
+            try:
+                db.session.rollback()  # Откатываем транзакцию в случае ошибки
+            except:
+                pass  # Игнорируем ошибки при откате транзакции
             return results
     
     @staticmethod
