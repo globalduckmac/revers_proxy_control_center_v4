@@ -53,6 +53,12 @@
                   </div>
                 </div>
                 <div class="mb-3 row">
+                  <label class="col-sm-4 col-form-label">IP для FFPanel:</label>
+                  <div class="col-sm-8">
+                    <p class="form-control-plaintext">{{ domain.ffpanel_target_ip or domain.target_ip }} {% if domain.ffpanel_target_ip and domain.ffpanel_target_ip != domain.target_ip %}<span class="badge bg-info">Отличается от основного</span>{% endif %}</p>
+                  </div>
+                </div>
+                <div class="mb-3 row">
                   <label class="col-sm-4 col-form-label">Порты:</label>
                   <div class="col-sm-8">
                     <p class="form-control-plaintext">
