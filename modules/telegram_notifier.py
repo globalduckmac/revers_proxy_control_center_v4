@@ -199,6 +199,13 @@ class TelegramNotifier:
                                    f"❌ {error_count} с ошибками, " \
                                    f"⏳ {pending_count} ожидающих доменов в группе\n"
         
+        # ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: всегда используем маскированное имя, независимо от статуса
+        # Проблема была в том, что иногда при статусе mismatch имя домена не маскировалось
+        if new_status == 'mismatch' or old_status == 'mismatch':
+            # Дополнительная гарантия, что имя домена всегда будет замаскировано
+            masked_domain_name = mask_domain_name(domain.name)
+            logger.info(f"Applying extra masking for domain with mismatch status: {masked_domain_name}")
+        
         # Составляем сообщение только с маскированным именем домена
         message = f"{emoji} <b>Изменение статуса NS-записей домена</b>\n\n" \
                   f"Домен: <b>{masked_domain_name}</b>\n" \
