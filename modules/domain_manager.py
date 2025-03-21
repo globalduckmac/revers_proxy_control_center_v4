@@ -670,7 +670,11 @@ class DomainManager:
                             existing_domain.expected_nameservers = ff_domain.get('dns')
                         
                         db.session.commit()
-                        logger.info(f"Updated domain {domain_name} from FFPanel (ID: {existing_domain.ffpanel_id})")
+                        
+                        # Маскируем имя домена в логах для безопасности
+                        from modules.telegram_notifier import mask_domain_name
+                        masked_domain_name = mask_domain_name(domain_name)
+                        logger.info(f"Updated domain {masked_domain_name} from FFPanel (ID: {existing_domain.ffpanel_id})")
                         stats['updated'] += 1
                     else:
                         # Если домен не существует, создаем новый
@@ -692,12 +696,25 @@ class DomainManager:
                         
                         db.session.add(new_domain)
                         db.session.commit()
-                        logger.info(f"Imported new domain {domain_name} from FFPanel (ID: {new_domain.ffpanel_id})")
+                        
+                        # Маскируем имя домена в логах для безопасности
+                        from modules.telegram_notifier import mask_domain_name
+                        masked_domain_name = mask_domain_name(domain_name)
+                        logger.info(f"Imported new domain {masked_domain_name} from FFPanel (ID: {new_domain.ffpanel_id})")
                         stats['imported'] += 1
                         
                 except Exception as e:
                     db.session.rollback()
-                    error_msg = f"Ошибка при обработке домена {ff_domain.get('domain', 'Неизвестно')}: {str(e)}"
+                    
+                    # Получаем имя домена и маскируем его для безопасности
+                    domain_name_for_error = ff_domain.get('domain', 'Неизвестно')
+                    if domain_name_for_error != 'Неизвестно':
+                        from modules.telegram_notifier import mask_domain_name
+                        masked_domain_name = mask_domain_name(domain_name_for_error)
+                        error_msg = f"Ошибка при обработке домена {masked_domain_name}: {str(e)}"
+                    else:
+                        error_msg = f"Ошибка при обработке домена Неизвестно: {str(e)}"
+                        
                     logger.error(error_msg)
                     stats['errors'].append(error_msg)
                     stats['failed'] += 1
