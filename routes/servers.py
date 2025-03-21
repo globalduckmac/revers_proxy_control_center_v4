@@ -36,13 +36,18 @@ def index():
     for server in servers:
         server_groups[server.id] = [group.name for group in server.groups]
     
+    # Передаем текущую дату для расчета дней до оплаты
+    from datetime import datetime
+    now = datetime.utcnow()
+    
     return render_template(
         'servers/index.html', 
         servers=servers, 
         server_domains=server_domains,
         groups=groups,
         current_group_id=group_id,
-        server_groups=server_groups
+        server_groups=server_groups,
+        now=now
     )
 
 @bp.route('/create', methods=['GET', 'POST'])
@@ -65,8 +70,25 @@ def create():
         # Получаем выбранные группы (может быть несколько)
         selected_group_ids = request.form.getlist('server_groups')
         
+        # Получаем данные биллинга
+        comment = request.form.get('comment')
+        billing_provider = request.form.get('billing_provider')
+        billing_login = request.form.get('billing_login')
+        billing_password = request.form.get('billing_password')
+        payment_date_str = request.form.get('payment_date')
+        
+        # Преобразуем строку даты в объект Date
+        from datetime import datetime
+        payment_date = None
+        if payment_date_str:
+            try:
+                payment_date = datetime.strptime(payment_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                flash('Неверный формат даты оплаты. Используйте формат ГГГГ-ММ-ДД', 'danger')
+                return render_template('servers/create.html', groups=groups)
+        
         # Validate required fields
-        if not name or not ip_address or not ssh_user:
+        if not name or not ip_address or not ssh_user or not payment_date:
             flash('Все обязательные поля должны быть заполнены', 'danger')
             return render_template('servers/create.html', groups=groups)
         
@@ -86,7 +108,11 @@ def create():
             ssh_user=ssh_user,
             ssh_port=ssh_port,
             ssh_key=ssh_key,
-            status='pending'
+            status='pending',
+            comment=comment,
+            billing_provider=billing_provider,
+            billing_login=billing_login,
+            payment_date=payment_date
         )
         
         # Устанавливаем пароль если используется аутентификация по паролю
@@ -96,6 +122,10 @@ def create():
             # Временно храним пароль в памяти для проверки соединения
             if verify_connection:
                 server._temp_password = ssh_password
+        
+        # Устанавливаем пароль биллинга если он указан
+        if billing_password:
+            server.set_billing_password(billing_password)
         
         db.session.add(server)
         
