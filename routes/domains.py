@@ -25,18 +25,20 @@ def index():
         domains = group.domains.all()
     elif show_ungrouped:
         # Показываем только домены без групп
-        # Используем подзапрос для определения доменов с группами
-        from sqlalchemy import select, and_, not_, exists
-        from sqlalchemy.orm import aliased
+        from sqlalchemy import select, not_, exists
+
+        # Находим домены, которые не имеют связей в таблице domain_group_association
+        ungrouped_domains = []
         
-        # Подзапрос для поиска доменов, которые находятся в группах
-        domain_group_assoc = db.Table('domain_group_association', db.metadata, autoload_with=db.engine)
-        domains_with_groups = select(domain_group_assoc.c.domain_id).distinct()
+        # Получаем все домены
+        all_domains = Domain.query.all()
         
-        # Основной запрос: находим домены, которых нет в подзапросе
-        domains = Domain.query.filter(not_(exists().where(
-            Domain.id == domain_group_assoc.c.domain_id
-        ))).all()
+        # Фильтруем только те, у которых нет групп
+        for domain in all_domains:
+            if not domain.groups:
+                ungrouped_domains.append(domain)
+                
+        domains = ungrouped_domains
     else:
         # Иначе показываем все домены
         domains = Domain.query.all()
