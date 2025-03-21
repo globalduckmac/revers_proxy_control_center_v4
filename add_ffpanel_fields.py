@@ -9,7 +9,7 @@ import os
 import sys
 from datetime import datetime
 
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, DateTime, text
 from sqlalchemy.sql import select
 
 def add_ffpanel_fields():
@@ -50,7 +50,16 @@ def add_ffpanel_fields():
         for column_name, column_def in columns_to_add:
             if column_name not in existing_columns:
                 print(f"Добавление колонки {column_name}...")
-                conn.execute(text(f"ALTER TABLE domain ADD COLUMN {column_name} {column_def.type}"))
+                # Для datetime нужно использовать TIMESTAMP в PostgreSQL
+                sql_type = "TIMESTAMP"
+                if isinstance(column_def.type, DateTime):
+                    sql_type = "TIMESTAMP"
+                elif isinstance(column_def.type, String):
+                    sql_type = f"VARCHAR({column_def.type.length})"
+                elif isinstance(column_def.type, Integer):
+                    sql_type = "INTEGER"
+                
+                conn.execute(text(f"ALTER TABLE domain ADD COLUMN {column_name} {sql_type}"))
                 print(f"Колонка {column_name} успешно добавлена.")
             else:
                 print(f"Колонка {column_name} уже существует.")
