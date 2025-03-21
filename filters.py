@@ -9,7 +9,7 @@ def register_filters(app):
         app: Flask application instance
     """
     
-    @app.template_filter('humanize')
+    @app.template_filter('humanize_timestamp')
     def humanize_timestamp(timestamp):
         """
         Преобразует временную метку в понятный человеку формат 'X минут/часов/дней назад'
