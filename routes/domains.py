@@ -63,13 +63,23 @@ def create():
         # Получаем ожидаемые NS-записи
         expected_nameservers = request.form.get('expected_nameservers', '')
         
+        # Получаем настройки FFPanel
+        ffpanel_enabled = 'ffpanel_enabled' in request.form
+        ffpanel_target_ip = request.form.get('ffpanel_target_ip') if ffpanel_enabled else None
+        
+        # Если FFPanel включен, но не указан специальный IP, используем основной target_ip
+        if ffpanel_enabled and not ffpanel_target_ip:
+            ffpanel_target_ip = target_ip
+            
         # Create domain
         domain = Domain(
             name=name,
             target_ip=target_ip,
             target_port=target_port,
             ssl_enabled=ssl_enabled,
-            expected_nameservers=expected_nameservers
+            expected_nameservers=expected_nameservers,
+            ffpanel_enabled=ffpanel_enabled,
+            ffpanel_target_ip=ffpanel_target_ip
         )
         
         db.session.add(domain)
@@ -136,12 +146,22 @@ def edit(domain_id):
         # Получаем ожидаемые NS-записи
         expected_nameservers = request.form.get('expected_nameservers', '')
         
+        # Получаем настройки FFPanel
+        ffpanel_enabled = 'ffpanel_enabled' in request.form
+        ffpanel_target_ip = request.form.get('ffpanel_target_ip') if ffpanel_enabled else None
+        
+        # Если FFPanel включен, но не указан специальный IP, используем основной target_ip
+        if ffpanel_enabled and not ffpanel_target_ip:
+            ffpanel_target_ip = target_ip
+        
         # Update domain
         domain.name = name
         domain.target_ip = target_ip
         domain.target_port = target_port
         domain.ssl_enabled = ssl_enabled
         domain.expected_nameservers = expected_nameservers
+        domain.ffpanel_enabled = ffpanel_enabled
+        domain.ffpanel_target_ip = ffpanel_target_ip
         
         # Update domain groups
         domain.groups = []

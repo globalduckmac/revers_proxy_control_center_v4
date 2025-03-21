@@ -228,6 +228,8 @@ class Domain(db.Model):
     ns_check_date = db.Column(db.DateTime, nullable=True)
     
     # Поля для интеграции с FFPanel
+    ffpanel_enabled = db.Column(db.Boolean, default=False)  # Включена ли интеграция с FFPanel
+    ffpanel_target_ip = db.Column(db.String(45), nullable=True)  # IP-адрес специально для FFPanel (может отличаться от target_ip)
     ffpanel_id = db.Column(db.Integer, nullable=True)  # ID домена в FFPanel
     ffpanel_status = db.Column(db.String(20), default='not_synced')  # not_synced, synced, error
     ffpanel_port = db.Column(db.String(10), default='80')  # Порт в FFPanel
