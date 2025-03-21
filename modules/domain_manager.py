@@ -2,6 +2,7 @@ import logging
 import dns.resolver
 from datetime import datetime
 from models import Domain, DomainGroup, Server, ServerLog, db
+from modules.ffpanel_api import FFPanelAPI
 
 logger = logging.getLogger(__name__)
 
@@ -403,3 +404,211 @@ class DomainManager:
             db.session.rollback()
             logger.error(f"Error assigning group {group_id} to server {server_id}: {str(e)}")
             return False
+            
+    @staticmethod
+    def sync_domain_with_ffpanel(domain_id):
+        """
+        Синхронизирует домен с FFPanel (создание или обновление).
+        
+        Args:
+            domain_id: ID домена для синхронизации
+            
+        Returns:
+            dict: Результат операции {'success': bool, 'message': str}
+        """
+        try:
+            domain = Domain.query.get(domain_id)
+            if not domain:
+                logger.error(f"Domain with ID {domain_id} not found")
+                return {'success': False, 'message': 'Домен не найден'}
+            
+            # Проверка необходимых параметров
+            if not domain.name or not domain.target_ip:
+                logger.error(f"Missing required parameters for domain {domain.name}")
+                return {'success': False, 'message': 'Отсутствуют обязательные параметры (имя или целевой IP)'}
+            
+            # Инициализируем API
+            api = FFPanelAPI()
+            
+            # Если домен уже синхронизирован с FFPanel
+            if domain.ffpanel_id:
+                # Обновляем домен в FFPanel
+                dns_records = None  # Здесь можно добавить логику для создания NS-записей
+                result = api.update_site(
+                    site_id=domain.ffpanel_id,
+                    ip_path=domain.target_ip,
+                    port=str(domain.target_port),
+                    port_out=domain.ffpanel_port_out,
+                    port_ssl=domain.ffpanel_port_ssl,
+                    port_out_ssl=domain.ffpanel_port_out_ssl,
+                    dns=dns_records
+                )
+                
+                if result['success']:
+                    domain.ffpanel_status = 'synced'
+                    domain.ffpanel_last_sync = datetime.utcnow()
+                    db.session.commit()
+                    logger.info(f"Successfully updated domain {domain.name} in FFPanel (ID: {domain.ffpanel_id})")
+                    return {'success': True, 'message': 'Домен успешно обновлен в FFPanel'}
+                else:
+                    domain.ffpanel_status = 'error'
+                    db.session.commit()
+                    logger.error(f"Error updating domain {domain.name} in FFPanel: {result['message']}")
+                    return {'success': False, 'message': f"Ошибка обновления в FFPanel: {result['message']}"}
+            else:
+                # Создаем новый домен в FFPanel
+                result = api.add_site(
+                    domain=domain.name,
+                    ip_path=domain.target_ip,
+                    port=str(domain.target_port),
+                    port_out=domain.ffpanel_port_out or '80',
+                    dns=domain.ffpanel_dns or ''
+                )
+                
+                if result['success'] and result['id']:
+                    domain.ffpanel_id = result['id']
+                    domain.ffpanel_status = 'synced'
+                    domain.ffpanel_last_sync = datetime.utcnow()
+                    db.session.commit()
+                    logger.info(f"Successfully created domain {domain.name} in FFPanel (ID: {result['id']})")
+                    return {'success': True, 'message': 'Домен успешно создан в FFPanel'}
+                else:
+                    domain.ffpanel_status = 'error'
+                    db.session.commit()
+                    logger.error(f"Error creating domain {domain.name} in FFPanel: {result['message']}")
+                    return {'success': False, 'message': f"Ошибка создания в FFPanel: {result['message']}"}
+                    
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Exception in FFPanel sync for domain {domain_id}: {str(e)}")
+            return {'success': False, 'message': f"Исключение при синхронизации: {str(e)}"}
+            
+    @staticmethod
+    def delete_domain_from_ffpanel(domain_id):
+        """
+        Удаляет домен из FFPanel.
+        
+        Args:
+            domain_id: ID домена для удаления
+            
+        Returns:
+            dict: Результат операции {'success': bool, 'message': str}
+        """
+        try:
+            domain = Domain.query.get(domain_id)
+            if not domain:
+                logger.error(f"Domain with ID {domain_id} not found")
+                return {'success': False, 'message': 'Домен не найден'}
+            
+            # Если домен не синхронизирован с FFPanel, просто успешно завершаем
+            if not domain.ffpanel_id:
+                logger.warning(f"Domain {domain.name} is not synced with FFPanel, nothing to delete")
+                return {'success': True, 'message': 'Домен не был синхронизирован с FFPanel'}
+            
+            # Инициализируем API
+            api = FFPanelAPI()
+            
+            # Удаляем домен из FFPanel
+            result = api.delete_site(site_id=domain.ffpanel_id)
+            
+            if result['success']:
+                # Сбрасываем поля FFPanel
+                domain.ffpanel_id = None
+                domain.ffpanel_status = 'not_synced'
+                domain.ffpanel_last_sync = datetime.utcnow()
+                db.session.commit()
+                logger.info(f"Successfully deleted domain {domain.name} from FFPanel")
+                return {'success': True, 'message': 'Домен успешно удален из FFPanel'}
+            else:
+                logger.error(f"Error deleting domain {domain.name} from FFPanel: {result['message']}")
+                return {'success': False, 'message': f"Ошибка удаления из FFPanel: {result['message']}"}
+                
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Exception in FFPanel delete for domain {domain_id}: {str(e)}")
+            return {'success': False, 'message': f"Исключение при удалении: {str(e)}"}
+            
+    @staticmethod
+    def import_domains_from_ffpanel():
+        """
+        Импортирует список доменов из FFPanel в локальную базу данных.
+        
+        Returns:
+            dict: Статистика импорта {'imported': int, 'updated': int, 'failed': int, 'message': str}
+        """
+        stats = {'imported': 0, 'updated': 0, 'failed': 0, 'message': ''}
+        
+        try:
+            # Инициализируем API
+            api = FFPanelAPI()
+            
+            # Получаем список доменов из FFPanel
+            ffpanel_domains = api.get_sites()
+            
+            if not ffpanel_domains:
+                logger.warning("No domains found in FFPanel or failed to retrieve list")
+                stats['message'] = 'Не удалось получить список доменов из FFPanel или список пуст'
+                return stats
+            
+            for ff_domain in ffpanel_domains:
+                try:
+                    domain_name = ff_domain.get('domain')
+                    if not domain_name:
+                        logger.error(f"Missing domain name in FFPanel response: {ff_domain}")
+                        stats['failed'] += 1
+                        continue
+                    
+                    # Проверяем, существует ли домен в нашей системе
+                    existing_domain = Domain.query.filter_by(name=domain_name).first()
+                    
+                    if existing_domain:
+                        # Если домен уже существует, обновляем его параметры FFPanel
+                        existing_domain.ffpanel_id = ff_domain.get('id')
+                        existing_domain.ffpanel_status = 'synced'
+                        existing_domain.ffpanel_port = ff_domain.get('port', '80')
+                        existing_domain.ffpanel_port_out = ff_domain.get('port_out', '80')
+                        existing_domain.ffpanel_port_ssl = ff_domain.get('port_ssl', '443')
+                        existing_domain.ffpanel_port_out_ssl = ff_domain.get('port_out_ssl', '443')
+                        existing_domain.ffpanel_dns = ff_domain.get('dns', '')
+                        existing_domain.ffpanel_last_sync = datetime.utcnow()
+                        
+                        # Если у нас не установлен target_ip, добавим его из FFPanel
+                        if not existing_domain.target_ip:
+                            existing_domain.target_ip = ff_domain.get('ip', '')
+                        
+                        db.session.commit()
+                        logger.info(f"Updated domain {domain_name} from FFPanel (ID: {existing_domain.ffpanel_id})")
+                        stats['updated'] += 1
+                    else:
+                        # Если домен не существует, создаем новый
+                        new_domain = Domain(
+                            name=domain_name,
+                            target_ip=ff_domain.get('ip', ''),
+                            target_port=int(ff_domain.get('port', 80)),
+                            ffpanel_id=ff_domain.get('id'),
+                            ffpanel_status='synced',
+                            ffpanel_port=ff_domain.get('port', '80'),
+                            ffpanel_port_out=ff_domain.get('port_out', '80'),
+                            ffpanel_port_ssl=ff_domain.get('port_ssl', '443'),
+                            ffpanel_port_out_ssl=ff_domain.get('port_out_ssl', '443'),
+                            ffpanel_dns=ff_domain.get('dns', ''),
+                            ffpanel_last_sync=datetime.utcnow()
+                        )
+                        
+                        db.session.add(new_domain)
+                        db.session.commit()
+                        logger.info(f"Imported new domain {domain_name} from FFPanel (ID: {new_domain.ffpanel_id})")
+                        stats['imported'] += 1
+                        
+                except Exception as e:
+                    db.session.rollback()
+                    logger.error(f"Error processing FFPanel domain {ff_domain.get('domain', 'Unknown')}: {str(e)}")
+                    stats['failed'] += 1
+            
+            stats['message'] = f"Импорт завершен. Импортировано новых: {stats['imported']}, обновлено: {stats['updated']}, ошибок: {stats['failed']}"
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Exception in FFPanel import: {str(e)}")
+            stats['message'] = f"Ошибка при импорте доменов: {str(e)}"
+            return stats

@@ -20,4 +20,5 @@ dependencies = [
     "dnspython>=2.7.0",
     "python-telegram-bot>=22.0",
     "pytz>=2025.1",
+    "requests>=2.32.3",
 ]

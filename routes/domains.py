@@ -1,4 +1,5 @@
 import logging
+import os
 from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
 from flask_login import login_required
 from models import Domain, DomainGroup, db
@@ -233,3 +234,76 @@ def api_check_nameservers(domain_name):
             'success': False,
             'error': str(e)
         }), 400
+
+@bp.route('/<int:domain_id>/ffpanel', methods=['GET', 'POST'])
+@login_required
+def ffpanel(domain_id):
+    """Управление интеграцией домена с FFPanel."""
+    domain = Domain.query.get_or_404(domain_id)
+    
+    # Проверяем, установлен ли токен FFPanel
+    ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+    if not ffpanel_token:
+        flash('Не настроен токен FFPanel API. Пожалуйста, добавьте FFPANEL_TOKEN в переменные окружения.', 'danger')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        # Синхронизация домена с FFPanel
+        if action == 'sync':
+            # Обновляем параметры домена для FFPanel
+            domain.ffpanel_port = request.form.get('ffpanel_port', '80')
+            domain.ffpanel_port_out = request.form.get('ffpanel_port_out', '80')
+            domain.ffpanel_port_ssl = request.form.get('ffpanel_port_ssl', '443')
+            domain.ffpanel_port_out_ssl = request.form.get('ffpanel_port_out_ssl', '443')
+            domain.ffpanel_dns = request.form.get('ffpanel_dns', '')
+            db.session.commit()
+            
+            # Запускаем синхронизацию
+            result = DomainManager.sync_domain_with_ffpanel(domain_id)
+            
+            if result['success']:
+                flash(result['message'], 'success')
+            else:
+                flash(result['message'], 'danger')
+                
+        # Удаление домена из FFPanel
+        elif action == 'delete':
+            result = DomainManager.delete_domain_from_ffpanel(domain_id)
+            
+            if result['success']:
+                flash(result['message'], 'success')
+            else:
+                flash(result['message'], 'danger')
+        
+        return redirect(url_for('domains.ffpanel', domain_id=domain_id))
+    
+    return render_template('domains/ffpanel.html', domain=domain)
+
+@bp.route('/ffpanel/import', methods=['GET', 'POST'])
+@login_required
+def ffpanel_import():
+    """Импорт доменов из FFPanel."""
+    
+    # Проверяем, установлен ли токен FFPanel
+    ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+    if not ffpanel_token:
+        flash('Не настроен токен FFPanel API. Пожалуйста, добавьте FFPANEL_TOKEN в переменные окружения.', 'danger')
+        return redirect(url_for('domains.index'))
+    
+    if request.method == 'POST':
+        # Запускаем импорт доменов
+        stats = DomainManager.import_domains_from_ffpanel()
+        
+        flash(stats['message'], 'info')
+        
+        if stats['imported'] > 0 or stats['updated'] > 0:
+            flash(f"Импортировано новых доменов: {stats['imported']}, обновлено существующих: {stats['updated']}", 'success')
+        
+        if stats['failed'] > 0:
+            flash(f"Ошибок при импорте: {stats['failed']}", 'warning')
+            
+        return redirect(url_for('domains.index'))
+    
+    return render_template('domains/ffpanel_import.html')

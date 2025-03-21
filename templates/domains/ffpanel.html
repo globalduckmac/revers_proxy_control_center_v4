@@ -1,0 +1,149 @@
+{% extends 'layout.html' %}
+
+{% block title %}Интеграция с FFPanel - {{ domain.name }}{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Главная</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('domains.index') }}">Домены</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Интеграция с FFPanel - {{ domain.name }}</li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Управление FFPanel для домена {{ domain.name }}</h5>
+      <div>
+        <a href="{{ url_for('domains.edit', domain_id=domain.id) }}" class="btn btn-sm btn-secondary">
+          <i class="bi bi-arrow-left"></i> Назад к домену
+        </a>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="row mb-4">
+        <div class="col-md-12">
+          <div class="alert {% if domain.ffpanel_status == 'synced' %}alert-success{% elif domain.ffpanel_status == 'error' %}alert-danger{% else %}alert-warning{% endif %}">
+            <strong>Статус синхронизации:</strong> 
+            {% if domain.ffpanel_status == 'synced' %}
+              Синхронизирован
+              {% if domain.ffpanel_last_sync %}
+                (последняя синхронизация: {{ domain.ffpanel_last_sync|humanize_timestamp }})
+              {% endif %}
+            {% elif domain.ffpanel_status == 'error' %}
+              Ошибка синхронизации
+            {% else %}
+              Не синхронизирован с FFPanel
+            {% endif %}
+          </div>
+          
+          <div class="card mb-3">
+            <div class="card-header">
+              <h6 class="mb-0">Информация о домене в FFPanel</h6>
+            </div>
+            <div class="card-body">
+              {% if domain.ffpanel_id %}
+                <div class="mb-3 row">
+                  <label class="col-sm-4 col-form-label">ID в FFPanel:</label>
+                  <div class="col-sm-8">
+                    <p class="form-control-plaintext">{{ domain.ffpanel_id }}</p>
+                  </div>
+                </div>
+                <div class="mb-3 row">
+                  <label class="col-sm-4 col-form-label">Порты:</label>
+                  <div class="col-sm-8">
+                    <p class="form-control-plaintext">
+                      HTTP: {{ domain.ffpanel_port }} → {{ domain.ffpanel_port_out }}<br>
+                      HTTPS: {{ domain.ffpanel_port_ssl }} → {{ domain.ffpanel_port_out_ssl }}
+                    </p>
+                  </div>
+                </div>
+                <div class="mb-3 row">
+                  <label class="col-sm-4 col-form-label">DNS:</label>
+                  <div class="col-sm-8">
+                    <p class="form-control-plaintext">{{ domain.ffpanel_dns or 'Не указан' }}</p>
+                  </div>
+                </div>
+              {% else %}
+                <p class="text-muted">Домен не синхронизирован с FFPanel.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="row">
+        <div class="col-md-6">
+          <form method="POST" action="{{ url_for('domains.ffpanel', domain_id=domain.id) }}">
+            <input type="hidden" name="action" value="sync">
+            <div class="card mb-3">
+              <div class="card-header">
+                <h6 class="mb-0">Параметры синхронизации</h6>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label for="ffpanel_port" class="form-label">HTTP порт (внутренний)</label>
+                    <input type="text" class="form-control" id="ffpanel_port" name="ffpanel_port" 
+                           value="{{ domain.ffpanel_port or '80' }}">
+                  </div>
+                  <div class="col-md-6">
+                    <label for="ffpanel_port_out" class="form-label">HTTP порт (внешний)</label>
+                    <input type="text" class="form-control" id="ffpanel_port_out" name="ffpanel_port_out" 
+                           value="{{ domain.ffpanel_port_out or '80' }}">
+                  </div>
+                  <div class="col-md-6">
+                    <label for="ffpanel_port_ssl" class="form-label">HTTPS порт (внутренний)</label>
+                    <input type="text" class="form-control" id="ffpanel_port_ssl" name="ffpanel_port_ssl" 
+                           value="{{ domain.ffpanel_port_ssl or '443' }}">
+                  </div>
+                  <div class="col-md-6">
+                    <label for="ffpanel_port_out_ssl" class="form-label">HTTPS порт (внешний)</label>
+                    <input type="text" class="form-control" id="ffpanel_port_out_ssl" name="ffpanel_port_out_ssl" 
+                           value="{{ domain.ffpanel_port_out_ssl or '443' }}">
+                  </div>
+                  <div class="col-md-12">
+                    <label for="ffpanel_dns" class="form-label">DNS</label>
+                    <input type="text" class="form-control" id="ffpanel_dns" name="ffpanel_dns" 
+                           value="{{ domain.ffpanel_dns or '' }}" placeholder="ns1.example.com">
+                    <small class="text-muted">Укажите DNS-сервер, если необходимо.</small>
+                  </div>
+                </div>
+              </div>
+              <div class="card-footer">
+                <button type="submit" class="btn btn-primary">
+                  <i class="bi bi-arrow-repeat"></i>
+                  {% if domain.ffpanel_id %}Обновить{% else %}Создать{% endif %} в FFPanel
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+        
+        <div class="col-md-6">
+          {% if domain.ffpanel_id %}
+            <div class="card">
+              <div class="card-header bg-danger text-white">
+                <h6 class="mb-0">Опасная зона</h6>
+              </div>
+              <div class="card-body">
+                <p>Удаление домена из FFPanel не удалит его из текущей системы, но удалит все настройки связанные с ним в FFPanel.</p>
+                <form method="POST" action="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" 
+                      onsubmit="return confirm('Вы уверены, что хотите удалить домен {{ domain.name }} из FFPanel? Эта операция необратима.');">
+                  <input type="hidden" name="action" value="delete">
+                  <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-trash"></i> Удалить из FFPanel
+                  </button>
+                </form>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
