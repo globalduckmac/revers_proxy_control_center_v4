@@ -304,6 +304,11 @@ def ffpanel_import():
         if stats['failed'] > 0:
             flash(f"Ошибок при импорте: {stats['failed']}", 'warning')
             
+            # Отображаем детали ошибок
+            if 'errors' in stats and stats['errors']:
+                for error in stats['errors']:
+                    flash(f"Детали ошибки: {error}", 'danger')
+            
         return redirect(url_for('domains.index'))
     
     return render_template('domains/ffpanel_import.html')

@@ -534,9 +534,9 @@ class DomainManager:
         Импортирует список доменов из FFPanel в локальную базу данных.
         
         Returns:
-            dict: Статистика импорта {'imported': int, 'updated': int, 'failed': int, 'message': str}
+            dict: Статистика импорта {'imported': int, 'updated': int, 'failed': int, 'message': str, 'errors': list}
         """
-        stats = {'imported': 0, 'updated': 0, 'failed': 0, 'message': ''}
+        stats = {'imported': 0, 'updated': 0, 'failed': 0, 'message': '', 'errors': []}
         
         try:
             # Инициализируем API
@@ -554,7 +554,9 @@ class DomainManager:
                 try:
                     domain_name = ff_domain.get('domain')
                     if not domain_name:
-                        logger.error(f"Missing domain name in FFPanel response: {ff_domain}")
+                        error_msg = f"Отсутствует имя домена в ответе FFPanel: {ff_domain}"
+                        logger.error(error_msg)
+                        stats['errors'].append(error_msg)
                         stats['failed'] += 1
                         continue
                     
@@ -602,13 +604,17 @@ class DomainManager:
                         
                 except Exception as e:
                     db.session.rollback()
-                    logger.error(f"Error processing FFPanel domain {ff_domain.get('domain', 'Unknown')}: {str(e)}")
+                    error_msg = f"Ошибка при обработке домена {ff_domain.get('domain', 'Неизвестно')}: {str(e)}"
+                    logger.error(error_msg)
+                    stats['errors'].append(error_msg)
                     stats['failed'] += 1
             
             stats['message'] = f"Импорт завершен. Импортировано новых: {stats['imported']}, обновлено: {stats['updated']}, ошибок: {stats['failed']}"
             return stats
             
         except Exception as e:
-            logger.error(f"Exception in FFPanel import: {str(e)}")
+            error_msg = f"Исключение при импорте доменов из FFPanel: {str(e)}"
+            logger.error(error_msg)
+            stats['errors'].append(error_msg)
             stats['message'] = f"Ошибка при импорте доменов: {str(e)}"
             return stats
