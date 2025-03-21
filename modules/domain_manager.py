@@ -67,10 +67,18 @@ class DomainManager:
             actual_ns_lowercase = [ns.lower() for ns in actual_ns]
             expected_ns_lowercase = [ns.lower() for ns in expected_ns]
             
-            # Проверяем, что каждый ожидаемый NS-сервер присутствует в фактическом списке
+            # Обрабатываем особые случаи - проверка на содержание подстроки в NS-серверах
+            # Например, "dnspod" должен матчиться с "a.dnspod.com", "b.dnspod.com", и т.д.
+            is_special_match = False
+            if len(expected_ns_lowercase) == 1:
+                special_provider = expected_ns_lowercase[0]
+                # Проверяем, что хотя бы один фактический NS содержит ожидаемый провайдер
+                is_special_match = any(special_provider in ns for ns in actual_ns_lowercase)
+            
+            # Стандартная проверка - точное совпадение
             all_expected_found = all(ns in actual_ns_lowercase for ns in expected_ns_lowercase)
             
-            if all_expected_found:
+            if all_expected_found or is_special_match:
                 domain.ns_status = 'ok'
                 logger.info(f"Domain {domain.name} NS check: OK. All expected NS found in actual NS list.")
             else:
