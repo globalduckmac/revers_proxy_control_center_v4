@@ -42,13 +42,6 @@ def create():
         target_port = request.form.get('target_port', 80, type=int)
         ssl_enabled = 'ssl_enabled' in request.form
         
-        # Если выбран сервер, используем его IP-адрес
-        if server_id and not target_ip:
-            from models import Server
-            server = Server.query.get(server_id)
-            if server:
-                target_ip = server.ip_address
-        
         # Validate required fields
         if not name or not target_ip:
             flash('Domain name and target IP are required', 'danger')
@@ -65,11 +58,24 @@ def create():
         
         # Получаем настройки FFPanel
         ffpanel_enabled = 'ffpanel_enabled' in request.form
-        ffpanel_target_ip = request.form.get('ffpanel_target_ip') if ffpanel_enabled else None
+        ffpanel_target_ip = None
         
-        # Если FFPanel включен, но не указан специальный IP, используем основной target_ip
-        if ffpanel_enabled and not ffpanel_target_ip:
-            ffpanel_target_ip = target_ip
+        if ffpanel_enabled:
+            # Проверяем, был ли выбран сервер для FFPanel
+            server_id = request.form.get('server_id')
+            if server_id:
+                # Если выбран сервер, используем его IP-адрес для FFPanel
+                from models import Server
+                server = Server.query.get(server_id)
+                if server:
+                    ffpanel_target_ip = server.ip_address
+            else:
+                # Иначе используем введенный вручную IP
+                ffpanel_target_ip = request.form.get('ffpanel_target_ip')
+            
+            # Если FFPanel включен, но не указан специальный IP, используем основной target_ip
+            if not ffpanel_target_ip:
+                ffpanel_target_ip = target_ip
             
         # Create domain
         domain = Domain(
@@ -120,16 +126,8 @@ def edit(domain_id):
     if request.method == 'POST':
         name = request.form.get('name')
         target_ip = request.form.get('target_ip')
-        server_id = request.form.get('server_id')
         target_port = request.form.get('target_port', 80, type=int)
         ssl_enabled = 'ssl_enabled' in request.form
-        
-        # Если выбран сервер, используем его IP-адрес
-        if server_id and not target_ip:
-            from models import Server
-            server = Server.query.get(server_id)
-            if server:
-                target_ip = server.ip_address
         
         # Validate required fields
         if not name or not target_ip:
@@ -148,11 +146,24 @@ def edit(domain_id):
         
         # Получаем настройки FFPanel
         ffpanel_enabled = 'ffpanel_enabled' in request.form
-        ffpanel_target_ip = request.form.get('ffpanel_target_ip') if ffpanel_enabled else None
+        ffpanel_target_ip = None
         
-        # Если FFPanel включен, но не указан специальный IP, используем основной target_ip
-        if ffpanel_enabled and not ffpanel_target_ip:
-            ffpanel_target_ip = target_ip
+        if ffpanel_enabled:
+            # Проверяем, был ли выбран сервер для FFPanel
+            server_id = request.form.get('server_id')
+            if server_id:
+                # Если выбран сервер, используем его IP-адрес для FFPanel
+                from models import Server
+                server = Server.query.get(server_id)
+                if server:
+                    ffpanel_target_ip = server.ip_address
+            else:
+                # Иначе используем введенный вручную IP
+                ffpanel_target_ip = request.form.get('ffpanel_target_ip')
+            
+            # Если FFPanel включен, но не указан специальный IP, используем основной target_ip
+            if not ffpanel_target_ip:
+                ffpanel_target_ip = target_ip
         
         # Update domain
         domain.name = name

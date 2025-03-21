@@ -58,7 +58,17 @@
                 </div>
                 <div class="card-body ffpanel-settings" style="display: {% if domain.ffpanel_enabled %}block{% else %}none{% endif %};">
                     <div class="row mb-3">
-                        <div class="col-md-12">
+                        <div class="col-md-6">
+                            <label for="server_id" class="form-label">Выберите сервер для FFPanel</label>
+                            <select class="form-select" id="server_id" name="server_id">
+                                <option value="">-- Выберите сервер или введите IP вручную --</option>
+                                {% for server in servers %}
+                                <option value="{{ server.id }}" {% if domain.ffpanel_target_ip and server.ip_address == domain.ffpanel_target_ip %}selected{% endif %}>{{ server.name }} ({{ server.ip_address }})</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Выберите сервер из списка или укажите FFPanel IP вручную</div>
+                        </div>
+                        <div class="col-md-6">
                             <label for="ffpanel_target_ip" class="form-label">FFPanel Target IP Address</label>
                             <input type="text" class="form-control" id="ffpanel_target_ip" name="ffpanel_target_ip" value="{{ domain.ffpanel_target_ip or domain.target_ip }}">
                             <div class="form-text">IP-адрес для маршрутизации трафика в FFPanel (может отличаться от основного target IP)</div>
@@ -126,65 +136,45 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const serverSelect = document.getElementById('server_id');
     const targetIpInput = document.getElementById('target_ip');
     const ffpanelEnabled = document.getElementById('ffpanel_enabled');
     const ffpanelSettings = document.querySelector('.ffpanel-settings');
     const ffpanelTargetIp = document.getElementById('ffpanel_target_ip');
-    
-    // Функция для обновления состояния поля ввода IP
-    function updateTargetIpState() {
-        if (serverSelect.value) {
-            // Если выбран сервер, делаем поле ввода IP неактивным и снимаем требование заполнения
-            targetIpInput.disabled = true;
-            targetIpInput.removeAttribute('required');
-            targetIpInput.placeholder = 'IP-адрес будет взят из выбранного сервера';
-        } else {
-            // Если сервер не выбран, поле ввода IP активно и обязательно
-            targetIpInput.disabled = false;
-            targetIpInput.setAttribute('required', 'required');
-            targetIpInput.placeholder = '';
-        }
-    }
+    const serverSelect = document.getElementById('server_id');
     
     // Функция для обновления видимости настроек FFPanel
     function updateFFPanelSettings() {
         if (ffpanelEnabled.checked) {
             ffpanelSettings.style.display = 'block';
             
-            // Если поле FFPanel Target IP пустое, предлагаем основной IP
-            if (!ffpanelTargetIp.value) {
-                if (serverSelect.value && targetIpInput.disabled) {
-                    // Получаем IP из выбранного сервера
-                    const serverOption = serverSelect.options[serverSelect.selectedIndex];
-                    const serverIP = serverOption.text.match(/\((.*?)\)/)[1];
-                    ffpanelTargetIp.value = serverIP;
-                } else if (targetIpInput.value) {
-                    // Если IP введен вручную, предлагаем такой же для FFPanel
-                    ffpanelTargetIp.value = targetIpInput.value;
-                }
+            // Предлагаем основной Target IP в качестве начального значения для FFPanel IP
+            if (targetIpInput.value && !ffpanelTargetIp.value) {
+                ffpanelTargetIp.value = targetIpInput.value;
             }
         } else {
             ffpanelSettings.style.display = 'none';
         }
     }
     
-    // Инициализация при загрузке страницы
-    updateTargetIpState();
+    // Функция для обновления IP на основе выбранного сервера
+    function updateFFPanelIpFromServer() {
+        if (serverSelect.value) {
+            // Если выбран сервер, заполняем IP из сервера
+            const serverOption = serverSelect.options[serverSelect.selectedIndex];
+            const serverIP = serverOption.text.match(/\((.*?)\)/)[1];
+            ffpanelTargetIp.value = serverIP;
+        }
+    }
     
     // События изменения
-    serverSelect.addEventListener('change', function() {
-        updateTargetIpState();
-        if (ffpanelEnabled.checked) {
-            updateFFPanelSettings();
-        }
-    });
-    
     targetIpInput.addEventListener('input', function() {
-        if (ffpanelEnabled.checked && !ffpanelTargetIp.value) {
+        if (ffpanelEnabled.checked && !serverSelect.value) {
+            // При вводе основного IP, предлагаем его же для FFPanel, если не выбран сервер
             ffpanelTargetIp.value = targetIpInput.value;
         }
     });
+    
+    serverSelect.addEventListener('change', updateFFPanelIpFromServer);
     
     ffpanelEnabled.addEventListener('change', updateFFPanelSettings);
 });
