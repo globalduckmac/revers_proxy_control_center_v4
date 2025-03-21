@@ -557,8 +557,13 @@ class DomainManager:
                 logger.error(f"Domain with ID {domain_id} not found")
                 return {'success': False, 'message': 'Домен не найден'}
             
+            # Проверка включена ли интеграция с FFPanel
+            if not domain.ffpanel_enabled:
+                logger.error(f"FFPanel integration is not enabled for domain {domain.name}")
+                return {'success': False, 'message': 'Интеграция с FFPanel не включена для этого домена'}
+                
             # Проверка необходимых параметров
-            if not domain.name or not domain.target_ip:
+            if not domain.name or not (domain.target_ip or domain.ffpanel_target_ip):
                 logger.error(f"Missing required parameters for domain {domain.name}")
                 return {'success': False, 'message': 'Отсутствуют обязательные параметры (имя или целевой IP)'}
             
@@ -569,9 +574,15 @@ class DomainManager:
             if domain.ffpanel_id:
                 # Обновляем домен в FFPanel
                 dns_records = None  # Здесь можно добавить логику для создания NS-записей
+                
+                # Определяем IP-адрес для FFPanel
+                # Если указан специальный IP для FFPanel, используем его
+                # Иначе используем основной target_ip
+                target_ip = domain.ffpanel_target_ip if domain.ffpanel_target_ip else domain.target_ip
+                
                 result = api.update_site(
                     site_id=domain.ffpanel_id,
-                    ip_path=domain.target_ip,
+                    ip_path=target_ip,
                     port=str(domain.target_port),
                     port_out=domain.ffpanel_port_out,
                     port_ssl=domain.ffpanel_port_ssl,
@@ -600,9 +611,15 @@ class DomainManager:
                     return {'success': False, 'message': f"Ошибка обновления в FFPanel: {result['message']}"}
             else:
                 # Создаем новый домен в FFPanel
+                
+                # Определяем IP-адрес для FFPanel
+                # Если указан специальный IP для FFPanel, используем его
+                # Иначе используем основной target_ip
+                target_ip = domain.ffpanel_target_ip if domain.ffpanel_target_ip else domain.target_ip
+                
                 result = api.add_site(
                     domain=domain.name,
-                    ip_path=domain.target_ip,
+                    ip_path=target_ip,
                     port=str(domain.target_port),
                     port_out=domain.ffpanel_port_out or '80',
                     dns=domain.ffpanel_dns or ''
