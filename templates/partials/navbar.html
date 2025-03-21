@@ -64,6 +64,9 @@
                         <li><a class="dropdown-item" href="{{ url_for('servers.check_passwords') }}">
                             <i class="fas fa-key me-1"></i> Проверка паролей серверов
                         </a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('users.index') }}">
+                            <i class="fas fa-users me-1"></i> Управление пользователями
+                        </a></li>
                         {% endif %}
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">Logout</a></li>
