@@ -14,6 +14,9 @@
                 <i class="fas fa-sync"></i> Проверить NS всех доменов
             </button>
         </form>
+        <a href="{{ url_for('domains.ffpanel_import') }}" class="btn btn-outline-success me-2">
+            <i class="fas fa-cloud-download-alt"></i> Импорт из FFPanel
+        </a>
         <a href="{{ url_for('domains.create') }}" class="btn btn-primary">
             <i class="fas fa-plus"></i> Add Domain
         </a>
@@ -57,6 +60,7 @@
                         <th>Target Port</th>
                         <th>SSL Enabled</th>
                         <th>NS Status</th>
+                        <th>FFPanel</th>
                         <th>Groups</th>
                         <th>Created</th>
                         <th>Actions</th>
@@ -85,6 +89,18 @@
                             {% endif %}
                         </td>
                         <td>
+                            {% if domain.ffpanel_status == 'synced' %}
+                            <span class="badge bg-success">Синхронизирован</span>
+                            {% elif domain.ffpanel_status == 'error' %}
+                            <span class="badge bg-danger">Ошибка</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Не синхронизирован</span>
+                            {% endif %}
+                            {% if domain.ffpanel_id %}
+                            <span class="badge bg-info">ID: {{ domain.ffpanel_id }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
                             {% for group in domain.groups %}
                             <span class="badge bg-info">{{ group.name }}</span>
                             {% else %}
@@ -99,6 +115,9 @@
                                 </a>
                                 <a href="{{ url_for('domains.nameservers', domain_id=domain.id) }}" class="btn btn-sm btn-outline-info" title="Manage NS Records">
                                     <i class="fas fa-server"></i>
+                                </a>
+                                <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-outline-success" title="FFPanel Integration">
+                                    <i class="fas fa-cloud"></i>
                                 </a>
                                 <button type="button" class="btn btn-sm btn-outline-danger" 
                                         data-bs-toggle="modal" 
@@ -132,7 +151,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="text-center">No domains found. <a href="{{ url_for('domains.create') }}">Add your first domain</a>.</td>
+                        <td colspan="9" class="text-center">No domains found. <a href="{{ url_for('domains.create') }}">Add your first domain</a>.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
