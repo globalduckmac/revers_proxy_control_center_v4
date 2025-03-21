@@ -227,6 +227,16 @@ class Domain(db.Model):
     # Дата последней проверки NS
     ns_check_date = db.Column(db.DateTime, nullable=True)
     
+    # Поля для интеграции с FFPanel
+    ffpanel_id = db.Column(db.Integer, nullable=True)  # ID домена в FFPanel
+    ffpanel_status = db.Column(db.String(20), default='not_synced')  # not_synced, synced, error
+    ffpanel_port = db.Column(db.String(10), default='80')  # Порт в FFPanel
+    ffpanel_port_out = db.Column(db.String(10), default='80')  # Внешний порт в FFPanel
+    ffpanel_port_ssl = db.Column(db.String(10), default='443')  # SSL порт в FFPanel
+    ffpanel_port_out_ssl = db.Column(db.String(10), default='443')  # Внешний SSL порт в FFPanel
+    ffpanel_dns = db.Column(db.String(255), nullable=True)  # DNS в FFPanel
+    ffpanel_last_sync = db.Column(db.DateTime, nullable=True)  # Дата последней синхронизации
+    
     # Many-to-many relationship with DomainGroup
     groups = db.relationship('DomainGroup', secondary='domain_group_association', 
                             backref=db.backref('domains', lazy='dynamic'))
