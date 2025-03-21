@@ -169,6 +169,12 @@ class TelegramNotifier:
             old_status (str): Предыдущий статус
             new_status (str): Новый статус
         """
+        # Сначала маскируем имя домена для безопасности
+        masked_domain_name = mask_domain_name(domain.name)
+        
+        # Для безопасности логируем только маскированное имя
+        logger.info(f"Preparing NS status change notification for domain {masked_domain_name}")
+        
         emoji = "🔴" if new_status == 'mismatch' else "🟢"
         
         # Получаем группы, в которые входит домен
@@ -182,7 +188,7 @@ class TelegramNotifier:
                 server_name = group.server.name if group.server else "Нет сервера"
                 groups_text += f"• <b>{group.name}</b> (сервер: {server_name})\n"
                 
-                # Добавляем информацию о других доменах в группе
+                # Добавляем информацию о других доменах в группе (без раскрытия имен!)
                 other_domains = group.domains.filter(Domain.id != domain.id).all()
                 if other_domains:
                     ok_count = sum(1 for d in other_domains if d.ns_status == 'ok')
@@ -193,9 +199,7 @@ class TelegramNotifier:
                                    f"❌ {error_count} с ошибками, " \
                                    f"⏳ {pending_count} ожидающих доменов в группе\n"
         
-        # Маскируем имя домена для обеспечения безопасности
-        masked_domain_name = mask_domain_name(domain.name)
-        
+        # Составляем сообщение только с маскированным именем домена
         message = f"{emoji} <b>Изменение статуса NS-записей домена</b>\n\n" \
                   f"Домен: <b>{masked_domain_name}</b>\n" \
                   f"Статус: {old_status} → <b>{new_status}</b>\n\n" \

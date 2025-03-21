@@ -105,10 +105,16 @@ class DomainManager:
             
             if all_expected_found or is_special_match:
                 domain.ns_status = 'ok'
-                logger.info(f"Domain {domain.name} NS check: OK. All expected NS found in actual NS list.")
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                logger.info(f"Domain {masked_domain_name} NS check: OK. All expected NS found in actual NS list.")
             else:
                 domain.ns_status = 'mismatch'
-                logger.warning(f"Domain {domain.name} NS mismatch. Expected (any of): {expected_ns}, Actual: {actual_ns}")
+                # Маскируем имя домена в логах для безопасности
+                from modules.telegram_notifier import mask_domain_name
+                masked_domain_name = mask_domain_name(domain.name)
+                logger.warning(f"Domain {masked_domain_name} NS mismatch. Expected (any of): {expected_ns}, Actual: {actual_ns}")
                 
             db.session.commit()
             return domain.ns_status == 'ok'

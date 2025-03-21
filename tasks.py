@@ -273,19 +273,29 @@ class BackgroundTasks:
                                 asyncio.set_event_loop(loop)
                                 
                                 try:
+                                    # Получаем маскированное имя домена для логирования
+                                    from modules.telegram_notifier import mask_domain_name
+                                    masked_domain_name = mask_domain_name(domain.name)
+                                    
                                     loop.run_until_complete(
                                         TelegramNotifier.notify_domain_ns_status_change(
                                             domain, old_status, domain.ns_status
                                         )
                                     )
-                                    logger.info(f"Domain NS status notification sent for {domain.name}")
+                                    logger.info(f"Domain NS status notification sent for {masked_domain_name}")
                                 finally:
                                     loop.close()
                             except Exception as e:
-                                logger.error(f"Error sending domain NS status notification: {str(e)}")
+                                # Маскируем домен даже в сообщениях об ошибках
+                                from modules.telegram_notifier import mask_domain_name
+                                masked_domain_name = mask_domain_name(domain.name)
+                                logger.error(f"Error sending domain NS status notification for {masked_domain_name}: {str(e)}")
                         
                     except Exception as e:
-                        logger.error(f"Error checking NS for domain {domain.name}: {str(e)}")
+                        # Маскируем домен даже в сообщениях об ошибках
+                        from modules.telegram_notifier import mask_domain_name
+                        masked_domain_name = mask_domain_name(domain.name)
+                        logger.error(f"Error checking NS for domain {masked_domain_name}: {str(e)}")
                 
             except Exception as e:
                 logger.error(f"Error in domain NS check task: {str(e)}")
@@ -340,17 +350,24 @@ class BackgroundTasks:
                         
                         for domain in domains:
                             try:
+                                # Получаем маскированное имя домена для логирования
+                                from modules.telegram_notifier import mask_domain_name
+                                masked_domain_name = mask_domain_name(domain.name)
+                                
                                 # Собираем и сохраняем метрики домена
-                                logger.info(f"Collecting metrics for domain {domain.name}")
+                                logger.info(f"Collecting metrics for domain {masked_domain_name}")
                                 metric = MonitoringManager.collect_domain_metrics(server, domain)
                                 
                                 if metric:
-                                    logger.info(f"Collected metrics for domain {domain.name}: Requests: {metric.requests_count}, Bandwidth: {metric.bandwidth_used/1024/1024:.2f}MB")
+                                    logger.info(f"Collected metrics for domain {masked_domain_name}: Requests: {metric.requests_count}, Bandwidth: {metric.bandwidth_used/1024/1024:.2f}MB")
                                 else:
-                                    logger.warning(f"Failed to collect metrics for domain {domain.name}")
+                                    logger.warning(f"Failed to collect metrics for domain {masked_domain_name}")
                                     
                             except Exception as e:
-                                logger.error(f"Error collecting metrics for domain {domain.name}: {str(e)}")
+                                # Маскируем домен даже в сообщениях об ошибках
+                                from modules.telegram_notifier import mask_domain_name
+                                masked_domain_name = mask_domain_name(domain.name)
+                                logger.error(f"Error collecting metrics for domain {masked_domain_name}: {str(e)}")
                         
                     except Exception as e:
                         logger.error(f"Error processing server {server.name} for domain metrics: {str(e)}")
