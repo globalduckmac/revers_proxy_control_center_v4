@@ -10,6 +10,7 @@ def register_filters(app):
     """
     
     @app.template_filter('humanize_timestamp')
+    @app.template_filter('humanize')
     def humanize_timestamp(timestamp):
         """
         Преобразует временную метку в понятный человеку формат 'X минут/часов/дней назад'
