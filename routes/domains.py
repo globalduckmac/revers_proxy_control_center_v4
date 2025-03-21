@@ -38,8 +38,16 @@ def create():
     if request.method == 'POST':
         name = request.form.get('name')
         target_ip = request.form.get('target_ip')
+        server_id = request.form.get('server_id')
         target_port = request.form.get('target_port', 80, type=int)
         ssl_enabled = 'ssl_enabled' in request.form
+        
+        # Если выбран сервер, используем его IP-адрес
+        if server_id and not target_ip:
+            from models import Server
+            server = Server.query.get(server_id)
+            if server:
+                target_ip = server.ip_address
         
         # Validate required fields
         if not name or not target_ip:
@@ -85,7 +93,13 @@ def create():
     # Get all domain groups for dropdown
     domain_groups = DomainGroup.query.all()
     
-    return render_template('domains/create.html', domain_groups=domain_groups)
+    # Get all servers for dropdown
+    from models import Server
+    servers = Server.query.all()
+    
+    return render_template('domains/create.html', 
+                          domain_groups=domain_groups, 
+                          servers=servers)
 
 @bp.route('/<int:domain_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -138,7 +152,14 @@ def edit(domain_id):
     # Get all domain groups for dropdown
     domain_groups = DomainGroup.query.all()
     
-    return render_template('domains/edit.html', domain=domain, domain_groups=domain_groups)
+    # Get all servers for dropdown
+    from models import Server
+    servers = Server.query.all()
+    
+    return render_template('domains/edit.html', 
+                          domain=domain, 
+                          domain_groups=domain_groups, 
+                          servers=servers)
 
 @bp.route('/<int:domain_id>/delete', methods=['POST'])
 @login_required

@@ -25,9 +25,22 @@
                     <div class="form-text">The domain name, e.g., example.com</div>
                 </div>
                 <div class="col-md-6">
-                    <label for="target_ip" class="form-label">Target IP Address</label>
-                    <input type="text" class="form-control" id="target_ip" name="target_ip" required>
-                    <div class="form-text">The IP address to route traffic to</div>
+                    <label for="server_id" class="form-label">Выберите сервер</label>
+                    <select class="form-select" id="server_id" name="server_id">
+                        <option value="">-- Выберите сервер или введите IP вручную --</option>
+                        {% for server in servers %}
+                        <option value="{{ server.id }}">{{ server.name }} ({{ server.ip_address }})</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Выберите сервер из списка или укажите IP-адрес вручную ниже</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <label for="target_ip" class="form-label">Target IP Address (ручной ввод)</label>
+                    <input type="text" class="form-control" id="target_ip" name="target_ip">
+                    <div class="form-text">IP-адрес для маршрутизации трафика (если не выбрано из списка серверов)</div>
                 </div>
             </div>
             
@@ -90,4 +103,32 @@
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const serverSelect = document.getElementById('server_id');
+    const targetIpInput = document.getElementById('target_ip');
+    
+    // Функция для обновления состояния поля ввода IP
+    function updateTargetIpState() {
+        if (serverSelect.value) {
+            // Если выбран сервер, делаем поле ввода IP неактивным и снимаем требование заполнения
+            targetIpInput.disabled = true;
+            targetIpInput.removeAttribute('required');
+            targetIpInput.placeholder = 'IP-адрес будет взят из выбранного сервера';
+        } else {
+            // Если сервер не выбран, поле ввода IP активно и обязательно
+            targetIpInput.disabled = false;
+            targetIpInput.setAttribute('required', 'required');
+            targetIpInput.placeholder = '';
+        }
+    }
+    
+    // Вызываем при загрузке страницы
+    updateTargetIpState();
+    
+    // Вызываем при изменении выбора сервера
+    serverSelect.addEventListener('change', updateTargetIpState);
+});
+</script>
 {% endblock %}
