@@ -694,8 +694,26 @@ class DomainManager:
                 logger.warning(f"Domain {masked_domain_name} is not synced with FFPanel, nothing to delete")
                 return {'success': True, 'message': 'Домен не был синхронизирован с FFPanel'}
             
-            # Инициализируем API
-            api = FFPanelAPI()
+            # Инициализируем API с явным получением токена
+            from models import SystemSetting
+            import os
+            
+            # Пытаемся получить токен из базы данных
+            ffpanel_token = SystemSetting.get_value('ffpanel_token')
+            
+            # Если в настройках нет, используем переменную окружения
+            if not ffpanel_token:
+                ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+                
+            # Если токен не найден, выходим
+            if not ffpanel_token:
+                logger.error("FFPanel token not found in settings or environment variables")
+                return {'success': False, 'message': 'Токен FFPanel не найден в настройках системы или переменных окружения'}
+                
+            # Создаем экземпляр API с токеном
+            api = FFPanelAPI(token=ffpanel_token)
+            # Логируем информацию о токене
+            logger.info(f"Using FFPanel token for delete, length: {len(ffpanel_token)}")
             
             # Удаляем домен из FFPanel
             result = api.delete_site(site_id=domain.ffpanel_id)
