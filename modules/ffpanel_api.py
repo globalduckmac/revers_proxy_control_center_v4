@@ -24,11 +24,26 @@ class FFPanelAPI:
         Инициализация с токеном API.
         
         Args:
-            token: Токен для доступа к API (если None, берется из переменных окружения)
+            token: Токен для доступа к API (если None, берется из настроек или переменных окружения)
         """
-        self.token = token or os.environ.get('FFPANEL_TOKEN')
+        self.token = token
         self.jwt_token = None
         self.jwt_expire = 0
+        
+        # Если токен не указан, пытаемся получить его из настроек или переменных окружения
+        if not self.token:
+            try:
+                from models import SystemSetting
+                from flask import current_app
+                with current_app.app_context():
+                    self.token = SystemSetting.get_value('ffpanel_token')
+                    if not self.token:
+                        current_app.logger.warning("Токен FFPanel не найден в настройках")
+                        self.token = os.environ.get('FFPANEL_TOKEN')
+            except Exception as e:
+                from flask import current_app
+                current_app.logger.error(f"Ошибка при получении токена FFPanel из настроек: {str(e)}")
+                self.token = os.environ.get('FFPANEL_TOKEN')
         
     def _authenticate(self):
         """

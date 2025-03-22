@@ -40,8 +40,9 @@
                             <input type="password" class="form-control" 
                                    id="setting_{{ setting.key }}" 
                                    name="setting_{{ setting.key }}" 
-                                   placeholder="{% if setting.get_value(setting.key) %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
+                                   placeholder="{% if setting.value %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
                                    autocomplete="off">
+                            <input type="hidden" name="has_value_{{ setting.key }}" value="{% if setting.value %}1{% else %}0{% endif %}">
                             <button class="btn btn-outline-secondary toggle-password-btn" type="button" data-target="setting_{{ setting.key }}">
                                 <i class="fas fa-eye"></i>
                             </button>
@@ -79,8 +80,9 @@
                             <input type="password" class="form-control" 
                                    id="setting_{{ setting.key }}" 
                                    name="setting_{{ setting.key }}" 
-                                   placeholder="{% if setting.get_value(setting.key) %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
+                                   placeholder="{% if setting.value %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
                                    autocomplete="off">
+                            <input type="hidden" name="has_value_{{ setting.key }}" value="{% if setting.value %}1{% else %}0{% endif %}">
                             <button class="btn btn-outline-secondary toggle-password-btn" type="button" data-target="setting_{{ setting.key }}">
                                 <i class="fas fa-eye"></i>
                             </button>
@@ -110,8 +112,9 @@
                             <input type="password" class="form-control" 
                                    id="setting_{{ setting.key }}" 
                                    name="setting_{{ setting.key }}" 
-                                   placeholder="{% if setting.get_value(setting.key) %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
+                                   placeholder="{% if setting.value %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
                                    autocomplete="off">
+                            <input type="hidden" name="has_value_{{ setting.key }}" value="{% if setting.value %}1{% else %}0{% endif %}">
                             <button class="btn btn-outline-secondary toggle-password-btn" type="button" data-target="setting_{{ setting.key }}">
                                 <i class="fas fa-eye"></i>
                             </button>

@@ -57,15 +57,30 @@ def update():
     # Обновляем значения настроек из формы
     for key, setting in settings_dict.items():
         form_key = f'setting_{key}'
-        if form_key in request.form:
-            value = request.form[form_key].strip()
+        has_value_key = f'has_value_{key}'
+        
+        # Для зашифрованных полей особая логика
+        if setting.is_encrypted:
+            value = request.form.get(form_key, '').strip()
+            has_existing_value = request.form.get(has_value_key) == "1"
             
-            # Если значение пустое, устанавливаем его в None
-            if not value:
-                value = None
+            # Если поле пустое, но было ранее заполнено - сохраняем старое значение
+            if not value and has_existing_value:
+                continue  # Пропускаем обновление, сохраняем старое значение
             
-            # Устанавливаем новое значение с учетом шифрования
-            if value is not None or value != setting.get_value(key):
+            # Если поле заполнено - обновляем значение
+            if value:
+                SystemSetting.set_value(key, value, setting.description, setting.is_encrypted)
+        else:
+            # Для обычных полей стандартная логика
+            if form_key in request.form:
+                value = request.form[form_key].strip()
+                
+                # Если значение пустое, устанавливаем его в None
+                if not value:
+                    value = None
+                
+                # Устанавливаем новое значение
                 SystemSetting.set_value(key, value, setting.description, setting.is_encrypted)
     
     db.session.commit()
