@@ -75,13 +75,20 @@ source venv/bin/activate
 # Установка Python-зависимостей
 print_header "Установка Python-зависимостей"
 pip install --upgrade pip
-pip install gunicorn psycopg2-binary cryptography dnspython email-validator flask flask-login flask-sqlalchemy flask-wtf jinja2 paramiko python-telegram-bot pytz requests sqlalchemy werkzeug
+pip install gunicorn psycopg2-binary cryptography dnspython email-validator flask flask-login flask-sqlalchemy flask-wtf jinja2 paramiko python-telegram-bot pytz requests sqlalchemy werkzeug pymysql
+
+# Исправление конфигурации базы данных
+print_header "Исправление конфигурации базы данных"
+echo "Изменение значения по умолчанию для SQLALCHEMY_DATABASE_URI в config.py..."
+sed -i "s|'mysql://root:password@localhost/reverse_proxy_manager'|'postgresql://proxy_manager:secure_password@localhost/reverse_proxy_manager'|" "$APP_DIR/config.py"
+echo "Файл config.py успешно обновлен"
 
 # Настройка переменных окружения
 print_header "Настройка переменных окружения"
 cat > "$APP_DIR/.env" <<EOF
 FLASK_APP=main.py
 FLASK_ENV=production
+FLASK_CONFIG=production
 SESSION_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(24))")
 DATABASE_URL=postgresql://proxy_manager:secure_password@localhost/reverse_proxy_manager
 
