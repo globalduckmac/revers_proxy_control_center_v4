@@ -21,7 +21,7 @@ GET
 
 Пример запроса:
 
-GET https://ffv2.ru/public/api?method=auth&token=4c5d4befc009be579ecea95476810091
+GET https://ffv2.ru/public/api?method=auth&token=
 
 Ожидаемый ответ (код 200):
 
