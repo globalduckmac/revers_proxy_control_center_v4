@@ -567,8 +567,26 @@ class DomainManager:
                 logger.error(f"Missing required parameters for domain {domain.name}")
                 return {'success': False, 'message': 'Отсутствуют обязательные параметры (имя или целевой IP)'}
             
-            # Инициализируем API
-            api = FFPanelAPI()
+            # Инициализируем API с явным получением токена
+            from models import SystemSetting
+            import os
+            
+            # Пытаемся получить токен из базы данных
+            ffpanel_token = SystemSetting.get_value('ffpanel_token')
+            
+            # Если в настройках нет, используем переменную окружения
+            if not ffpanel_token:
+                ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+                
+            # Если токен не найден, выходим
+            if not ffpanel_token:
+                logger.error("FFPanel token not found in settings or environment variables")
+                return {'success': False, 'message': 'Токен FFPanel не найден в настройках системы или переменных окружения'}
+                
+            # Создаем экземпляр API с токеном
+            api = FFPanelAPI(token=ffpanel_token)
+            # Логируем информацию о токене
+            logger.info(f"Using FFPanel token for sync, length: {len(ffpanel_token)}")
             
             # Если домен уже синхронизирован с FFPanel
             if domain.ffpanel_id:
@@ -717,8 +735,27 @@ class DomainManager:
         stats = {'imported': 0, 'updated': 0, 'failed': 0, 'message': '', 'errors': []}
         
         try:
-            # Инициализируем API
-            api = FFPanelAPI()
+            # Инициализируем API с явным получением токена
+            from models import SystemSetting
+            import os
+            
+            # Пытаемся получить токен из базы данных
+            ffpanel_token = SystemSetting.get_value('ffpanel_token')
+            
+            # Если в настройках нет, используем переменную окружения
+            if not ffpanel_token:
+                ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+                
+            # Если токен не найден, выходим
+            if not ffpanel_token:
+                logger.error("FFPanel token not found in settings or environment variables")
+                stats['message'] = 'Токен FFPanel не найден в настройках системы или переменных окружения'
+                return stats
+                
+            # Создаем экземпляр API с токеном
+            api = FFPanelAPI(token=ffpanel_token)
+            # Логируем информацию о токене
+            logger.info(f"Using FFPanel token, length: {len(ffpanel_token)}")
             
             # Получаем список доменов из FFPanel
             ffpanel_domains = api.get_sites()

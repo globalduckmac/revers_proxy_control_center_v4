@@ -527,11 +527,20 @@ def ffpanel(domain_id):
 def ffpanel_import():
     """Импорт доменов из FFPanel."""
     
-    # Проверяем, установлен ли токен FFPanel
-    ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+    # Проверяем, установлен ли токен FFPanel (в настройках системы или переменных окружения)
+    from models import SystemSetting
+    
+    # Пытаемся получить токен из настроек системы
+    ffpanel_token = SystemSetting.get_value('ffpanel_token')
+    
+    # Если в настройках нет, проверяем переменные окружения
     if not ffpanel_token:
-        flash('Не настроен токен FFPanel API. Пожалуйста, добавьте FFPANEL_TOKEN в переменные окружения.', 'danger')
-        return redirect(url_for('domains.index'))
+        ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+        
+    # Если токен не найден нигде, выводим сообщение об ошибке    
+    if not ffpanel_token:
+        flash('Не настроен токен FFPanel API. Пожалуйста, добавьте токен в настройках системы или переменной окружения FFPANEL_TOKEN.', 'danger')
+        return redirect(url_for('settings.index'))
     
     if request.method == 'POST':
         # Запускаем импорт доменов
