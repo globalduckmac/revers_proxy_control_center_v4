@@ -35,14 +35,23 @@ class FFPanelAPI:
             try:
                 from models import SystemSetting
                 from flask import current_app
-                with current_app.app_context():
-                    self.token = SystemSetting.get_value('ffpanel_token')
-                    if not self.token:
-                        current_app.logger.warning("Токен FFPanel не найден в настройках")
-                        self.token = os.environ.get('FFPANEL_TOKEN')
+                
+                # Получаем токен из SystemSetting
+                self.token = SystemSetting.get_value('ffpanel_token')
+                
+                # Если не нашли в настройках, проверяем переменные окружения
+                if not self.token:
+                    self.token = os.environ.get('FFPANEL_TOKEN')
+                    
+                # Логируем информацию о токене    
+                if self.token:
+                    current_app.logger.info(f"FFPanel токен найден, длина: {len(self.token)}")
+                else:
+                    current_app.logger.warning("Токен FFPanel не найден ни в настройках, ни в переменных окружения")
             except Exception as e:
                 from flask import current_app
-                current_app.logger.error(f"Ошибка при получении токена FFPanel из настроек: {str(e)}")
+                current_app.logger.error(f"Ошибка при получении токена FFPanel: {str(e)}")
+                # Пробуем использовать переменную окружения как запасной вариант
                 self.token = os.environ.get('FFPANEL_TOKEN')
         
     def _authenticate(self):

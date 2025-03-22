@@ -1,6 +1,6 @@
 import os
 import subprocess
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, current_app as app
 from flask_login import login_required, current_user
 
 from app import db
@@ -131,6 +131,9 @@ def update():
             # Если поле заполнено - обновляем значение
             if value:
                 SystemSetting.set_value(key, value, setting.description, setting.is_encrypted)
+                # Добавляем отладочный вывод для FFPanel токена 
+                if key == 'ffpanel_token':
+                    app.logger.info(f"FFPanel токен обновлен, длина: {len(value)}")
         else:
             # Для обычных полей стандартная логика
             if form_key in request.form:
