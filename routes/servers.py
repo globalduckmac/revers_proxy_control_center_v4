@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required
 from models import Server, ServerLog, ServerGroup, db
@@ -37,7 +38,6 @@ def index():
         server_groups[server.id] = [group.name for group in server.groups]
     
     # Передаем текущую дату для расчета дней до оплаты
-    from datetime import datetime
     now = datetime.utcnow()
     
     return render_template(
@@ -78,7 +78,6 @@ def create():
         payment_date_str = request.form.get('payment_date')
         
         # Преобразуем строку даты в объект Date
-        from datetime import datetime
         payment_date = None
         if payment_date_str:
             try:
@@ -174,7 +173,6 @@ def edit(server_id):
         payment_date_str = request.form.get('payment_date')
         
         # Преобразуем строку даты в объект Date
-        from datetime import datetime
         payment_date = None
         if payment_date_str:
             try:
