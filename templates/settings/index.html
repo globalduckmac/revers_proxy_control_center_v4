@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}Системные настройки{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Системные настройки</h1>
+    
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="card-title mb-0">Настройки интеграций</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('settings.update') }}">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4>Настройки Telegram</h4>
+                        <div class="alert alert-info">
+                            <i class="fa fa-info-circle"></i> Эти настройки используются для отправки уведомлений через Telegram.
+                        </div>
+                        
+                        {% for setting in settings %}
+                            {% if setting.key.startswith('telegram_') %}
+                                <div class="mb-3">
+                                    <label for="{{ setting.key }}" class="form-label">
+                                        {{ setting.description }}
+                                    </label>
+                                    <input type="{% if setting.is_encrypted %}password{% else %}text{% endif %}" 
+                                           class="form-control" 
+                                           id="{{ setting.key }}" 
+                                           name="setting_{{ setting.key }}" 
+                                           value="{{ setting.get_value(setting.key) or '' }}"
+                                           autocomplete="off">
+                                    <div class="form-text text-muted">
+                                        {% if setting.key == 'telegram_bot_token' %}
+                                            Создайте бота у @BotFather и получите токен.
+                                        {% elif setting.key == 'telegram_chat_id' %}
+                                            ID чата или группы, куда будут отправляться уведомления.
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h4>Настройки FFPanel</h4>
+                        <div class="alert alert-info">
+                            <i class="fa fa-info-circle"></i> Эти настройки используются для интеграции с FFPanel API.
+                        </div>
+                        
+                        {% for setting in settings %}
+                            {% if setting.key.startswith('ffpanel_') %}
+                                <div class="mb-3">
+                                    <label for="{{ setting.key }}" class="form-label">
+                                        {{ setting.description }}
+                                    </label>
+                                    <input type="{% if setting.is_encrypted %}password{% else %}text{% endif %}" 
+                                           class="form-control" 
+                                           id="{{ setting.key }}" 
+                                           name="setting_{{ setting.key }}" 
+                                           value="{{ setting.get_value(setting.key) or '' }}"
+                                           autocomplete="off">
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h4>Настройки GitHub</h4>
+                        <div class="alert alert-info">
+                            <i class="fa fa-info-circle"></i> Эти настройки используются для интеграции с GitHub API.
+                        </div>
+                        
+                        {% for setting in settings %}
+                            {% if setting.key.startswith('github_') %}
+                                <div class="mb-3">
+                                    <label for="{{ setting.key }}" class="form-label">
+                                        {{ setting.description }}
+                                    </label>
+                                    <input type="{% if setting.is_encrypted %}password{% else %}text{% endif %}" 
+                                           class="form-control" 
+                                           id="{{ setting.key }}" 
+                                           name="setting_{{ setting.key }}" 
+                                           value="{{ setting.get_value(setting.key) or '' }}"
+                                           autocomplete="off">
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+                    <a href="{{ url_for('auth.dashboard') }}" class="btn btn-secondary">Вернуться на панель управления</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="alert alert-warning">
+        <i class="fa fa-exclamation-triangle"></i> <strong>Внимание:</strong> Значения токенов хранятся в зашифрованном виде. Для лучшей защиты рекомендуется использовать переменные окружения.
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Показать сообщение об обновлении настроек, если они были обновлены
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    if ('{{ category }}' === 'success') {
+                        const toast = document.createElement('div');
+                        toast.className = 'toast position-fixed bottom-0 end-0 m-3 bg-success text-white';
+                        toast.setAttribute('role', 'alert');
+                        toast.setAttribute('aria-live', 'assertive');
+                        toast.setAttribute('aria-atomic', 'true');
+                        toast.innerHTML = `
+                            <div class="toast-header bg-success text-white">
+                                <strong class="me-auto">Уведомление</strong>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                            </div>
+                            <div class="toast-body">
+                                {{ message }}
+                            </div>
+                        `;
+                        document.body.appendChild(toast);
+                        const bsToast = new bootstrap.Toast(toast);
+                        bsToast.show();
+                    }
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    });
+</script>
+{% endblock %}

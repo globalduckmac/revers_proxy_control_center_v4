@@ -314,3 +314,71 @@ class DomainMetric(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
     domain = db.relationship('Domain', backref=db.backref('metrics', lazy=True))
+
+
+class SystemSetting(db.Model):
+    """Хранит системные настройки приложения."""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64), unique=True, nullable=False)
+    value = db.Column(db.Text, nullable=True)
+    description = db.Column(db.String(255), nullable=True)
+    is_encrypted = db.Column(db.Boolean, default=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    @classmethod
+    def get_value(cls, key, default=None):
+        """
+        Получает значение настройки по ключу.
+        Если настройка зашифрована, то автоматически расшифровывает её.
+        
+        Args:
+            key: Ключ настройки
+            default: Значение по умолчанию, если настройка не найдена
+            
+        Returns:
+            str: Значение настройки или default, если настройка не найдена
+        """
+        setting = cls.query.filter_by(key=key).first()
+        if not setting:
+            return default
+            
+        if setting.is_encrypted and setting.value:
+            try:
+                return decrypt_password(setting.value)
+            except Exception:
+                return default
+        
+        return setting.value
+    
+    @classmethod
+    def set_value(cls, key, value, description=None, is_encrypted=False):
+        """
+        Устанавливает значение настройки по ключу.
+        Если is_encrypted=True, то значение будет зашифровано.
+        
+        Args:
+            key: Ключ настройки
+            value: Значение настройки
+            description: Описание настройки (необязательно)
+            is_encrypted: Флаг, указывающий, нужно ли шифровать значение
+            
+        Returns:
+            SystemSetting: Объект настройки
+        """
+        setting = cls.query.filter_by(key=key).first()
+        if not setting:
+            setting = cls(key=key)
+            if description:
+                setting.description = description
+        
+        if is_encrypted and value:
+            setting.value = encrypt_password(value)
+            setting.is_encrypted = True
+        else:
+            setting.value = value
+            setting.is_encrypted = is_encrypted
+        
+        db.session.add(setting)
+        db.session.commit()
+        return setting
