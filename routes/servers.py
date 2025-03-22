@@ -262,14 +262,38 @@ def check_connectivity(server_id):
     # Для серверов с шифрованным паролем используем его для проверки
     if server.ssh_encrypted_password:
         try:
+            # Запоминаем текущий статус перед проверкой
+            old_status = server.status
+            
             # Если пароль уже зашифрован, используем его
-            if ServerManager.check_connectivity(server):
+            is_reachable = ServerManager.check_connectivity(server)
+            
+            # Обновляем статус и время последней проверки
+            server.status = 'active' if is_reachable else 'error'
+            server.last_check = datetime.utcnow()
+            
+            # Если статус изменился, добавляем запись в лог
+            if old_status != server.status:
+                # Добавляем запись в лог об изменении статуса
+                log = ServerLog(
+                    server_id=server.id,
+                    action='status_change',
+                    status='success' if is_reachable else 'error',
+                    message=f"Server status changed from {old_status} to {server.status}"
+                )
+                db.session.add(log)
+            
+            # Сохраняем изменения в базе данных
+            db.session.commit()
+            
+            if is_reachable:
                 flash(f'Подключение к серверу {server.name} успешно проверено', 'success')
             else:
                 flash(f'Ошибка подключения к серверу {server.name}', 'danger')
             return redirect(url_for('servers.index'))
         except Exception as e:
             flash(f'Ошибка проверки подключения: {str(e)}', 'danger')
+            db.session.rollback()
             return redirect(url_for('servers.index'))
     
     # Для серверов с аутентификацией по паролю без зашифрованного пароля
@@ -298,12 +322,37 @@ def check_connectivity(server_id):
         server._temp_password = password
     
     try:
-        if ServerManager.check_connectivity(server):
+        # Запоминаем текущий статус перед проверкой
+        old_status = server.status
+        
+        # Выполняем проверку соединения
+        is_reachable = ServerManager.check_connectivity(server)
+        
+        # Обновляем статус и время последней проверки
+        server.status = 'active' if is_reachable else 'error'
+        server.last_check = datetime.utcnow()
+        
+        # Если статус изменился, добавляем запись в лог
+        if old_status != server.status:
+            # Добавляем запись в лог об изменении статуса
+            log = ServerLog(
+                server_id=server.id,
+                action='status_change',
+                status='success' if is_reachable else 'error',
+                message=f"Server status changed from {old_status} to {server.status}"
+            )
+            db.session.add(log)
+        
+        # Сохраняем изменения в базе данных
+        db.session.commit()
+        
+        if is_reachable:
             flash(f'Подключение к серверу {server.name} успешно проверено', 'success')
         else:
             flash(f'Ошибка подключения к серверу {server.name}', 'danger')
     except Exception as e:
         flash(f'Ошибка проверки подключения: {str(e)}', 'danger')
+        db.session.rollback()
     
     # Очищаем временный пароль
     if hasattr(server, '_temp_password'):
