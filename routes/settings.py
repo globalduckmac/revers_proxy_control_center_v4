@@ -1,94 +1,74 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import login_required, current_user
-from models import SystemSetting, db
-from app import app
-import os
+
+from app import db
+from models import SystemSetting
 
 bp = Blueprint('settings', __name__, url_prefix='/settings')
 
-@bp.route('/', methods=['GET'])
+@bp.route('/')
 @login_required
 def index():
     """Отображает страницу с системными настройками."""
-    # Проверка, что пользователь является администратором
+    # Только администраторы могут изменять настройки
     if not current_user.is_admin:
-        flash('Доступ запрещен. Требуются права администратора.', 'danger')
+        flash('У вас нет прав для доступа к настройкам системы', 'danger')
         return redirect(url_for('auth.dashboard'))
     
-    # Получение всех настроек из базы данных
-    settings = SystemSetting.query.all()
+    # Получаем все настройки из базы данных
+    settings_list = SystemSetting.query.order_by(SystemSetting.key).all()
     
-    # Предварительно заданные настройки с описаниями
-    predefined_settings = {
-        'telegram_bot_token': {
-            'description': 'Токен бота Telegram для отправки уведомлений',
-            'is_encrypted': True
-        },
-        'telegram_chat_id': {
-            'description': 'ID чата Telegram для отправки уведомлений',
-            'is_encrypted': False
-        },
-        'ffpanel_token': {
-            'description': 'Токен для взаимодействия с FFPanel API',
-            'is_encrypted': True
-        },
-        'github_token': {
-            'description': 'Токен доступа к GitHub API (для возможности автоматического обновления)',
-            'is_encrypted': True
-        }
+    # Проверяем наличие обязательных настроек и создаем их, если они отсутствуют
+    required_settings = {
+        'telegram_bot_token': ('Токен бота Telegram', True),
+        'telegram_chat_id': ('ID чата Telegram для уведомлений', False),
+        'ffpanel_token': ('Токен API FFPanel', True)
     }
     
-    # Создание недостающих настроек в базе данных
-    for key, config in predefined_settings.items():
-        setting = SystemSetting.query.filter_by(key=key).first()
-        if not setting:
-            # Проверяем, есть ли значение в переменных окружения
-            env_value = os.environ.get(key.upper(), None)
-            SystemSetting.set_value(
+    # Создаем отсутствующие настройки
+    existing_keys = {setting.key for setting in settings_list}
+    for key, (description, is_encrypted) in required_settings.items():
+        if key not in existing_keys:
+            new_setting = SystemSetting(
                 key=key,
-                value=env_value,
-                description=config['description'],
-                is_encrypted=config['is_encrypted']
+                description=description,
+                is_encrypted=is_encrypted
             )
+            db.session.add(new_setting)
+            settings_list.append(new_setting)
     
-    # Получаем обновленный список настроек
-    settings = SystemSetting.query.all()
-    return render_template('settings/index.html', settings=settings)
+    db.session.commit()
+    
+    return render_template('settings/index.html', settings=settings_list)
 
 @bp.route('/update', methods=['POST'])
 @login_required
 def update():
     """Обрабатывает обновление системных настроек."""
-    # Проверка, что пользователь является администратором
+    # Только администраторы могут изменять настройки
     if not current_user.is_admin:
-        flash('Доступ запрещен. Требуются права администратора.', 'danger')
+        flash('У вас нет прав для изменения настроек системы', 'danger')
         return redirect(url_for('auth.dashboard'))
     
-    # Обработка формы
-    for key, value in request.form.items():
-        if key.startswith('setting_'):
-            setting_key = key.replace('setting_', '')
-            setting = SystemSetting.query.filter_by(key=setting_key).first()
+    # Получаем все настройки из базы данных
+    all_settings = SystemSetting.query.all()
+    settings_dict = {setting.key: setting for setting in all_settings}
+    
+    # Обновляем значения настроек из формы
+    for key, setting in settings_dict.items():
+        form_key = f'setting_{key}'
+        if form_key in request.form:
+            value = request.form[form_key].strip()
             
-            if setting:
-                # Проверяем, нужно ли шифровать значение
-                current_value = setting.get_value(setting_key)
-                
-                # Обновляем значение только если оно изменилось
-                if value != current_value and value.strip():
-                    SystemSetting.set_value(
-                        key=setting_key,
-                        value=value,
-                        is_encrypted=setting.is_encrypted
-                    )
+            # Если значение пустое, устанавливаем его в None
+            if not value:
+                value = None
+            
+            # Устанавливаем новое значение с учетом шифрования
+            if value is not None or value != setting.get_value(key):
+                SystemSetting.set_value(key, value, setting.description, setting.is_encrypted)
     
-    # Сохранение настроек в переменные окружения (опционально)
-    # Это обеспечит их доступность для всех компонентов системы
-    for setting in SystemSetting.query.all():
-        env_var_name = setting.key.upper()
-        value = setting.get_value(setting.key)
-        if value:
-            os.environ[env_var_name] = value
+    db.session.commit()
+    flash('Настройки системы успешно обновлены', 'success')
     
-    flash('Настройки успешно обновлены.', 'success')
     return redirect(url_for('settings.index'))

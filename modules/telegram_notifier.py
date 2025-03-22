@@ -6,15 +6,11 @@ import telegram
 from telegram.error import TelegramError
 from sqlalchemy import func, desc, and_
 from app import db
-from models import Server, Domain, DomainGroup, ServerMetric, DomainMetric, ServerLog, ServerGroup
+from models import Server, Domain, DomainGroup, ServerMetric, DomainMetric, ServerLog, ServerGroup, SystemSetting
 import asyncio
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
-
-# Получаем токен бота и ID чата из переменных окружения
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 # Пороговые значения для уведомлений
 CPU_THRESHOLD = 80  # % CPU
@@ -74,12 +70,23 @@ class TelegramNotifier:
     @staticmethod
     def is_configured():
         """
-        Проверяет, настроены ли токен бота и ID чата
+        Проверяет, настроены ли токен бота и ID чата в настройках системы
         
         Returns:
             bool: True, если настроены, иначе False
         """
-        return TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+        from app import app
+        
+        # Контекст приложения для доступа к базе данных
+        # Не проверяем его, вместо этого используем try-except
+            
+        try:
+            telegram_token = SystemSetting.get_value('telegram_bot_token')
+            telegram_chat_id = SystemSetting.get_value('telegram_chat_id')
+            return telegram_token and telegram_chat_id
+        except RuntimeError:
+            # Если работаем вне контекста приложения
+            return False
     
     @staticmethod
     async def send_message(text, parse_mode='HTML'):
@@ -97,17 +104,25 @@ class TelegramNotifier:
             logger.warning("Telegram notifications are not configured")
             return False
         
+        # Получаем настройки из базы данных
+        try:
+            telegram_token = SystemSetting.get_value('telegram_bot_token')
+            telegram_chat_id = SystemSetting.get_value('telegram_chat_id')
+        except Exception as e:
+            logger.error(f"Failed to get Telegram settings from database: {str(e)}")
+            return False
+        
         # Логирование попытки отправки с частичной информацией
-        token_preview = TELEGRAM_BOT_TOKEN[:5] + "..." + TELEGRAM_BOT_TOKEN[-5:] if TELEGRAM_BOT_TOKEN else "None"
-        chat_id_str = str(TELEGRAM_CHAT_ID) if TELEGRAM_CHAT_ID else "None"
+        token_preview = telegram_token[:5] + "..." + telegram_token[-5:] if telegram_token else "None"
+        chat_id_str = str(telegram_chat_id) if telegram_chat_id else "None"
         
         logger.info(f"Attempting to send Telegram message. Token: {token_preview}, Chat ID: {chat_id_str}")
         logger.info(f"Message length: {len(text)} chars, parse_mode: {parse_mode}")
         
         try:
-            bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+            bot = telegram.Bot(token=telegram_token)
             result = await bot.send_message(
-                chat_id=TELEGRAM_CHAT_ID,
+                chat_id=telegram_chat_id,
                 text=text,
                 parse_mode=parse_mode
             )
@@ -115,7 +130,7 @@ class TelegramNotifier:
             return True
         except TelegramError as e:
             logger.error(f"Failed to send Telegram notification: {str(e)}")
-            logger.error(f"Chat ID type: {type(TELEGRAM_CHAT_ID)}, Token length: {len(TELEGRAM_BOT_TOKEN) if TELEGRAM_BOT_TOKEN else 0}")
+            logger.error(f"Chat ID type: {type(telegram_chat_id)}, Token length: {len(telegram_token) if telegram_token else 0}")
             return False
         except Exception as e:
             logger.error(f"Unexpected error sending Telegram message: {str(e)}")

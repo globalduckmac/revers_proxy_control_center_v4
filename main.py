@@ -16,24 +16,43 @@ from modules.telegram_notifier import TelegramNotifier
 background_tasks_started = False
 
 # Проверяем настройки Telegram при старте приложения
-if TelegramNotifier.is_configured():
-    app.logger.info("Telegram notifications are configured and ready to use")
-    app.logger.info(f"Telegram bot token: {'*' * 10}{os.environ.get('TELEGRAM_BOT_TOKEN')[-5:] if os.environ.get('TELEGRAM_BOT_TOKEN') else 'Not set'}")
-    app.logger.info(f"Telegram chat ID: {os.environ.get('TELEGRAM_CHAT_ID') if os.environ.get('TELEGRAM_CHAT_ID') else 'Not set'}")
-else:
-    app.logger.warning("Telegram notifications are not configured! Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.")
+from models import SystemSetting
+
+# Используем контекст приложения для доступа к базе данных
+with app.app_context():
+    if TelegramNotifier.is_configured():
+        app.logger.info("Telegram notifications are configured and ready to use")
+        telegram_token = SystemSetting.get_value('telegram_bot_token')
+        app.logger.info(f"Telegram bot token: {'*' * 10}{telegram_token[-5:] if telegram_token else 'Not set'}")
+        app.logger.info(f"Telegram chat ID: {SystemSetting.get_value('telegram_chat_id')}")
+    else:
+        app.logger.warning("Telegram notifications are not configured! Add settings in the System Settings panel.")
 
 # Добавляем тестовый маршрут для проверки конфигурации Telegram
 @app.route('/debug/telegram-test')
 def test_telegram_debug():
     """Тестовый маршрут для проверки работы Telegram уведомлений."""
+    # Этот маршрут уже выполняется в контексте приложения Flask,
+    # поэтому дополнительно создавать app_context не нужно
+    
     if not TelegramNotifier.is_configured():
-        return jsonify({
-            'status': 'error',
-            'message': 'Telegram notifications are not configured',
-            'token_exists': bool(os.environ.get('TELEGRAM_BOT_TOKEN')),
-            'chat_id_exists': bool(os.environ.get('TELEGRAM_CHAT_ID')),
-        })
+        try:
+            telegram_token = SystemSetting.get_value('telegram_bot_token')
+            telegram_chat_id = SystemSetting.get_value('telegram_chat_id')
+            return jsonify({
+                'status': 'error',
+                'message': 'Telegram notifications are not configured',
+                'token_exists': bool(telegram_token),
+                'chat_id_exists': bool(telegram_chat_id),
+            })
+        except Exception as e:
+            app.logger.error(f"Error accessing Telegram settings: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Error accessing settings: {str(e)}',
+                'token_exists': False,
+                'chat_id_exists': False,
+            })
     
     try:
         # Создаем тестовое сообщение
@@ -48,12 +67,23 @@ def test_telegram_debug():
         # Создаем event loop и отправляем сообщение
         result = asyncio.run(TelegramNotifier.send_message(test_message))
         
-        return jsonify({
-            'status': 'success' if result else 'error',
-            'message': 'Test message sent successfully' if result else 'Failed to send message',
-            'token_prefix': os.environ.get('TELEGRAM_BOT_TOKEN')[:5] + '...' if os.environ.get('TELEGRAM_BOT_TOKEN') else 'Not set',
-            'chat_id': os.environ.get('TELEGRAM_CHAT_ID') if os.environ.get('TELEGRAM_CHAT_ID') else 'Not set',
-        })
+        try:
+            telegram_token = SystemSetting.get_value('telegram_bot_token')
+            telegram_chat_id = SystemSetting.get_value('telegram_chat_id')
+            
+            return jsonify({
+                'status': 'success' if result else 'error',
+                'message': 'Test message sent successfully' if result else 'Failed to send message',
+                'token_prefix': telegram_token[:5] + '...' if telegram_token else 'Not set',
+                'chat_id': telegram_chat_id if telegram_chat_id else 'Not set',
+            })
+        except Exception as e:
+            app.logger.error(f"Error accessing Telegram settings for response: {str(e)}")
+            return jsonify({
+                'status': 'success' if result else 'error',
+                'message': 'Test message sent successfully' if result else 'Failed to send message',
+                'token_error': str(e),
+            })
     
     except Exception as e:
         app.logger.error(f"Error sending test Telegram message: {str(e)}")
@@ -73,8 +103,11 @@ def start_background_tasks_if_needed():
         app.logger.info("Background tasks started on first request")
         
         # Информируем о настроенных уведомлениях
-        if TelegramNotifier.is_configured():
-            app.logger.info("Telegram notifications are enabled for system events")
+        try:
+            if TelegramNotifier.is_configured():
+                app.logger.info("Telegram notifications are enabled for system events")
+        except Exception as e:
+            app.logger.error(f"Error checking Telegram configuration: {str(e)}")
 
 # Останавливаем задачи при остановке приложения
 atexit.register(background_tasks.stop)

@@ -52,6 +52,7 @@ def register_blueprints(app):
     from routes.monitoring import bp as monitoring_bp
     from routes.server_groups import server_groups_bp
     from routes.users import bp as users_bp
+    from routes.settings import bp as settings_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(servers_bp)
@@ -61,6 +62,7 @@ def register_blueprints(app):
     app.register_blueprint(monitoring_bp)
     app.register_blueprint(server_groups_bp, url_prefix='/server-groups')
     app.register_blueprint(users_bp)
+    app.register_blueprint(settings_bp)
 
 # Register template filters
 from filters import register_filters
