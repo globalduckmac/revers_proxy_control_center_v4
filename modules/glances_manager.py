@@ -23,7 +23,8 @@ class GlancesManager:
     @staticmethod
     def install_glances(server_id, api_port=61208, web_port=61209):
         """
-        Устанавливает Glances на указанный сервер.
+        Начинает асинхронную установку Glances на указанный сервер.
+        Обновляет статус сервера на 'installing' и возвращает результат.
         
         Args:
             server_id: ID сервера
@@ -31,119 +32,175 @@ class GlancesManager:
             web_port: Порт для веб-интерфейса Glances (по умолчанию 61209)
             
         Returns:
-            dict: Результат установки {'success': bool, 'message': str}
+            dict: Результат запуска установки {'success': bool, 'message': str}
         """
-        logger.info(f"Установка Glances на сервер ID {server_id}, API порт: {api_port}, Web порт: {web_port}")
+        logger.info(f"Начинаем асинхронную установку Glances на сервер ID {server_id}, API порт: {api_port}, Web порт: {web_port}")
         
         server = Server.query.get(server_id)
         if not server:
             return {'success': False, 'message': f'Сервер с ID {server_id} не найден'}
         
-        try:
-            # Шаг 1: Получаем скрипт установки из локальной файловой системы
-            install_script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'install_glances.sh')
-            with open(install_script_path, 'r') as f:
-                install_script = f.read()
+        # Обновляем статус
+        server.glances_status = 'installing'
+        
+        # Логируем начало установки
+        log = ServerLog(
+            server_id=server.id,
+            action='install_glances_start',
+            status='pending',
+            message=f'Начата установка Glances. API порт: {api_port}, Web порт: {web_port}'
+        )
+        db.session.add(log)
+        db.session.commit()
+        
+        # Запускаем установку в отдельном потоке
+        from threading import Thread
+        thread = Thread(
+            target=GlancesManager._install_glances_worker,
+            args=(server_id, api_port, web_port)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return {
+            'success': True,
+            'message': 'Установка Glances запущена. Проверьте статус позже.',
+            'status': 'installing'
+        }
+    
+    @staticmethod
+    def _install_glances_worker(server_id, api_port=61208, web_port=61209):
+        """
+        Рабочая функция для асинхронной установки Glances на указанный сервер.
+        Вызывается в отдельном потоке.
+        
+        Args:
+            server_id: ID сервера
+            api_port: Порт для API Glances
+            web_port: Порт для веб-интерфейса Glances
+        """
+        from app import app
+        with app.app_context():
+            logger.info(f"Установка Glances на сервер ID {server_id}, API порт: {api_port}, Web порт: {web_port}")
             
-            # Шаг 2: Подключаемся к серверу по SSH
-            ssh = SSHClient()
-            ssh.set_missing_host_key_policy(AutoAddPolicy())
+            server = Server.query.get(server_id)
+            if not server:
+                logger.error(f'Сервер с ID {server_id} не найден')
+                return
             
-            # Подключаемся с использованием пароля или ключа
-            connect_kwargs = {
-                'hostname': server.ip_address,
-                'username': server.ssh_user,
-                'port': server.ssh_port,
-                'timeout': 30
-            }
-            
-            if server.ssh_key:
-                connect_kwargs['key_filename'] = server.get_key_file_path()
-            elif server.ssh_password_hash:
-                connect_kwargs['password'] = server.get_decrypted_password()
-            else:
-                return {'success': False, 'message': 'Не найдены учетные данные SSH для подключения к серверу'}
-            
-            logger.debug(f"Подключение к серверу {server.ip_address}:{server.ssh_port} как {server.ssh_user}")
-            ssh.connect(**connect_kwargs)
-            
-            # Шаг 3: Загружаем скрипт установки на сервер
-            sftp = ssh.open_sftp()
-            remote_script_path = '/tmp/install_glances.sh'
-            sftp.putfo(open(install_script_path, 'rb'), remote_script_path)
-            sftp.chmod(remote_script_path, 0o755)  # Делаем скрипт исполняемым
-            sftp.close()
-            
-            # Шаг 4: Запускаем скрипт установки
-            logger.info(f"Запуск скрипта установки на сервере {server.ip_address}")
-            command = f"sudo bash {remote_script_path} {api_port} {web_port}"
-            stdin, stdout, stderr = ssh.exec_command(command)
-            exit_status = stdout.channel.recv_exit_status()
-            
-            # Шаг 5: Получаем вывод скрипта
-            stdout_data = stdout.read().decode('utf-8')
-            stderr_data = stderr.read().decode('utf-8')
-            
-            # Шаг 6: Обновляем информацию о сервере в базе данных
-            if exit_status == 0:
-                server.glances_installed = True
-                server.glances_port = api_port
-                server.glances_web_port = web_port
-                server.glances_enabled = True
-                server.glances_status = 'active'
-                server.glances_last_check = datetime.datetime.now()
-                db.session.commit()
+            try:
+                # Шаг 1: Получаем скрипт установки из локальной файловой системы
+                install_script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'install_glances.sh')
+                with open(install_script_path, 'r') as f:
+                    install_script = f.read()
                 
-                # Логируем успешную установку
-                log = ServerLog(
-                    server_id=server.id,
-                    action='install_glances',
-                    status='success',
-                    message=f'Glances успешно установлен. API порт: {api_port}, Web порт: {web_port}\n\nВывод:\n{stdout_data}'
-                )
-                db.session.add(log)
-                db.session.commit()
+                # Шаг 2: Подключаемся к серверу по SSH
+                ssh = SSHClient()
+                ssh.set_missing_host_key_policy(AutoAddPolicy())
                 
-                return {
-                    'success': True,
-                    'message': 'Glances успешно установлен',
-                    'output': stdout_data
+                # Подключаемся с использованием пароля или ключа
+                connect_kwargs = {
+                    'hostname': server.ip_address,
+                    'username': server.ssh_user,
+                    'port': server.ssh_port,
+                    'timeout': 30
                 }
-            else:
-                # Логируем ошибку установки
+                
+                if server.ssh_key:
+                    connect_kwargs['key_filename'] = server.get_key_file_path()
+                elif server.ssh_password_hash:
+                    connect_kwargs['password'] = server.get_decrypted_password()
+                else:
+                    logger.error(f'Не найдены учетные данные SSH для подключения к серверу {server_id}')
+                    
+                    # Обновляем статус сервера
+                    server.glances_status = 'error'
+                    server.glances_last_check = datetime.datetime.now()
+                    
+                    # Логируем ошибку
+                    log = ServerLog(
+                        server_id=server.id,
+                        action='install_glances',
+                        status='error',
+                        message='Не найдены учетные данные SSH для подключения к серверу'
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+                    return
+                
+                logger.debug(f"Подключение к серверу {server.ip_address}:{server.ssh_port} как {server.ssh_user}")
+                ssh.connect(**connect_kwargs)
+                
+                # Шаг 3: Загружаем скрипт установки на сервер
+                sftp = ssh.open_sftp()
+                remote_script_path = '/tmp/install_glances.sh'
+                sftp.putfo(open(install_script_path, 'rb'), remote_script_path)
+                sftp.chmod(remote_script_path, 0o755)  # Делаем скрипт исполняемым
+                sftp.close()
+                
+                # Шаг 4: Запускаем скрипт установки
+                logger.info(f"Запуск скрипта установки на сервере {server.ip_address}")
+                command = f"sudo bash {remote_script_path} {api_port} {web_port}"
+                stdin, stdout, stderr = ssh.exec_command(command)
+                exit_status = stdout.channel.recv_exit_status()
+                
+                # Шаг 5: Получаем вывод скрипта
+                stdout_data = stdout.read().decode('utf-8')
+                stderr_data = stderr.read().decode('utf-8')
+                
+                # Шаг 6: Обновляем информацию о сервере в базе данных
+                if exit_status == 0:
+                    server.glances_installed = True
+                    server.glances_port = api_port
+                    server.glances_web_port = web_port
+                    server.glances_enabled = True
+                    server.glances_status = 'active'
+                    server.glances_last_check = datetime.datetime.now()
+                    
+                    # Логируем успешную установку
+                    log = ServerLog(
+                        server_id=server.id,
+                        action='install_glances',
+                        status='success',
+                        message=f'Glances успешно установлен. API порт: {api_port}, Web порт: {web_port}\n\nВывод:\n{stdout_data}'
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+                    
+                    logger.info(f"Glances успешно установлен на сервер ID {server_id}")
+                else:
+                    # Обновляем статус сервера
+                    server.glances_status = 'error'
+                    server.glances_last_check = datetime.datetime.now()
+                    
+                    # Логируем ошибку установки
+                    log = ServerLog(
+                        server_id=server.id,
+                        action='install_glances',
+                        status='error',
+                        message=f'Ошибка установки Glances. Код: {exit_status}\n\nСтандартный вывод:\n{stdout_data}\n\nОшибки:\n{stderr_data}'
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+                    
+                    logger.error(f"Ошибка установки Glances на сервер ID {server_id}. Код: {exit_status}")
+                    
+            except Exception as e:
+                logger.error(f"Исключение при установке Glances на сервер ID {server_id}: {str(e)}")
+                
+                # Обновляем статус сервера
+                server.glances_status = 'error'
+                server.glances_last_check = datetime.datetime.now()
+                
+                # Логируем исключение
                 log = ServerLog(
                     server_id=server.id,
                     action='install_glances',
                     status='error',
-                    message=f'Ошибка установки Glances. Код: {exit_status}\n\nСтандартный вывод:\n{stdout_data}\n\nОшибки:\n{stderr_data}'
+                    message=f'Исключение при установке Glances: {str(e)}'
                 )
                 db.session.add(log)
                 db.session.commit()
-                
-                return {
-                    'success': False,
-                    'message': f'Ошибка установки Glances. Код: {exit_status}',
-                    'stdout': stdout_data,
-                    'stderr': stderr_data
-                }
-                
-        except Exception as e:
-            logger.error(f"Ошибка при установке Glances: {str(e)}")
-            
-            # Логируем исключение
-            log = ServerLog(
-                server_id=server.id,
-                action='install_glances',
-                status='error',
-                message=f'Исключение при установке Glances: {str(e)}'
-            )
-            db.session.add(log)
-            db.session.commit()
-            
-            return {
-                'success': False,
-                'message': f'Ошибка при установке Glances: {str(e)}'
-            }
     
     @staticmethod
     def check_glances_status(server_id):

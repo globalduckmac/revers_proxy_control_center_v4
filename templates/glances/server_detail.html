@@ -11,6 +11,8 @@
         <span class="badge bg-success">Активен</span>
       {% elif server.glances_installed and server.glances_status == 'service_running' %}
         <span class="badge bg-warning">Сервис запущен</span>
+      {% elif server.glances_status == 'installing' %}
+        <span class="badge bg-info">Установка...</span>
       {% elif server.glances_installed and server.glances_status == 'error' %}
         <span class="badge bg-danger">Ошибка</span>
       {% else %}
@@ -52,6 +54,8 @@
                   {% else %}
                     <span class="badge bg-secondary">Статус неизвестен</span>
                   {% endif %}
+                {% elif server.glances_status == 'installing' %}
+                  <span class="badge bg-info">Установка...</span>
                 {% else %}
                   <span class="badge bg-secondary">Не установлен</span>
                 {% endif %}
@@ -114,7 +118,22 @@
           <h5 class="card-title mb-0">Управление Glances</h5>
         </div>
         <div class="card-body">
-          {% if server.glances_installed %}
+          {% if server.glances_status == 'installing' %}
+            <div class="alert alert-info">
+              <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                  <span class="visually-hidden">Установка...</span>
+                </div>
+                <strong>Установка Glances в процессе...</strong>
+              </div>
+              <p class="mt-2 mb-0">Установка может занять несколько минут. Периодически проверяйте статус, нажимая кнопку ниже.</p>
+            </div>
+            <form action="{{ url_for('glances.check_status', server_id=server.id) }}" method="post" class="mt-3">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-arrow-repeat"></i> Проверить статус установки
+              </button>
+            </form>
+          {% elif server.glances_installed %}
             <div class="d-flex flex-wrap gap-2 mb-3">
               <form action="{{ url_for('glances.check_status', server_id=server.id) }}" method="post">
                 <button type="submit" class="btn btn-primary">

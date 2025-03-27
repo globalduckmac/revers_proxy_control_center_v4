@@ -45,7 +45,7 @@ def server_detail(server_id):
 @bp.route('/install/<int:server_id>', methods=['POST'])
 @login_required
 def install(server_id):
-    """Устанавливает Glances на выбранный сервер."""
+    """Устанавливает Glances на выбранный сервер в асинхронном режиме."""
     # Получаем параметры из формы
     api_port = request.form.get('api_port', 61208)
     web_port = request.form.get('web_port', 61209)
@@ -57,13 +57,13 @@ def install(server_id):
         flash('Порты должны быть числами', 'danger')
         return redirect(url_for('glances.index'))
     
-    # Устанавливаем Glances
+    # Запускаем асинхронную установку Glances
     result = GlancesManager.install_glances(server_id, api_port, web_port)
     
     if result.get('success', False):
-        flash(f'Glances успешно установлен: {result.get("message", "")}', 'success')
+        flash(f'Установка Glances запущена. {result.get("message", "")}', 'info')
     else:
-        flash(f'Ошибка установки Glances: {result.get("message", "")}', 'danger')
+        flash(f'Ошибка запуска установки Glances: {result.get("message", "")}', 'danger')
     
     return redirect(url_for('glances.server_detail', server_id=server_id))
 
