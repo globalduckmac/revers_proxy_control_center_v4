@@ -21,12 +21,22 @@
 
 ## Установка
 
-### Автоматическая установка
+### Быстрая установка (в одну команду)
 
-Используйте скрипт деплоя для автоматической установки и настройки:
+Используйте следующую команду для автоматической установки всей системы:
 
 ```bash
-curl -O https://raw.githubusercontent.com/globalduckmac/revers_proxy_control_center_v3/main/deploy_script.sh
+wget -O - https://raw.githubusercontent.com/globalduckmac/revers_proxy_control_center_v3/main/quick_install.sh | sudo bash
+```
+
+После выполнения скрипта, вы получите логин, пароль и URL для доступа к системе.
+
+### Альтернативная автоматическая установка
+
+Вы также можете использовать стандартный скрипт деплоя:
+
+```bash
+wget https://raw.githubusercontent.com/globalduckmac/revers_proxy_control_center_v3/main/deploy_script.sh
 chmod +x deploy_script.sh
 sudo ./deploy_script.sh
 ```
