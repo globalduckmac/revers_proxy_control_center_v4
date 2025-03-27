@@ -70,10 +70,14 @@ Description=Glances server
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/glances -w -s --disable-plugin docker --config /etc/glances/glances.conf
-Restart=on-failure
+ExecStart=/usr/local/bin/glances -w -s --disable-plugin docker --bind 0.0.0.0 --port ${API_PORT} --webserver-port ${WEB_PORT}
+Restart=always
+RestartSec=10
 User=root
 Group=root
+Environment="PYTHONUNBUFFERED=1"
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -83,11 +87,18 @@ EOF
 echo "Настройка supervisor..."
 cat > /etc/supervisor/conf.d/glances.conf << EOF
 [program:glances]
-command=/usr/local/bin/glances -w -s --disable-plugin docker --config /etc/glances/glances.conf
+command=/usr/local/bin/glances -w -s --disable-plugin docker --bind 0.0.0.0 --port ${API_PORT} --webserver-port ${WEB_PORT}
 autostart=true
 autorestart=true
 redirect_stderr=true
 stdout_logfile=/var/log/glances.log
+directory=/tmp
+startretries=10
+startsecs=10
+stopwaitsecs=10
+stopasgroup=true
+killing_timeout=30
+environment=PYTHONUNBUFFERED="1"
 EOF
 
 # Включаем и запускаем сервисы
@@ -96,18 +107,89 @@ systemctl daemon-reload
 systemctl enable glances.service
 systemctl start glances.service
 
-# Перезапускаем supervisor для применения изменений
+# Дополнительная проверка и перезапуск, если сервис не запустился
+if ! systemctl is-active --quiet glances.service; then
+    echo "Сервис glances не запустился, пробуем перезапустить..."
+    systemctl restart glances.service
+    sleep 5
+fi
+
+# Пробуем альтернативный способ с supervisor
+echo "Настройка supervisor (альтернативный метод)..."
 supervisorctl reread
 supervisorctl update
 supervisorctl restart glances
 
+# Проверяем запущен ли хотя бы один из способов
+if ! (systemctl is-active --quiet glances.service || supervisorctl status glances | grep -q RUNNING); then
+    echo "Запускаем Glances напрямую через nohup..."
+    nohup /usr/local/bin/glances -w -s --disable-plugin docker --bind 0.0.0.0 --port ${API_PORT} --webserver-port ${WEB_PORT} > /var/log/glances_nohup.log 2>&1 &
+    sleep 5
+fi
+
 # Проверяем, что Glances запущен
 echo "Проверка статуса Glances..."
-systemctl status glances.service
-curl -s http://localhost:${API_PORT}/api/3/cpu | grep -q "total" && echo "API доступен на порту ${API_PORT}" || echo "Ошибка: API недоступен"
-curl -s http://localhost:${WEB_PORT} | grep -q "Glances" && echo "Веб-интерфейс доступен на порту ${WEB_PORT}" || echo "Ошибка: веб-интерфейс недоступен"
+systemctl status glances.service || echo "Systemd service check failed, trying supervisor..."
+supervisorctl status glances || echo "Supervisor check failed, checking process..."
+ps aux | grep -v grep | grep "glances -w" || echo "Process check failed"
 
-echo "Установка Glances завершена."
+# Проверяем доступность API
+echo "Проверка доступности API..."
+for i in {1..5}; do
+    echo "Попытка $i из 5..."
+    if curl -s http://localhost:${API_PORT}/api/3/cpu | grep -q "total"; then
+        echo "API доступен на порту ${API_PORT}"
+        API_ACCESSIBLE=true
+        break
+    else
+        echo "API недоступен на порту ${API_PORT}, подождем 2 секунды..."
+        sleep 2
+    fi
+done
+
+if [ -z "$API_ACCESSIBLE" ]; then
+    echo "Пробуем альтернативные способы запуска Glances..."
+    
+    # Пробуем запустить через nohup напрямую (с публичным доступом)
+    echo "Запуск через nohup с публичным доступом..."
+    pkill -f "glances -w" || true
+    nohup /usr/local/bin/glances -w -s --disable-plugin docker --bind 0.0.0.0 --port ${API_PORT} --webserver-port ${WEB_PORT} > /var/log/glances_nohup.log 2>&1 &
+    
+    echo "Ждем 5 секунд..."
+    sleep 5
+    
+    # Проверяем еще раз
+    if curl -s http://localhost:${API_PORT}/api/3/cpu | grep -q "total"; then
+        echo "API доступен на порту ${API_PORT} после прямого запуска"
+    else
+        # Проверяем от имени 0.0.0.0 и через внешний IP
+        PUBLIC_IP=$(curl -s http://ifconfig.me)
+        
+        if curl -s http://0.0.0.0:${API_PORT}/api/3/cpu | grep -q "total"; then
+            echo "API доступен через 0.0.0.0:${API_PORT}"
+        elif curl -s http://${PUBLIC_IP}:${API_PORT}/api/3/cpu | grep -q "total"; then
+            echo "API доступен через ${PUBLIC_IP}:${API_PORT}"
+        else
+            echo "ВНИМАНИЕ: API все еще недоступен. Проверяем порты..."
+            netstat -tulpn | grep ${API_PORT} || ss -tulpn | grep ${API_PORT}
+            echo "Ошибка: API недоступен после всех попыток"
+        fi
+    fi
+fi
+
+# Проверяем веб-интерфейс
+if curl -s http://localhost:${WEB_PORT} | grep -q "Glances"; then
+    echo "Веб-интерфейс доступен на порту ${WEB_PORT}"
+else
+    echo "Веб-интерфейс недоступен на порту ${WEB_PORT}"
+fi
+
+# Добавляем запуск Glances при старте системы, используя несколько методов
+echo "Настройка автозапуска при старте системы..."
+echo "@reboot root /usr/local/bin/glances -w -s --disable-plugin docker --bind 0.0.0.0 --port ${API_PORT} --webserver-port ${WEB_PORT} > /var/log/glances_boot.log 2>&1" > /etc/cron.d/glances-autostart
+chmod 644 /etc/cron.d/glances-autostart
+
+echo "Установка Glances завершена. Если Glances не работает, перезагрузите сервер и проверьте еще раз."
 echo "API URL: http://localhost:${API_PORT}"
 echo "Web URL: http://localhost:${WEB_PORT}"
 

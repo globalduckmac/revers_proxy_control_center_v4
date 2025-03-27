@@ -219,8 +219,17 @@ class GlancesManager:
         if not server:
             return {'success': False, 'message': f'Сервер с ID {server_id} не найден'}
         
-        if not server.glances_installed:
+        if not server.glances_installed and server.glances_status != 'installing':
             return {'success': False, 'running': False, 'api_accessible': False, 'message': 'Glances не установлен на этом сервере'}
+        
+        # Если Glances в процессе установки, возвращаем соответствующий статус
+        if server.glances_status == 'installing':
+            return {
+                'success': True,
+                'running': False,
+                'api_accessible': False,
+                'message': 'Установка Glances в процессе. Пожалуйста, подождите.'
+            }
         
         try:
             # Шаг 1: Подключаемся к серверу по SSH
@@ -244,20 +253,58 @@ class GlancesManager:
             logger.debug(f"Подключение к серверу {server.ip_address}:{server.ssh_port} как {server.ssh_user}")
             ssh.connect(**connect_kwargs)
             
-            # Шаг 2: Проверяем, запущен ли сервис Glances
-            command = "sudo systemctl is-active glances.service || sudo supervisorctl status glances | grep RUNNING"
+            # Шаг 2: Проверяем, запущен ли сервис Glances несколькими способами
+            command = "sudo systemctl is-active glances.service 2>/dev/null || echo 'checking supervisor...' && sudo supervisorctl status glances 2>/dev/null | grep -q RUNNING && echo 'supervisor:running' || echo 'checking ps...' && ps aux | grep -v grep | grep -q 'glances -w -s' && echo 'ps:running'"
             stdin, stdout, stderr = ssh.exec_command(command)
             exit_status = stdout.channel.recv_exit_status()
             stdout_data = stdout.read().decode('utf-8').strip()
             
-            service_running = exit_status == 0 and (stdout_data == "active" or "RUNNING" in stdout_data)
+            service_running = (exit_status == 0 and 
+                              (stdout_data == "active" or 
+                               "supervisor:running" in stdout_data or 
+                               "ps:running" in stdout_data))
             
-            # Шаг 3: Проверяем доступность API
+            # Если сервис не запущен, пробуем запустить его
+            if not service_running:
+                logger.warning(f"Сервис Glances не запущен на сервере {server_id}, пробуем запустить")
+                restart_command = f"sudo systemctl restart glances.service || sudo supervisorctl restart glances || nohup /usr/local/bin/glances -w -s --disable-plugin docker --bind {server.ip_address} --port {server.glances_port} --webserver-port {server.glances_web_port} > /var/log/glances_nohup.log 2>&1 &"
+                ssh.exec_command(restart_command)
+                # Даем время для запуска
+                import time
+                time.sleep(5)
+                
+                # Проверяем статус еще раз
+                command = "sudo systemctl is-active glances.service 2>/dev/null || sudo supervisorctl status glances 2>/dev/null | grep -q RUNNING || ps aux | grep -v grep | grep -q 'glances -w -s' && echo 'running'"
+                stdin, stdout, stderr = ssh.exec_command(command)
+                stdout_data = stdout.read().decode('utf-8').strip()
+                service_running = "running" in stdout_data
+            
+            # Шаг 3: Проверяем доступность API несколькими способами
             api_accessible = False
-            command = f"curl -s http://localhost:{server.glances_port}/api/3/cpu | grep -q total"
+            
+            # Сначала проверим простым curl
+            command = f"curl -s http://localhost:{server.glances_port}/api/3/cpu 2>/dev/null | grep -q total"
             stdin, stdout, stderr = ssh.exec_command(command)
             exit_status = stdout.channel.recv_exit_status()
             api_accessible = exit_status == 0
+            
+            # Если API недоступен через localhost, попробуем через 0.0.0.0 или IP сервера
+            if not api_accessible:
+                command = f"curl -s http://0.0.0.0:{server.glances_port}/api/3/cpu 2>/dev/null | grep -q total || curl -s http://{server.ip_address}:{server.glances_port}/api/3/cpu 2>/dev/null | grep -q total"
+                stdin, stdout, stderr = ssh.exec_command(command)
+                exit_status = stdout.channel.recv_exit_status()
+                api_accessible = exit_status == 0
+            
+            # Если API все еще недоступен, проверим, слушает ли процесс нужный порт
+            if not api_accessible:
+                command = f"sudo netstat -tulpn | grep -q ':{server.glances_port}' || sudo ss -tulpn | grep -q ':{server.glances_port}'"
+                stdin, stdout, stderr = ssh.exec_command(command)
+                exit_status = stdout.channel.recv_exit_status()
+                port_listening = exit_status == 0
+                
+                if port_listening:
+                    # Порт слушается, но API не отвечает - возможно, Glances еще инициализируется
+                    service_running = True
             
             # Шаг 4: Обновляем информацию о сервере в базе данных
             if api_accessible:
