@@ -1,0 +1,15 @@
+flask
+flask-sqlalchemy
+flask-login
+flask-wtf
+python-dotenv
+psycopg2-binary
+gunicorn
+cryptography
+paramiko
+pymysql
+dnspython
+email-validator
+python-telegram-bot
+pytz
+requests
