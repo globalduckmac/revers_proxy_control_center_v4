@@ -203,6 +203,367 @@ class GlancesManager:
                 db.session.commit()
     
     @staticmethod
+    def diagnose_glances_installation(server_id):
+        """
+        Запускает полную диагностику проблем с Glances на сервере, включая все возможные
+        причины недоступности API и проблем с запуском.
+        
+        Args:
+            server_id: ID сервера
+            
+        Returns:
+            dict: Результаты диагностики {'success': bool, 'details': list, 'summary': str}
+        """
+        logger.info(f"Запуск диагностики Glances на сервере ID {server_id}")
+        
+        server = Server.query.get(server_id)
+        if not server:
+            return {'success': False, 'summary': f'Сервер с ID {server_id} не найден'}
+        
+        if not server.glances_installed and server.glances_status != 'installing':
+            return {'success': False, 'summary': 'Glances не установлен на этом сервере'}
+        
+        try:
+            # Подключаемся к серверу
+            ssh = SSHClient()
+            ssh.set_missing_host_key_policy(AutoAddPolicy())
+            
+            connect_kwargs = {
+                'hostname': server.ip_address,
+                'username': server.ssh_user,
+                'port': server.ssh_port,
+                'timeout': 15
+            }
+            
+            if server.ssh_key:
+                connect_kwargs['key_filename'] = server.get_key_file_path()
+            elif server.ssh_password_hash:
+                connect_kwargs['password'] = server.get_decrypted_password()
+            else:
+                return {'success': False, 'summary': 'Не найдены учетные данные SSH для подключения к серверу'}
+            
+            ssh.connect(**connect_kwargs)
+            
+            # Собираем результаты диагностики
+            results = {
+                'success': True,
+                'details': [],
+                'fixes_applied': [],
+                'service_running': False,
+                'api_accessible': False,
+                'summary': ''
+            }
+            
+            # 1. Проверяем установлен ли glances
+            stdin, stdout, stderr = ssh.exec_command("which glances || echo 'not found'")
+            glances_path = stdout.read().decode('utf-8').strip()
+            
+            if 'not found' in glances_path:
+                results['details'].append({
+                    'test': 'Проверка установки Glances',
+                    'status': 'error',
+                    'message': 'Команда glances не найдена в системе'
+                })
+            else:
+                results['details'].append({
+                    'test': 'Проверка установки Glances',
+                    'status': 'success',
+                    'message': f'Glances установлен: {glances_path}'
+                })
+                
+                # Проверка версии
+                stdin, stdout, stderr = ssh.exec_command("glances --version || echo 'error'")
+                glances_version = stdout.read().decode('utf-8').strip()
+                
+                results['details'].append({
+                    'test': 'Версия Glances',
+                    'status': 'info',
+                    'message': f'Версия: {glances_version}'
+                })
+            
+            # 2. Проверка статуса сервиса systemd
+            stdin, stdout, stderr = ssh.exec_command("systemctl status glances.service || echo 'no systemd service'")
+            systemd_status = stdout.read().decode('utf-8').strip()
+            systemd_error = stderr.read().decode('utf-8').strip()
+            
+            systemd_running = False
+            if 'Active: active (running)' in systemd_status:
+                systemd_running = True
+                results['service_running'] = True
+                results['details'].append({
+                    'test': 'Systemd сервис',
+                    'status': 'success',
+                    'message': 'Сервис glances.service активен и работает'
+                })
+            elif 'no systemd service' in systemd_status:
+                results['details'].append({
+                    'test': 'Systemd сервис',
+                    'status': 'warning',
+                    'message': 'Сервис glances.service не найден'
+                })
+            else:
+                results['details'].append({
+                    'test': 'Systemd сервис',
+                    'status': 'error',
+                    'message': f'Сервис glances.service не работает: {systemd_status}\n{systemd_error}'
+                })
+            
+            # 3. Проверка статуса supervisor
+            stdin, stdout, stderr = ssh.exec_command("supervisorctl status glances || echo 'no supervisor'")
+            supervisor_status = stdout.read().decode('utf-8').strip()
+            
+            supervisor_running = False
+            if 'RUNNING' in supervisor_status:
+                supervisor_running = True
+                results['service_running'] = True
+                results['details'].append({
+                    'test': 'Supervisor',
+                    'status': 'success',
+                    'message': 'Glances запущен через supervisor'
+                })
+            elif 'no supervisor' in supervisor_status:
+                results['details'].append({
+                    'test': 'Supervisor',
+                    'status': 'warning',
+                    'message': 'Supervisor не настроен для Glances'
+                })
+            else:
+                results['details'].append({
+                    'test': 'Supervisor',
+                    'status': 'error',
+                    'message': f'Glances не запущен через supervisor: {supervisor_status}'
+                })
+            
+            # 4. Проверка процессов
+            stdin, stdout, stderr = ssh.exec_command("ps aux | grep -v grep | grep 'glances -w' | wc -l")
+            process_count = int(stdout.read().decode('utf-8').strip())
+            
+            if process_count > 0:
+                results['service_running'] = True
+                results['details'].append({
+                    'test': 'Процессы',
+                    'status': 'success',
+                    'message': f'Найдено {process_count} процессов Glances'
+                })
+                
+                # Получаем детали процессов
+                stdin, stdout, stderr = ssh.exec_command("ps aux | grep -v grep | grep 'glances -w'")
+                process_details = stdout.read().decode('utf-8').strip()
+                results['details'].append({
+                    'test': 'Детали процессов',
+                    'status': 'info',
+                    'message': process_details
+                })
+            else:
+                results['details'].append({
+                    'test': 'Процессы',
+                    'status': 'error',
+                    'message': 'Не найдено запущенных процессов Glances'
+                })
+            
+            # 5. Проверка портов
+            stdin, stdout, stderr = ssh.exec_command(f"ss -tulpn | grep ':{server.glances_port}' || netstat -tulpn 2>/dev/null | grep ':{server.glances_port}' || echo 'port not in use'")
+            api_port_status = stdout.read().decode('utf-8').strip()
+            
+            if 'port not in use' not in api_port_status:
+                results['details'].append({
+                    'test': f'Прослушивание порта API ({server.glances_port})',
+                    'status': 'success',
+                    'message': f'Порт {server.glances_port} прослушивается: {api_port_status}'
+                })
+            else:
+                results['details'].append({
+                    'test': f'Прослушивание порта API ({server.glances_port})',
+                    'status': 'error',
+                    'message': f'Порт {server.glances_port} не прослушивается'
+                })
+            
+            stdin, stdout, stderr = ssh.exec_command(f"ss -tulpn | grep ':{server.glances_web_port}' || netstat -tulpn 2>/dev/null | grep ':{server.glances_web_port}' || echo 'port not in use'")
+            web_port_status = stdout.read().decode('utf-8').strip()
+            
+            if 'port not in use' not in web_port_status:
+                results['details'].append({
+                    'test': f'Прослушивание веб-порта ({server.glances_web_port})',
+                    'status': 'success',
+                    'message': f'Порт {server.glances_web_port} прослушивается: {web_port_status}'
+                })
+            else:
+                results['details'].append({
+                    'test': f'Прослушивание веб-порта ({server.glances_web_port})',
+                    'status': 'error',
+                    'message': f'Порт {server.glances_web_port} не прослушивается'
+                })
+            
+            # 6. Проверка доступности API через curl
+            stdin, stdout, stderr = ssh.exec_command(f"curl -s http://localhost:{server.glances_port}/api/3/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
+            api_response = stdout.read().decode('utf-8').strip()
+            
+            if 'API not accessible' not in api_response and api_response != '':
+                results['api_accessible'] = True
+                results['details'].append({
+                    'test': 'API доступность',
+                    'status': 'success',
+                    'message': f'API доступен через localhost:{server.glances_port}. Ответ: {api_response[:100]}...'
+                })
+            else:
+                results['details'].append({
+                    'test': 'API доступность',
+                    'status': 'error',
+                    'message': f'API недоступен через localhost:{server.glances_port}'
+                })
+                
+                # Проверяем через 0.0.0.0
+                stdin, stdout, stderr = ssh.exec_command(f"curl -s http://0.0.0.0:{server.glances_port}/api/3/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
+                api_response = stdout.read().decode('utf-8').strip()
+                
+                if 'API not accessible' not in api_response and api_response != '':
+                    results['api_accessible'] = True
+                    results['details'].append({
+                        'test': 'API доступность (0.0.0.0)',
+                        'status': 'success',
+                        'message': f'API доступен через 0.0.0.0:{server.glances_port}'
+                    })
+                
+                # Проверяем через IP сервера
+                stdin, stdout, stderr = ssh.exec_command(f"curl -s http://{server.ip_address}:{server.glances_port}/api/3/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
+                api_response = stdout.read().decode('utf-8').strip()
+                
+                if 'API not accessible' not in api_response and api_response != '':
+                    results['api_accessible'] = True
+                    results['details'].append({
+                        'test': 'API доступность (IP)',
+                        'status': 'success',
+                        'message': f'API доступен через {server.ip_address}:{server.glances_port}'
+                    })
+            
+            # 7. Проверка файрвола
+            stdin, stdout, stderr = ssh.exec_command("which ufw >/dev/null && ufw status || echo 'ufw not found'")
+            ufw_status = stdout.read().decode('utf-8').strip()
+            
+            if 'ufw not found' not in ufw_status:
+                results['details'].append({
+                    'test': 'Файрвол UFW',
+                    'status': 'info',
+                    'message': f'Статус UFW: {ufw_status}'
+                })
+                
+                # Проверяем правила для портов Glances
+                stdin, stdout, stderr = ssh.exec_command(f"ufw status | grep {server.glances_port} || echo 'no rule found'")
+                ufw_api_rule = stdout.read().decode('utf-8').strip()
+                
+                if 'no rule found' not in ufw_api_rule:
+                    results['details'].append({
+                        'test': f'Правило UFW для порта {server.glances_port}',
+                        'status': 'success',
+                        'message': f'Найдено правило: {ufw_api_rule}'
+                    })
+                else:
+                    results['details'].append({
+                        'test': f'Правило UFW для порта {server.glances_port}',
+                        'status': 'warning',
+                        'message': f'Не найдено правило UFW для порта {server.glances_port}'
+                    })
+                    
+                    # Если порт не открыт, добавляем его
+                    if not results['api_accessible']:
+                        stdin, stdout, stderr = ssh.exec_command(f"sudo ufw allow {server.glances_port}/tcp || echo 'failed to add rule'")
+                        ufw_add_result = stdout.read().decode('utf-8').strip()
+                        
+                        if 'failed to add rule' not in ufw_add_result:
+                            results['fixes_applied'].append(f'Добавлено правило UFW для порта {server.glances_port}')
+                        
+                        stdin, stdout, stderr = ssh.exec_command(f"sudo ufw allow {server.glances_web_port}/tcp || echo 'failed to add rule'")
+                        ufw_add_result = stdout.read().decode('utf-8').strip()
+                        
+                        if 'failed to add rule' not in ufw_add_result:
+                            results['fixes_applied'].append(f'Добавлено правило UFW для порта {server.glances_web_port}')
+            
+            # 8. Файл конфигурации
+            stdin, stdout, stderr = ssh.exec_command("cat /etc/glances/glances.conf 2>/dev/null || echo 'config not found'")
+            config_content = stdout.read().decode('utf-8').strip()
+            
+            if 'config not found' not in config_content:
+                results['details'].append({
+                    'test': 'Конфигурация',
+                    'status': 'success',
+                    'message': 'Найден файл конфигурации /etc/glances/glances.conf'
+                })
+                
+                # Проверяем настройки веб и API
+                if 'host = 0.0.0.0' in config_content:
+                    results['details'].append({
+                        'test': 'Настройка хоста',
+                        'status': 'success',
+                        'message': 'Настроено прослушивание на всех интерфейсах (0.0.0.0)'
+                    })
+                else:
+                    results['details'].append({
+                        'test': 'Настройка хоста',
+                        'status': 'warning',
+                        'message': 'Не настроено прослушивание на всех интерфейсах. Может быть проблема доступа извне.'
+                    })
+            else:
+                results['details'].append({
+                    'test': 'Конфигурация',
+                    'status': 'warning',
+                    'message': 'Не найден файл конфигурации /etc/glances/glances.conf'
+                })
+            
+            # 9. Попытка перезапуска, если сервис не работает
+            if not results['service_running']:
+                restart_commands = [
+                    "sudo systemctl restart glances.service || echo 'failed'",
+                    "sudo supervisorctl restart glances || echo 'failed'",
+                    f"sudo pkill -f 'glances -w' || echo 'no process killed'; sudo nohup /usr/local/bin/glances -w -s --bind 0.0.0.0 --port {server.glances_port} --webserver-port {server.glances_web_port} > /var/log/glances_nohup.log 2>&1 &"
+                ]
+                
+                for cmd in restart_commands:
+                    stdin, stdout, stderr = ssh.exec_command(cmd)
+                    restart_result = stdout.read().decode('utf-8').strip()
+                    if 'failed' not in restart_result:
+                        results['fixes_applied'].append(f'Выполнена попытка перезапуска: {cmd}')
+                
+                # Проверяем снова
+                stdin, stdout, stderr = ssh.exec_command("ps aux | grep -v grep | grep 'glances -w' | wc -l")
+                process_count = int(stdout.read().decode('utf-8').strip())
+                
+                if process_count > 0:
+                    results['service_running'] = True
+                    results['fixes_applied'].append('Успешно запущен процесс Glances после перезапуска')
+            
+            # 10. Обновляем статус сервера в базе данных
+            if results['api_accessible']:
+                server.glances_status = 'active'
+            elif results['service_running']:
+                server.glances_status = 'service_running'
+            else:
+                server.glances_status = 'error'
+                
+            server.glances_last_check = datetime.datetime.now()
+            db.session.commit()
+            
+            # Формируем итоговое сообщение
+            if results['api_accessible']:
+                results['summary'] = 'API Glances доступен и работает нормально.'
+            elif results['service_running']:
+                results['summary'] = 'Сервис Glances запущен, но API недоступен. Возможно проблемы с сетью или файрволом.'
+            else:
+                results['summary'] = 'Сервис Glances не запущен. Требуется ручная проверка на сервере.'
+                
+            if results['fixes_applied']:
+                results['summary'] += f' Применены исправления: {", ".join(results["fixes_applied"])}'
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Ошибка при диагностике Glances на сервере ID {server_id}: {str(e)}")
+            return {
+                'success': False,
+                'summary': f'Ошибка при диагностике: {str(e)}',
+                'details': []
+            }
+    
+    @staticmethod
     def check_glances_status(server_id):
         """
         Проверяет статус Glances на указанном сервере.

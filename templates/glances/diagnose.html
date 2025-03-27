@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Диагностика Glances на сервере {{ server.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Диагностика Glances на сервере {{ server.name }}</h2>
+            <div class="d-flex">
+                <a href="{{ url_for('glances.server_detail', server_id=server.id) }}" class="btn btn-outline-secondary me-2">
+                    <i class="bi bi-arrow-left"></i> Назад
+                </a>
+                <form action="{{ url_for('glances.diagnose', server_id=server.id) }}" method="GET" class="ms-2">
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-arrow-repeat"></i> Обновить диагностику
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {% if diagnosis.success %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Итоги диагностики</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert {% if diagnosis.api_accessible %}alert-success{% elif diagnosis.service_running %}alert-warning{% else %}alert-danger{% endif %}">
+                        <h5>{{ diagnosis.summary }}</h5>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Статус:</strong>
+                        {% if diagnosis.api_accessible %}
+                            <span class="badge bg-success">API доступен</span>
+                        {% elif diagnosis.service_running %}
+                            <span class="badge bg-warning">Сервис запущен, API недоступен</span>
+                        {% else %}
+                            <span class="badge bg-danger">Сервис не запущен</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if diagnosis.fixes_applied %}
+                    <div class="mt-3 mb-3">
+                        <h5>Примененные исправления:</h5>
+                        <ul class="list-group">
+                            {% for fix in diagnosis.fixes_applied %}
+                            <li class="list-group-item list-group-item-success">
+                                <i class="bi bi-check-circle-fill me-2"></i> {{ fix }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h4 class="mb-0">Детали диагностики</h4>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="diagnosticsAccordion">
+                        {% for detail in diagnosis.details %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button {% if detail.status == 'error' %}bg-danger text-white{% elif detail.status == 'warning' %}bg-warning{% elif detail.status == 'success' %}bg-success text-white{% endif %}" 
+                                        type="button" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#collapse{{ loop.index }}" 
+                                        aria-expanded="{{ 'true' if loop.index == 1 else 'false' }}">
+                                    {% if detail.status == 'success' %}
+                                    <i class="bi bi-check-circle me-2"></i>
+                                    {% elif detail.status == 'warning' %}
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    {% elif detail.status == 'error' %}
+                                    <i class="bi bi-x-circle me-2"></i>
+                                    {% else %}
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    {% endif %}
+                                    {{ detail.test }}
+                                </button>
+                            </h2>
+                            <div id="collapse{{ loop.index }}" class="accordion-collapse collapse {% if loop.index == 1 %}show{% endif %}" data-bs-parent="#diagnosticsAccordion">
+                                <div class="accordion-body">
+                                    <pre class="border p-3 bg-light">{{ detail.message }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0">Быстрое решение проблем</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <form action="{{ url_for('glances.restart', server_id=server.id) }}" method="POST" class="mb-3">
+                                <button type="submit" class="btn btn-warning btn-lg w-100">
+                                    <i class="bi bi-arrow-clockwise me-2"></i> Перезапустить Glances
+                                </button>
+                            </form>
+                        </div>
+                        <div class="col-md-6">
+                            <form action="{{ url_for('glances.install', server_id=server.id) }}" method="POST" class="mb-3">
+                                <input type="hidden" name="api_port" value="{{ server.glances_port }}">
+                                <input type="hidden" name="web_port" value="{{ server.glances_web_port }}">
+                                <button type="submit" class="btn btn-primary btn-lg w-100">
+                                    <i class="bi bi-cloud-download me-2"></i> Переустановить Glances
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <h5 class="mt-4">Дополнительные действия для решения проблем:</h5>
+                    <ul class="list-group">
+                        <li class="list-group-item">
+                            <i class="bi bi-shield-check me-2"></i> <strong>Проверьте файрвол:</strong> убедитесь, что порты {{ server.glances_port }} и {{ server.glances_web_port }} открыты
+                        </li>
+                        <li class="list-group-item">
+                            <i class="bi bi-hdd-network me-2"></i> <strong>Проверьте сетевой доступ:</strong> убедитесь, что сервер доступен и может принимать подключения на указанные порты
+                        </li>
+                        <li class="list-group-item">
+                            <i class="bi bi-hdd me-2"></i> <strong>Проверьте свободное место:</strong> недостаток свободного места может привести к ошибкам при установке и запуске
+                        </li>
+                        <li class="list-group-item">
+                            <i class="bi bi-clock-history me-2"></i> <strong>Перезагрузите сервер:</strong> иногда полная перезагрузка сервера может решить проблемы с сервисами
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <div class="alert alert-danger">
+        <h4 class="alert-heading">Ошибка диагностики</h4>
+        <p>{{ diagnosis.summary }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

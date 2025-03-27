@@ -153,6 +153,10 @@
                 </button>
               </form>
               
+              <a href="{{ url_for('glances.diagnose', server_id=server.id) }}" class="btn btn-primary">
+                <i class="bi bi-search"></i> Диагностика
+              </a>
+              
               {% if server.glances_enabled %}
                 <form action="{{ url_for('glances.disable', server_id=server.id) }}" method="post">
                   <button type="submit" class="btn btn-danger">

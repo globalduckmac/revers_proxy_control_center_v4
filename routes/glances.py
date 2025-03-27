@@ -153,3 +153,18 @@ def api_get_status(server_id):
     """API-эндпоинт для получения статуса Glances на сервере."""
     result = GlancesManager.check_glances_status(server_id)
     return jsonify(result)
+
+@bp.route('/diagnose/<int:server_id>')
+@login_required
+def diagnose(server_id):
+    """Выполняет глубокую диагностику Glances на выбранном сервере."""
+    server = Server.query.get_or_404(server_id)
+    
+    # Запускаем полную диагностику
+    diagnosis = GlancesManager.diagnose_glances_installation(server_id)
+    
+    return render_template(
+        'glances/diagnose.html', 
+        server=server, 
+        diagnosis=diagnosis
+    )
