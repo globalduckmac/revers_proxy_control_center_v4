@@ -146,6 +146,9 @@
                                 <a href="{{ url_for('proxy.view_configs', server_id=server.id) }}" class="btn btn-sm btn-outline-secondary" title="Просмотр конфигурации">
                                     <i class="fas fa-file-code"></i>
                                 </a>
+                                <a href="{{ url_for('glances.server_detail', server_id=server.id) }}" class="btn btn-sm btn-outline-info" title="Мониторинг Glances">
+                                    <i class="fas fa-chart-line"></i>
+                                </a>
                                 <a href="{{ url_for('servers.manage_server_groups', server_id=server.id) }}" class="btn btn-sm btn-outline-primary" title="Управление группами">
                                     <i class="fas fa-layer-group"></i>
                                 </a>

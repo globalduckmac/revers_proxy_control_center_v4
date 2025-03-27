@@ -1,0 +1,502 @@
+{% extends 'layout.html' %}
+
+{% block title %}Мониторинг {{ server.name }} - Glances{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>
+      Мониторинг сервера <strong>{{ server.name }}</strong>
+      {% if server.glances_installed and server.glances_status == 'active' %}
+        <span class="badge bg-success">Активен</span>
+      {% elif server.glances_installed and server.glances_status == 'service_running' %}
+        <span class="badge bg-warning">Сервис запущен</span>
+      {% elif server.glances_installed and server.glances_status == 'error' %}
+        <span class="badge bg-danger">Ошибка</span>
+      {% else %}
+        <span class="badge bg-secondary">Не установлен</span>
+      {% endif %}
+    </h1>
+    <a href="{{ url_for('glances.index') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Назад
+    </a>
+  </div>
+  
+  <!-- Статус и информация -->
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Информация о сервере</h5>
+        </div>
+        <div class="card-body">
+          <table class="table">
+            <tr>
+              <th style="width: 35%">Имя сервера:</th>
+              <td>{{ server.name }}</td>
+            </tr>
+            <tr>
+              <th>IP-адрес:</th>
+              <td>{{ server.ip_address }}</td>
+            </tr>
+            <tr>
+              <th>Статус Glances:</th>
+              <td>
+                {% if server.glances_installed %}
+                  {% if server.glances_status == 'active' %}
+                    <span class="badge bg-success">Активен</span>
+                  {% elif server.glances_status == 'service_running' %}
+                    <span class="badge bg-warning">Сервис запущен</span>
+                  {% elif server.glances_status == 'error' %}
+                    <span class="badge bg-danger">Ошибка</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Статус неизвестен</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge bg-secondary">Не установлен</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th>Состояние мониторинга:</th>
+              <td>
+                {% if server.glances_enabled %}
+                  <span class="badge bg-success">Включен</span>
+                {% else %}
+                  <span class="badge bg-danger">Отключен</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% if server.glances_installed %}
+              <tr>
+                <th>API порт:</th>
+                <td>{{ server.glances_port }}</td>
+              </tr>
+              <tr>
+                <th>Веб-порт:</th>
+                <td>{{ server.glances_web_port }}</td>
+              </tr>
+              <tr>
+                <th>API URL:</th>
+                <td>
+                  <a href="{{ server.get_glances_url() }}" target="_blank">
+                    {{ server.get_glances_url() }}
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <th>Веб-интерфейс:</th>
+                <td>
+                  <a href="{{ server.get_glances_web_url() }}" target="_blank">
+                    {{ server.get_glances_web_url() }}
+                  </a>
+                </td>
+              </tr>
+            {% endif %}
+            <tr>
+              <th>Последняя проверка:</th>
+              <td>
+                {% if server.glances_last_check %}
+                  {{ server.glances_last_check|humanize_timestamp }}
+                {% else %}
+                  Никогда
+                {% endif %}
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Управление Glances</h5>
+        </div>
+        <div class="card-body">
+          {% if server.glances_installed %}
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <form action="{{ url_for('glances.check_status', server_id=server.id) }}" method="post">
+                <button type="submit" class="btn btn-primary">
+                  <i class="bi bi-arrow-repeat"></i> Проверить статус
+                </button>
+              </form>
+              
+              <form action="{{ url_for('glances.collect_metrics', server_id=server.id) }}" method="post">
+                <button type="submit" class="btn btn-info">
+                  <i class="bi bi-speedometer2"></i> Собрать метрики
+                </button>
+              </form>
+              
+              <form action="{{ url_for('glances.restart', server_id=server.id) }}" method="post">
+                <button type="submit" class="btn btn-warning">
+                  <i class="bi bi-arrow-clockwise"></i> Перезапустить
+                </button>
+              </form>
+              
+              {% if server.glances_enabled %}
+                <form action="{{ url_for('glances.disable', server_id=server.id) }}" method="post">
+                  <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-power"></i> Отключить мониторинг
+                  </button>
+                </form>
+              {% else %}
+                <form action="{{ url_for('glances.enable', server_id=server.id) }}" method="post">
+                  <button type="submit" class="btn btn-success">
+                    <i class="bi bi-power"></i> Включить мониторинг
+                  </button>
+                </form>
+              {% endif %}
+            </div>
+            
+            {% if server.get_glances_web_url() %}
+              <div class="row mt-3">
+                <div class="col-12">
+                  <div class="d-grid gap-2">
+                    <a href="{{ server.get_glances_web_url() }}" target="_blank" class="btn btn-lg btn-outline-primary">
+                      <i class="bi bi-window"></i> Открыть веб-интерфейс Glances
+                    </a>
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+            
+            {% if status %}
+              <div class="alert alert-{{ 'success' if status.success else 'danger' }} mt-3">
+                {{ status.message }}
+              </div>
+            {% endif %}
+            
+          {% else %}
+            <div class="alert alert-info">
+              Glances не установлен на этом сервере. Используйте кнопку ниже, чтобы установить Glances.
+            </div>
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#installModal">
+              <i class="bi bi-download"></i> Установить Glances
+            </button>
+            
+            <!-- Модальное окно для установки Glances -->
+            <div class="modal fade" id="installModal" tabindex="-1" aria-labelledby="installModalLabel" aria-hidden="true">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title" id="installModalLabel">Установка Glances на сервер {{ server.name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <form action="{{ url_for('glances.install', server_id=server.id) }}" method="post">
+                    <div class="modal-body">
+                      <div class="alert alert-info">
+                        Установка Glances требует доступа к серверу по SSH с правами sudo.
+                        Убедитесь, что у пользователя SSH есть необходимые права.
+                      </div>
+                      
+                      <div class="mb-3">
+                        <label for="api_port" class="form-label">API порт</label>
+                        <input type="number" class="form-control" id="api_port" name="api_port" value="61208">
+                        <div class="form-text">Порт для доступа к API Glances (по умолчанию 61208)</div>
+                      </div>
+                      
+                      <div class="mb-3">
+                        <label for="web_port" class="form-label">Веб-порт</label>
+                        <input type="number" class="form-control" id="web_port" name="web_port" value="61209">
+                        <div class="form-text">Порт для доступа к веб-интерфейсу Glances (по умолчанию 61209)</div>
+                      </div>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                      <button type="submit" class="btn btn-primary">Установить</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Если Glances установлен и работает, показываем метрики -->
+  {% if server.glances_installed and server.glances_status == 'active' and metrics and metrics.success %}
+    <!-- Основные показатели -->
+    <div class="row mb-4">
+      <!-- CPU -->
+      <div class="col-md-3">
+        <div class="card">
+          <div class="card-body text-center">
+            <h6 class="text-uppercase text-muted mb-2">CPU</h6>
+            <div class="progress mb-2" style="height: 8px;">
+              <div class="progress-bar bg-{{ 'success' if metrics.cpu.total < 70 else 'warning' if metrics.cpu.total < 90 else 'danger' }}" 
+                   role="progressbar" style="width: {{ metrics.cpu.total }}%;" 
+                   aria-valuenow="{{ metrics.cpu.total }}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <span class="h1 d-block mb-0">{{ metrics.cpu.total|round|int }}%</span>
+            <small class="text-muted">{{ metrics.cpu.cpu_count }} ядер</small>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Память -->
+      <div class="col-md-3">
+        <div class="card">
+          <div class="card-body text-center">
+            <h6 class="text-uppercase text-muted mb-2">Память</h6>
+            <div class="progress mb-2" style="height: 8px;">
+              <div class="progress-bar bg-{{ 'success' if metrics.mem.percent < 70 else 'warning' if metrics.mem.percent < 90 else 'danger' }}" 
+                   role="progressbar" style="width: {{ metrics.mem.percent }}%;" 
+                   aria-valuenow="{{ metrics.mem.percent }}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <span class="h1 d-block mb-0">{{ metrics.mem.percent|round|int }}%</span>
+            <small class="text-muted">{{ (metrics.mem.used/1024/1024/1024)|round(2) }} / {{ (metrics.mem.total/1024/1024/1024)|round(2) }} ГБ</small>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Swap -->
+      <div class="col-md-3">
+        <div class="card">
+          <div class="card-body text-center">
+            <h6 class="text-uppercase text-muted mb-2">Swap</h6>
+            <div class="progress mb-2" style="height: 8px;">
+              <div class="progress-bar bg-{{ 'success' if metrics.memswap.percent < 70 else 'warning' if metrics.memswap.percent < 90 else 'danger' }}" 
+                   role="progressbar" style="width: {{ metrics.memswap.percent }}%;" 
+                   aria-valuenow="{{ metrics.memswap.percent }}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <span class="h1 d-block mb-0">{{ metrics.memswap.percent|round|int if metrics.memswap.percent else 0 }}%</span>
+            <small class="text-muted">{{ (metrics.memswap.used/1024/1024/1024)|round(2) if metrics.memswap.used else 0 }} / {{ (metrics.memswap.total/1024/1024/1024)|round(2) if metrics.memswap.total else 0 }} ГБ</small>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Нагрузка -->
+      <div class="col-md-3">
+        <div class="card">
+          <div class="card-body text-center">
+            <h6 class="text-uppercase text-muted mb-2">Нагрузка</h6>
+            <span class="h1 d-block mb-0">{{ metrics.load.min1|round(2) }}</span>
+            <small class="text-muted">{{ metrics.load.min5|round(2) }} (5 мин) / {{ metrics.load.min15|round(2) }} (15 мин)</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Диски -->
+    <div class="row mb-4">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Использование дисков</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>Точка монтирования</th>
+                    <th>Файловая система</th>
+                    <th>Размер</th>
+                    <th>Использовано</th>
+                    <th>Свободно</th>
+                    <th>Заполнение</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for fs in metrics.fs %}
+                  <tr>
+                    <td>{{ fs.mnt_point }}</td>
+                    <td>{{ fs.fs_type }}</td>
+                    <td>{{ (fs.size/1024/1024/1024)|round(2) }} ГБ</td>
+                    <td>{{ (fs.used/1024/1024/1024)|round(2) }} ГБ</td>
+                    <td>{{ (fs.free/1024/1024/1024)|round(2) }} ГБ</td>
+                    <td>
+                      <div class="progress" style="height: 5px;">
+                        <div class="progress-bar bg-{{ 'success' if fs.percent < 70 else 'warning' if fs.percent < 90 else 'danger' }}" 
+                             role="progressbar" style="width: {{ fs.percent }}%;" 
+                             aria-valuenow="{{ fs.percent }}" aria-valuemin="0" aria-valuemax="100"></div>
+                      </div>
+                      <small class="mt-1">{{ fs.percent|round|int }}%</small>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Сеть -->
+    <div class="row mb-4">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Сетевые интерфейсы</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>Интерфейс</th>
+                    <th>IP-адрес</th>
+                    <th>Входящий трафик</th>
+                    <th>Исходящий трафик</th>
+                    <th>Вх. пакеты/с</th>
+                    <th>Исх. пакеты/с</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for key, net in metrics.network.items() %}
+                  {% if net.interface_name != 'lo' %}
+                  <tr>
+                    <td>{{ net.interface_name }}</td>
+                    <td>
+                      {% if net.ip_address %}
+                        {{ net.ip_address }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if net.rx %}
+                        {% if net.rx > 1024*1024*1024 %}
+                          {{ (net.rx/1024/1024/1024)|round(2) }} ГБ
+                        {% elif net.rx > 1024*1024 %}
+                          {{ (net.rx/1024/1024)|round(2) }} МБ
+                        {% elif net.rx > 1024 %}
+                          {{ (net.rx/1024)|round(2) }} КБ
+                        {% else %}
+                          {{ net.rx|round|int }} Б
+                        {% endif %}
+                      {% else %}
+                        0 Б
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if net.tx %}
+                        {% if net.tx > 1024*1024*1024 %}
+                          {{ (net.tx/1024/1024/1024)|round(2) }} ГБ
+                        {% elif net.tx > 1024*1024 %}
+                          {{ (net.tx/1024/1024)|round(2) }} МБ
+                        {% elif net.tx > 1024 %}
+                          {{ (net.tx/1024)|round(2) }} КБ
+                        {% else %}
+                          {{ net.tx|round|int }} Б
+                        {% endif %}
+                      {% else %}
+                        0 Б
+                      {% endif %}
+                    </td>
+                    <td>{{ net.rx_packets_rate|round|int if net.rx_packets_rate else 0 }}</td>
+                    <td>{{ net.tx_packets_rate|round|int if net.tx_packets_rate else 0 }}</td>
+                  </tr>
+                  {% endif %}
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Процессы -->
+    <div class="row mb-4">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Процессы (топ 10 по CPU)</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>PID</th>
+                    <th>Имя</th>
+                    <th>CPU %</th>
+                    <th>Память %</th>
+                    <th>Статус</th>
+                    <th>Пользователь</th>
+                    <th>Время работы</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for process in (metrics.processlist|sort(attribute='cpu_percent')|reverse)[:10] %}
+                  <tr>
+                    <td>{{ process.pid }}</td>
+                    <td>{{ process.name }}</td>
+                    <td>{{ process.cpu_percent|round(1) }}%</td>
+                    <td>{{ process.memory_percent|round(1) }}%</td>
+                    <td>
+                      {% if process.status == 'R' %}
+                        <span class="badge bg-success">Работает</span>
+                      {% elif process.status == 'S' %}
+                        <span class="badge bg-info">Спит</span>
+                      {% elif process.status == 'D' %}
+                        <span class="badge bg-warning">Блок-сон</span>
+                      {% elif process.status == 'Z' %}
+                        <span class="badge bg-danger">Зомби</span>
+                      {% elif process.status == 'T' %}
+                        <span class="badge bg-secondary">Остановлен</span>
+                      {% else %}
+                        <span class="badge bg-light text-dark">{{ process.status }}</span>
+                      {% endif %}
+                    </td>
+                    <td>{{ process.username }}</td>
+                    <td>{{ process.time_since_created }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% elif server.glances_installed and not metrics %}
+    <div class="row">
+      <div class="col-md-12">
+        <div class="alert alert-warning">
+          <h4 class="alert-heading">Нет данных от Glances</h4>
+          <p>Не удалось получить данные мониторинга с сервера. Попробуйте следующие действия:</p>
+          <ul>
+            <li>Проверьте статус Glances, используя кнопку "Проверить статус"</li>
+            <li>Убедитесь, что порты {{ server.glances_port }} и {{ server.glances_web_port }} открыты на сервере</li>
+            <li>При необходимости перезапустите Glances с помощью кнопки "Перезапустить"</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  $(document).ready(function() {
+    // Auto-refresh
+    const refreshInterval = 60; // секунд
+    let countdown = refreshInterval;
+    
+    function updateCountdown() {
+      countdown -= 1;
+      $('#refresh-countdown').text(countdown);
+      
+      if (countdown <= 0) {
+        location.reload();
+      }
+    }
+    
+    {% if server.glances_installed and server.glances_status == 'active' %}
+      // Добавляем счетчик обновления если Glances активен
+      setInterval(updateCountdown, 1000);
+      
+      $('#navbar-header').append(
+        '<div class="ms-auto me-3 text-light">Обновление через <span id="refresh-countdown">'+refreshInterval+'</span> сек</div>'
+      );
+    {% endif %}
+  });
+</script>
+{% endblock %}

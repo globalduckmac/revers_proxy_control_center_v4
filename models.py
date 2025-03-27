@@ -1,7 +1,7 @@
 from app import db
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import base64
 from cryptography.fernet import Fernet
@@ -90,6 +90,14 @@ class Server(db.Model):
     billing_password_encrypted = db.Column(db.Text, nullable=True)  # Зашифрованный пароль от биллинга
     payment_date = db.Column(db.Date, nullable=False)  # Дата оплаты сервера (обязательное поле)
     payment_reminder_sent = db.Column(db.Boolean, default=False)  # Флаг отправки напоминания
+    
+    # Поля для интеграции с Glances
+    glances_enabled = db.Column(db.Boolean, default=False)  # Включен ли мониторинг через Glances
+    glances_installed = db.Column(db.Boolean, default=False)  # Установлен ли Glances на сервере
+    glances_port = db.Column(db.Integer, default=61208)  # Порт для Glances API (по умолчанию 61208)
+    glances_web_port = db.Column(db.Integer, default=61209)  # Порт для веб-интерфейса Glances
+    glances_status = db.Column(db.String(20), default='not_installed')  # not_installed, active, error
+    glances_last_check = db.Column(db.DateTime, nullable=True)  # Время последней проверки Glances
     
     def set_ssh_password(self, password):
         """
@@ -199,6 +207,58 @@ class Server(db.Model):
             
         # Если сегодня или позже дня напоминания (за 2 дня до оплаты)
         return today >= reminder_date and today < self.payment_date
+    
+    # Методы для работы с Glances
+    def get_glances_url(self):
+        """
+        Получает URL для доступа к API Glances
+        
+        Returns:
+            str: URL для доступа к API Glances
+        """
+        if not self.glances_enabled or not self.glances_installed:
+            return None
+        return f"http://{self.ip_address}:{self.glances_port}"
+    
+    def get_glances_web_url(self):
+        """
+        Получает URL для доступа к веб-интерфейсу Glances
+        
+        Returns:
+            str: URL для доступа к веб-интерфейсу Glances
+        """
+        if not self.glances_enabled or not self.glances_installed:
+            return None
+        return f"http://{self.ip_address}:{self.glances_web_port}"
+        
+    def get_key_file_path(self):
+        """
+        Создает временный файл с SSH ключом сервера для подключения.
+        
+        Returns:
+            str: Путь к временному файлу с SSH ключом
+        """
+        if not self.ssh_key:
+            return None
+            
+        import tempfile
+        import os
+        
+        # Создаем временный файл для SSH ключа
+        fd, path = tempfile.mkstemp()
+        try:
+            with os.fdopen(fd, 'w') as tmp:
+                tmp.write(self.ssh_key)
+            # Устанавливаем правильные разрешения для ключа
+            os.chmod(path, 0o600)
+            return path
+        except Exception as e:
+            print(f"Ошибка при создании временного файла для SSH ключа: {e}")
+            try:
+                os.remove(path)
+            except:
+                pass
+            return None
     
     # Relationships
     domain_groups = db.relationship('DomainGroup', backref='server', lazy=True)
