@@ -13,9 +13,17 @@ echo "=== Установка Glances на Ubuntu 22.04 ==="
 echo "Обновление списка пакетов..."
 apt-get update
 
-# Устанавливаем Glances из системных репозиториев
-echo "Установка Glances..."
-apt-get install -y glances curl net-tools lsof jq
+# Устанавливаем pip и зависимости
+echo "Установка Python3-pip и зависимостей..."
+apt-get install -y python3-pip curl net-tools lsof jq
+
+# Устанавливаем Glances через pip для получения актуальной версии
+echo "Установка Glances через pip..."
+pip3 install --upgrade glances
+
+# Устанавливаем необходимые зависимости для веб-сервера
+echo "Установка веб-зависимостей..."
+pip3 install fastapi uvicorn jinja2
 
 # Создаем systemd сервис для Glances
 echo "Создание systemd сервиса..."
@@ -25,7 +33,7 @@ Description=Glances monitoring tool (web mode)
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/glances -w
+ExecStart=/usr/local/bin/glances -w
 Restart=always
 
 [Install]
