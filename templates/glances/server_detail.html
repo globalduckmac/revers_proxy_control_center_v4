@@ -362,7 +362,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for key, net in metrics.network.items() %}
+                  {% for net in metrics.network %}
                   {% if net.interface_name != 'lo' %}
                   <tr>
                     <td>{{ net.interface_name }}</td>
@@ -478,7 +478,7 @@
           <p>Не удалось получить данные мониторинга с сервера. Попробуйте следующие действия:</p>
           <ul>
             <li>Проверьте статус Glances, используя кнопку "Проверить статус"</li>
-            <li>Убедитесь, что порты {{ server.glances_port }} и {{ server.glances_web_port }} открыты на сервере</li>
+            <li>Убедитесь, что порт 61208 открыт на сервере</li>
             <li>При необходимости перезапустите Glances с помощью кнопки "Перезапустить"</li>
           </ul>
         </div>

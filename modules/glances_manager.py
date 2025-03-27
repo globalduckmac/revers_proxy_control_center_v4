@@ -396,8 +396,8 @@ class GlancesManager:
                     'message': f'Порт {server.glances_web_port} не прослушивается'
                 })
             
-            # 6. Проверка доступности API через curl
-            stdin, stdout, stderr = ssh.exec_command(f"curl -s http://localhost:{server.glances_port}/api/3/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
+            # 6. Проверка доступности API через curl (версия API 4)
+            stdin, stdout, stderr = ssh.exec_command(f"curl -s http://localhost:{server.glances_port}/api/4/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
             api_response = stdout.read().decode('utf-8').strip()
             
             if 'API not accessible' not in api_response and api_response != '':
@@ -405,7 +405,7 @@ class GlancesManager:
                 results['details'].append({
                     'test': 'API доступность',
                     'status': 'success',
-                    'message': f'API доступен через localhost:{server.glances_port}. Ответ: {api_response[:100]}...'
+                    'message': f'API v4 доступен через localhost:{server.glances_port}. Ответ: {api_response[:100]}...'
                 })
             else:
                 results['details'].append({
@@ -415,7 +415,7 @@ class GlancesManager:
                 })
                 
                 # Проверяем через 0.0.0.0
-                stdin, stdout, stderr = ssh.exec_command(f"curl -s http://0.0.0.0:{server.glances_port}/api/3/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
+                stdin, stdout, stderr = ssh.exec_command(f"curl -s http://0.0.0.0:{server.glances_port}/api/4/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
                 api_response = stdout.read().decode('utf-8').strip()
                 
                 if 'API not accessible' not in api_response and api_response != '':
@@ -427,7 +427,7 @@ class GlancesManager:
                     })
                 
                 # Проверяем через IP сервера
-                stdin, stdout, stderr = ssh.exec_command(f"curl -s http://{server.ip_address}:{server.glances_port}/api/3/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
+                stdin, stdout, stderr = ssh.exec_command(f"curl -s http://{server.ip_address}:{server.glances_port}/api/4/cpu 2>/dev/null | head -20 || echo 'API not accessible'")
                 api_response = stdout.read().decode('utf-8').strip()
                 
                 if 'API not accessible' not in api_response and api_response != '':
@@ -643,15 +643,15 @@ class GlancesManager:
             # Шаг 3: Проверяем доступность API несколькими способами
             api_accessible = False
             
-            # Сначала проверим простым curl
-            command = f"curl -s http://localhost:{server.glances_port}/api/3/cpu 2>/dev/null | grep -q total"
+            # Сначала проверим простым curl (используем API v4)
+            command = f"curl -s http://localhost:{server.glances_port}/api/4/cpu 2>/dev/null | grep -q total"
             stdin, stdout, stderr = ssh.exec_command(command)
             exit_status = stdout.channel.recv_exit_status()
             api_accessible = exit_status == 0
             
-            # Если API недоступен через localhost, попробуем через 0.0.0.0 или IP сервера
+            # Если API недоступен через localhost, попробуем через 0.0.0.0 или IP сервера (используем API v4)
             if not api_accessible:
-                command = f"curl -s http://0.0.0.0:{server.glances_port}/api/3/cpu 2>/dev/null | grep -q total || curl -s http://{server.ip_address}:{server.glances_port}/api/3/cpu 2>/dev/null | grep -q total"
+                command = f"curl -s http://0.0.0.0:{server.glances_port}/api/4/cpu 2>/dev/null | grep -q total || curl -s http://{server.ip_address}:{server.glances_port}/api/4/cpu 2>/dev/null | grep -q total"
                 stdin, stdout, stderr = ssh.exec_command(command)
                 exit_status = stdout.channel.recv_exit_status()
                 api_accessible = exit_status == 0
@@ -742,16 +742,16 @@ class GlancesManager:
                 'timestamp': datetime.datetime.now().isoformat()
             }
             
-            # CPU
-            cpu_response = requests.get(f"{glances_url}/api/3/cpu", timeout=5)
+            # CPU (используем API v4)
+            cpu_response = requests.get(f"{glances_url}/api/4/cpu", timeout=5)
             if cpu_response.status_code == 200:
                 cpu_data = cpu_response.json()
                 metrics['cpu_usage'] = cpu_data.get('total', 0)
             else:
                 metrics['cpu_usage'] = None
             
-            # Память
-            mem_response = requests.get(f"{glances_url}/api/3/mem", timeout=5)
+            # Память (используем API v4)
+            mem_response = requests.get(f"{glances_url}/api/4/mem", timeout=5)
             if mem_response.status_code == 200:
                 mem_data = mem_response.json()
                 metrics['memory_usage'] = mem_data.get('percent', 0)
@@ -762,8 +762,8 @@ class GlancesManager:
                 metrics['memory_total'] = None
                 metrics['memory_used'] = None
             
-            # Диск
-            fs_response = requests.get(f"{glances_url}/api/3/fs", timeout=5)
+            # Диск (используем API v4)
+            fs_response = requests.get(f"{glances_url}/api/4/fs", timeout=5)
             if fs_response.status_code == 200:
                 fs_data = fs_response.json()
                 if fs_data and len(fs_data) > 0:
@@ -780,8 +780,8 @@ class GlancesManager:
                 metrics['disk_total'] = None
                 metrics['disk_used'] = None
             
-            # Нагрузка
-            load_response = requests.get(f"{glances_url}/api/3/load", timeout=5)
+            # Нагрузка (используем API v4)
+            load_response = requests.get(f"{glances_url}/api/4/load", timeout=5)
             if load_response.status_code == 200:
                 load_data = load_response.json()
                 metrics['load_avg_1min'] = load_data.get('min1', 0)
@@ -965,36 +965,36 @@ class GlancesManager:
             
             # Шаг 2: Запрашиваем все доступные метрики
             try:
-                # Информация о системе
-                system_response = requests.get(f"{glances_url}/api/3/system", timeout=5)
+                # Информация о системе (используем API v4)
+                system_response = requests.get(f"{glances_url}/api/4/system", timeout=5)
                 system_data = system_response.json() if system_response.status_code == 200 else {}
                 
-                # CPU
-                cpu_response = requests.get(f"{glances_url}/api/3/cpu", timeout=5)
+                # CPU (используем API v4)
+                cpu_response = requests.get(f"{glances_url}/api/4/cpu", timeout=5)
                 cpu_data = cpu_response.json() if cpu_response.status_code == 200 else {}
                 
-                # Память
-                mem_response = requests.get(f"{glances_url}/api/3/mem", timeout=5)
+                # Память (используем API v4)
+                mem_response = requests.get(f"{glances_url}/api/4/mem", timeout=5)
                 mem_data = mem_response.json() if mem_response.status_code == 200 else {}
                 
-                # Swap
-                memswap_response = requests.get(f"{glances_url}/api/3/memswap", timeout=5)
+                # Swap (используем API v4)
+                memswap_response = requests.get(f"{glances_url}/api/4/memswap", timeout=5)
                 memswap_data = memswap_response.json() if memswap_response.status_code == 200 else {}
                 
-                # Диски
-                fs_response = requests.get(f"{glances_url}/api/3/fs", timeout=5)
+                # Диски (используем API v4)
+                fs_response = requests.get(f"{glances_url}/api/4/fs", timeout=5)
                 fs_data = fs_response.json() if fs_response.status_code == 200 else []
                 
-                # Нагрузка
-                load_response = requests.get(f"{glances_url}/api/3/load", timeout=5)
+                # Нагрузка (используем API v4)
+                load_response = requests.get(f"{glances_url}/api/4/load", timeout=5)
                 load_data = load_response.json() if load_response.status_code == 200 else {}
                 
-                # Сеть
-                network_response = requests.get(f"{glances_url}/api/3/network", timeout=5)
-                network_data = network_response.json() if network_response.status_code == 200 else {}
+                # Сеть (используем API v4)
+                network_response = requests.get(f"{glances_url}/api/4/network", timeout=5)
+                network_data = network_response.json() if network_response.status_code == 200 else []
                 
-                # Процессы
-                process_response = requests.get(f"{glances_url}/api/3/processlist", timeout=5)
+                # Процессы (используем API v4)
+                process_response = requests.get(f"{glances_url}/api/4/processlist", timeout=5)
                 process_data = process_response.json() if process_response.status_code == 200 else []
                 
                 # Шаг 3: Объединяем все метрики в один объект
