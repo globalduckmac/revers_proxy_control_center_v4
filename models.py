@@ -65,8 +65,8 @@ class User(UserMixin, db.Model):
 
 # Таблица связи между серверами и группами серверов
 server_group_association = db.Table('server_group_association',
-    db.Column('server_id', db.Integer, db.ForeignKey('server.id'), primary_key=True),
-    db.Column('server_group_id', db.Integer, db.ForeignKey('server_group.id'), primary_key=True)
+    db.Column('server_id', db.Integer, db.ForeignKey('server.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('server_group_id', db.Integer, db.ForeignKey('server_group.id', ondelete='CASCADE'), primary_key=True)
 )
 
 class Server(db.Model):
@@ -262,8 +262,8 @@ class Server(db.Model):
             return None
     
     # Relationships
-    domain_groups = db.relationship('DomainGroup', backref='server', lazy=True)
-    logs = db.relationship('ServerLog', backref='server', lazy=True)
+    domain_groups = db.relationship('DomainGroup', backref='server', lazy=True, cascade='all, delete-orphan')
+    logs = db.relationship('ServerLog', backref='server', lazy=True, cascade='all, delete-orphan')
     # Связь многие-ко-многим с группами серверов
     groups = db.relationship('ServerGroup', secondary=server_group_association, 
                             backref=db.backref('servers', lazy='dynamic'))
@@ -308,33 +308,33 @@ class Domain(db.Model):
 class DomainGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), nullable=False)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id', ondelete='CASCADE'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 # Association table for many-to-many relationship between Domain and DomainGroup
 domain_group_association = db.Table('domain_group_association',
-    db.Column('domain_id', db.Integer, db.ForeignKey('domain.id'), primary_key=True),
-    db.Column('domain_group_id', db.Integer, db.ForeignKey('domain_group.id'), primary_key=True)
+    db.Column('domain_id', db.Integer, db.ForeignKey('domain.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('domain_group_id', db.Integer, db.ForeignKey('domain_group.id', ondelete='CASCADE'), primary_key=True)
 )
 
 
 class ProxyConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id', ondelete='CASCADE'), nullable=False)
     config_content = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, deployed, error
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationship
-    server = db.relationship('Server', backref=db.backref('proxy_configs', lazy=True))
+    server = db.relationship('Server', backref=db.backref('proxy_configs', lazy=True, cascade='all, delete-orphan'))
 
 
 class ServerLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id', ondelete='CASCADE'), nullable=False)
     action = db.Column(db.String(64), nullable=False)  # deploy, configure, check, etc.
     status = db.Column(db.String(20), nullable=False)  # success, error
     message = db.Column(db.Text, nullable=True)
@@ -343,14 +343,15 @@ class ServerLog(db.Model):
 class ServerMetric(db.Model):
     """Stores monitoring metrics for servers."""
     id = db.Column(db.Integer, primary_key=True)
-    server_id = db.Column(db.Integer, db.ForeignKey('server.id'), nullable=False)
+    server_id = db.Column(db.Integer, db.ForeignKey('server.id', ondelete='CASCADE'), nullable=False)
     cpu_usage = db.Column(db.Float, nullable=True)
     memory_usage = db.Column(db.Float, nullable=True)
     disk_usage = db.Column(db.Float, nullable=True)
     load_average = db.Column(db.String(30), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    collection_method = db.Column(db.String(20), default='ssh', nullable=True)  # 'ssh' или 'glances_api'
     
-    server = db.relationship('Server', backref=db.backref('metrics', lazy=True))
+    server = db.relationship('Server', backref=db.backref('metrics', lazy=True, cascade='all, delete-orphan'))
     
 class ServerGroup(db.Model):
     """Группы серверов для организации и фильтрации."""
@@ -364,7 +365,7 @@ class ServerGroup(db.Model):
 class DomainMetric(db.Model):
     """Stores traffic metrics for domains."""
     id = db.Column(db.Integer, primary_key=True)
-    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id'), nullable=False)
+    domain_id = db.Column(db.Integer, db.ForeignKey('domain.id', ondelete='CASCADE'), nullable=False)
     requests_count = db.Column(db.Integer, default=0)
     bandwidth_used = db.Column(db.BigInteger, default=0)  # in bytes
     avg_response_time = db.Column(db.Float, nullable=True)  # in milliseconds
@@ -374,7 +375,7 @@ class DomainMetric(db.Model):
     status_5xx_count = db.Column(db.Integer, default=0)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
-    domain = db.relationship('Domain', backref=db.backref('metrics', lazy=True))
+    domain = db.relationship('Domain', backref=db.backref('metrics', lazy=True, cascade='all, delete-orphan'))
 
 
 class SystemSetting(db.Model):
