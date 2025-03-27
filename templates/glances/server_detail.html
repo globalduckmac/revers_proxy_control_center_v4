@@ -438,7 +438,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for process in (metrics.processlist|sort(attribute='cpu_percent')|reverse)[:10] %}
+                  {% for process in (metrics.processlist|sort(attribute='cpu_percent', reverse=True))[:10] %}
                   <tr>
                     <td>{{ process.pid }}</td>
                     <td>{{ process.name }}</td>
