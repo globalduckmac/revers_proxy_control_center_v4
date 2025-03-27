@@ -311,6 +311,10 @@ fi
 print_header "Установка и настройка Glances"
 print_subheader "Создание сервиса Glances для мониторинга серверов"
 
+# Устанавливаем Glances через apt для надежности
+print_subheader "Установка Glances через APT (более надежный способ)"
+apt-get install -y glances
+
 # Проверяем путь к исполняемому файлу Glances
 GLANCES_PATH=$(which glances || echo "")
 if [ -z "$GLANCES_PATH" ]; then
@@ -320,16 +324,21 @@ if [ -z "$GLANCES_PATH" ]; then
     elif [ -f "/usr/local/bin/glances" ]; then
         GLANCES_PATH="/usr/local/bin/glances"
     else
-        # Создаем symlink к возможному пути в Python
-        PYTHON_GLANCES=$(find /usr -name glances | grep "/bin/glances" | head -n 1)
-        if [ -n "$PYTHON_GLANCES" ]; then
-            ln -sf "$PYTHON_GLANCES" /usr/local/bin/glances
-            GLANCES_PATH="/usr/local/bin/glances"
-        else
-            print_error "Не удалось найти исполняемый файл Glances после установки"
-            print_warning "Служба Glances может не запуститься. Возможно, потребуется ручная настройка."
-            GLANCES_PATH="/usr/local/bin/glances"
+        # Пробуем установить через pip с указанием пути
+        print_subheader "Установка Glances через pip с указанием пути"
+        pip3 install --force-reinstall glances
+        
+        # Создаем скрипт-обертку для glances, если его не существует
+        if [ ! -f "/usr/local/bin/glances" ]; then
+            print_subheader "Создание скрипта-обертки для glances"
+            cat > /usr/local/bin/glances <<EOF
+#!/bin/bash
+python3 -m glances "\$@"
+EOF
+            chmod +x /usr/local/bin/glances
         fi
+        
+        GLANCES_PATH="/usr/local/bin/glances"
     fi
     print_subheader "Найден путь к Glances: $GLANCES_PATH"
 fi
@@ -371,13 +380,13 @@ apt-get update
 echo "Установка Python3-pip и зависимостей..."
 apt-get install -y python3-pip curl net-tools lsof jq
 
-# Устанавливаем Glances через pip для получения актуальной версии
-echo "Установка Glances через pip..."
-pip3 install --upgrade glances
+# Устанавливаем Glances через apt для надежности
+echo "Установка Glances через APT (более надежный способ)..."
+apt-get install -y glances
 
 # Устанавливаем необходимые зависимости для веб-сервера
 echo "Установка веб-зависимостей..."
-pip3 install fastapi uvicorn jinja2
+apt-get install -y python3-fastapi python3-uvicorn python3-jinja2
 
 # Проверяем путь к исполняемому файлу Glances
 GLANCES_PATH=$(which glances || echo "")
