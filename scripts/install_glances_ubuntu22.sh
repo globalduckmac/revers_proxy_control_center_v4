@@ -1,77 +1,54 @@
 #!/bin/bash
 
-# Скрипт установки Glances для Ubuntu 22.04
-# Устанавливает Glances через apt и настраивает systemd-сервис
-# для автоматического запуска API и веб-интерфейса на порту 61208
+# Скрипт для установки Glances на Ubuntu 22.04
+# и настройки его как системного сервиса
 
-# Выход при любой ошибке
 set -e
 
-echo "Начало установки Glances на Ubuntu 22.04..."
+# Цветовое оформление
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log() {
+    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+success() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+warning() {
+    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+    exit 1
+}
 
 # Проверка root прав
 if [ "$EUID" -ne 0 ]; then
-    if ! command -v sudo &>/dev/null; then
-        echo "Ошибка: Необходимы права root для установки. Пожалуйста, запустите скрипт с sudo"
-        exit 1
-    fi
-fi
-
-# Префикс для команд (sudo или пусто в зависимости от прав)
-SUDO=""
-if [ "$EUID" -ne 0 ]; then
-    SUDO="sudo"
+    error "Установка должна выполняться с правами root. Запустите скрипт с sudo."
 fi
 
 # Обновление списка пакетов
-echo "Обновление списка пакетов..."
-$SUDO apt-get update -y
+log "Обновление списка пакетов..."
+apt-get update || error "Не удалось обновить список пакетов"
 
-# Установка зависимостей
-echo "Установка зависимостей..."
-$SUDO apt-get install -y python3-pip python3-dev build-essential curl net-tools
+# Установка Glances
+log "Установка Glances..."
+apt-get install -y glances || error "Не удалось установить Glances"
 
-# Установка Glances через apt
-echo "Установка Glances через apt (рекомендуемый метод)..."
-$SUDO apt-get install -y glances
-
-# Проверка установки
-if ! command -v glances &>/dev/null; then
-    echo "Ошибка! Glances не был установлен через apt. Пробуем установить через pip..."
-    $SUDO pip3 install glances
-    
-    if ! command -v glances &>/dev/null; then
-        # Создаем обертку для glances, если он установлен, но не доступен в PATH
-        GLANCES_PATH=$($SUDO find /usr -name glances 2>/dev/null | grep -v "__pycache__" | head -n 1)
-        
-        if [ -n "$GLANCES_PATH" ]; then
-            echo "Найден путь к Glances: $GLANCES_PATH, создаем ссылку..."
-            $SUDO ln -sf "$GLANCES_PATH" /usr/local/bin/glances
-        else
-            echo "Критическая ошибка! Не удалось найти исполняемый файл glances после установки."
-            exit 1
-        fi
-    fi
-fi
-
-# Проверка, доступна ли команда glances
-echo "Проверка установки Glances..."
-if ! command -v glances &>/dev/null; then
-    echo "Ошибка! Не удалось установить Glances. Пожалуйста, проверьте журнал ошибок."
-    exit 1
-fi
-
-# Определение версии Glances
-GLANCES_VERSION=$(glances --version 2>/dev/null || echo "Unknown")
-echo "Установлена версия Glances: $GLANCES_VERSION"
-
-# Создание systemd service
-echo "Создание и настройка systemd сервиса..."
-
-# Определение полного пути к исполняемому файлу glances
+# Определение пути к исполняемому файлу glances
 GLANCES_EXEC=$(which glances)
 
-cat << EOF > /tmp/glances.service
+# Создание systemd сервиса
+log "Создание systemd сервиса для Glances..."
+
+cat << EOF > /etc/systemd/system/glances.service
 [Unit]
 Description=Glances Server
 After=network.target
@@ -86,44 +63,27 @@ User=root
 WantedBy=multi-user.target
 EOF
 
-# Копирование файла сервиса
-$SUDO cp /tmp/glances.service /etc/systemd/system/
-$SUDO chmod 644 /etc/systemd/system/glances.service
+chmod 644 /etc/systemd/system/glances.service
+systemctl daemon-reload
+systemctl enable glances.service
+systemctl restart glances.service
 
-# Перезагрузка systemd, включение и запуск сервиса
-echo "Запуск сервиса Glances..."
-$SUDO systemctl daemon-reload
-$SUDO systemctl enable glances.service
-$SUDO systemctl restart glances.service
-
-# Проверка статуса сервиса
-echo "Проверка статуса сервиса..."
-$SUDO systemctl status glances.service --no-pager || true
-
-# Проверка, слушает ли сервис порт
-sleep 3
-if netstat -tulpn 2>/dev/null | grep -q ":61208" || ss -tulpn | grep -q ":61208"; then
-    echo "Glances успешно запущен и слушает порт 61208"
+# Проверка, что сервис запущен
+if systemctl is-active --quiet glances; then
+    success "Glances успешно установлен и запущен как systemd сервис"
+    log "Glances доступен по адресу: http://$(hostname -I | awk '{print $1}'):61208"
+    log "Glances API доступен по адресу: http://$(hostname -I | awk '{print $1}'):61208/api/4"
 else
-    echo "Предупреждение: Glances, возможно, не слушает порт 61208. Проверьте журналы systemd для подробностей."
-    $SUDO journalctl -u glances -n 20 --no-pager || true
+    error "Не удалось запустить сервис Glances"
 fi
 
 # Проверка доступности API
-echo "Проверка доступности API Glances..."
-if curl -s http://localhost:61208/api/4/cpu > /dev/null; then
-    echo "API Glances успешно отвечает!"
+log "Проверка доступности Glances API..."
+sleep 2
+if curl -s http://localhost:61208/api/4/cpu >/dev/null; then
+    success "Glances API доступен по адресу http://localhost:61208/api/4"
 else
-    echo "Предупреждение: API Glances не отвечает на localhost. Возможно, он настроен только на сетевой интерфейс."
-    
-    # Пробуем через IP сервера
-    SERVER_IP=$(hostname -I | awk '{print $1}')
-    if [ -n "$SERVER_IP" ] && curl -s "http://$SERVER_IP:61208/api/4/cpu" > /dev/null; then
-        echo "API Glances доступен через IP сервера: $SERVER_IP"
-    else
-        echo "Предупреждение: API Glances не отвечает. Возможно, он еще инициализируется."
-    fi
+    warning "Glances API недоступен! Проверьте журналы systemd."
 fi
 
-echo "Установка Glances завершена."
 exit 0
