@@ -1,102 +1,129 @@
 #!/bin/bash
 
-# ======================================================
-# Скрипт установки Glances для Ubuntu 22.04 
-# Создан специально для Reverse Proxy Manager
-# ======================================================
+# Скрипт установки Glances для Ubuntu 22.04
+# Устанавливает Glances через apt и настраивает systemd-сервис
+# для автоматического запуска API и веб-интерфейса на порту 61208
 
-set -e # Останавливаем скрипт при любой ошибке
+# Выход при любой ошибке
+set -e
 
-echo "=== Установка Glances на Ubuntu 22.04 ==="
+echo "Начало установки Glances на Ubuntu 22.04..."
 
-# Обновляем список пакетов
+# Проверка root прав
+if [ "$EUID" -ne 0 ]; then
+    if ! command -v sudo &>/dev/null; then
+        echo "Ошибка: Необходимы права root для установки. Пожалуйста, запустите скрипт с sudo"
+        exit 1
+    fi
+fi
+
+# Префикс для команд (sudo или пусто в зависимости от прав)
+SUDO=""
+if [ "$EUID" -ne 0 ]; then
+    SUDO="sudo"
+fi
+
+# Обновление списка пакетов
 echo "Обновление списка пакетов..."
-apt-get update
+$SUDO apt-get update -y
 
-# Устанавливаем pip и зависимости
-echo "Установка Python3-pip и зависимостей..."
-apt-get install -y python3-pip curl net-tools lsof jq
+# Установка зависимостей
+echo "Установка зависимостей..."
+$SUDO apt-get install -y python3-pip python3-dev build-essential curl net-tools
 
-# Устанавливаем Glances через pip для получения актуальной версии
-echo "Установка Glances через pip..."
-pip3 install --upgrade glances
+# Установка Glances через apt
+echo "Установка Glances через apt (рекомендуемый метод)..."
+$SUDO apt-get install -y glances
 
-# Устанавливаем необходимые зависимости для веб-сервера
-echo "Установка веб-зависимостей..."
-pip3 install fastapi uvicorn jinja2
+# Проверка установки
+if ! command -v glances &>/dev/null; then
+    echo "Ошибка! Glances не был установлен через apt. Пробуем установить через pip..."
+    $SUDO pip3 install glances
+    
+    if ! command -v glances &>/dev/null; then
+        # Создаем обертку для glances, если он установлен, но не доступен в PATH
+        GLANCES_PATH=$($SUDO find /usr -name glances 2>/dev/null | grep -v "__pycache__" | head -n 1)
+        
+        if [ -n "$GLANCES_PATH" ]; then
+            echo "Найден путь к Glances: $GLANCES_PATH, создаем ссылку..."
+            $SUDO ln -sf "$GLANCES_PATH" /usr/local/bin/glances
+        else
+            echo "Критическая ошибка! Не удалось найти исполняемый файл glances после установки."
+            exit 1
+        fi
+    fi
+fi
 
-# Создаем systemd сервис для Glances
-echo "Создание systemd сервиса..."
-cat > /etc/systemd/system/glances.service << EOF
+# Проверка, доступна ли команда glances
+echo "Проверка установки Glances..."
+if ! command -v glances &>/dev/null; then
+    echo "Ошибка! Не удалось установить Glances. Пожалуйста, проверьте журнал ошибок."
+    exit 1
+fi
+
+# Определение версии Glances
+GLANCES_VERSION=$(glances --version 2>/dev/null || echo "Unknown")
+echo "Установлена версия Glances: $GLANCES_VERSION"
+
+# Создание systemd service
+echo "Создание и настройка systemd сервиса..."
+
+# Определение полного пути к исполняемому файлу glances
+GLANCES_EXEC=$(which glances)
+
+cat << EOF > /tmp/glances.service
 [Unit]
-Description=Glances monitoring tool (web mode)
+Description=Glances Server
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/glances -w
-Restart=always
+ExecStart=$GLANCES_EXEC -w --port 61208 --disable-plugin sensors --enable-history
+Restart=on-failure
+Type=simple
+User=root
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Перезагружаем systemd, включаем и запускаем сервис
-echo "Запуск сервиса..."
-systemctl daemon-reload
-systemctl enable glances.service
-systemctl start glances.service
+# Копирование файла сервиса
+$SUDO cp /tmp/glances.service /etc/systemd/system/
+$SUDO chmod 644 /etc/systemd/system/glances.service
 
-# Ждем немного для старта сервиса
-echo "Ожидание запуска сервиса (5 секунд)..."
-sleep 5
+# Перезагрузка systemd, включение и запуск сервиса
+echo "Запуск сервиса Glances..."
+$SUDO systemctl daemon-reload
+$SUDO systemctl enable glances.service
+$SUDO systemctl restart glances.service
 
-# Проверяем статус сервиса
+# Проверка статуса сервиса
 echo "Проверка статуса сервиса..."
-systemctl status glances.service --no-pager
+$SUDO systemctl status glances.service --no-pager || true
 
-# Проверяем доступность API и Web-интерфейса
-echo "Проверка доступности API (порт 61208)..."
-if curl -s "http://localhost:61208/api/4/cpu" | grep -q "total"; then
-    echo "✅ API доступен и работает"
+# Проверка, слушает ли сервис порт
+sleep 3
+if netstat -tulpn 2>/dev/null | grep -q ":61208" || ss -tulpn | grep -q ":61208"; then
+    echo "Glances успешно запущен и слушает порт 61208"
 else
-    echo "❌ API не отвечает. Проверьте журнал: journalctl -u glances.service"
+    echo "Предупреждение: Glances, возможно, не слушает порт 61208. Проверьте журналы systemd для подробностей."
+    $SUDO journalctl -u glances -n 20 --no-pager || true
+fi
+
+# Проверка доступности API
+echo "Проверка доступности API Glances..."
+if curl -s http://localhost:61208/api/4/cpu > /dev/null; then
+    echo "API Glances успешно отвечает!"
+else
+    echo "Предупреждение: API Glances не отвечает на localhost. Возможно, он настроен только на сетевой интерфейс."
     
-    # Дополнительная информация о процессе
-    echo "Информация о процессе Glances:"
-    ps aux | grep -v grep | grep glances || echo "Процесс не найден"
-    
-    # Информация о прослушиваемых портах
-    echo "Открытые порты:"
-    ss -tulpn | grep 61208 || echo "Порт не прослушивается"
-    
-    # Пробуем перезапустить сервис
-    echo "Пробуем перезапустить сервис..."
-    systemctl restart glances.service
-    sleep 5
-    
-    # Проверяем еще раз
-    if curl -s "http://localhost:61208/api/4/cpu" | grep -q "total"; then
-        echo "✅ После перезапуска API стал доступен"
+    # Пробуем через IP сервера
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    if [ -n "$SERVER_IP" ] && curl -s "http://$SERVER_IP:61208/api/4/cpu" > /dev/null; then
+        echo "API Glances доступен через IP сервера: $SERVER_IP"
     else
-        echo "❌ API все еще недоступен"
+        echo "Предупреждение: API Glances не отвечает. Возможно, он еще инициализируется."
     fi
 fi
 
-echo "Проверка доступности Web-интерфейса..."
-if curl -s "http://localhost:61208/" | grep -q "Glances"; then
-    echo "✅ Web-интерфейс доступен и работает"
-else
-    echo "❌ Web-интерфейс не отвечает"
-fi
-
-# Информация о сети для облегчения доступа извне
-echo "Внешние интерфейсы:"
-ip -4 addr show | grep -v 127.0.0.1 | grep inet
-
-echo "======================================================"
 echo "Установка Glances завершена."
-echo "Web URL и API URL: http://IP_АДРЕС:61208/"
-echo "Журнал: journalctl -u glances.service -f"
-echo "======================================================"
-
 exit 0

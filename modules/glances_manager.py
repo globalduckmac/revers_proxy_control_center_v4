@@ -566,6 +566,47 @@ class GlancesManager:
             }
     
     @staticmethod
+    def check_glances_availability(server):
+        """
+        Проверяет, доступен ли Glances API на указанном сервере.
+        
+        Args:
+            server: объект Server
+            
+        Returns:
+            bool: True если Glances API доступен, False иначе
+        """
+        try:
+            if not server.glances_installed or not server.glances_enabled:
+                return False
+                
+            if not server.ip_address or not server.glances_port:
+                return False
+                
+            url = f"http://{server.ip_address}:{server.glances_port}/api/4/cpu"
+            response = requests.get(url, timeout=5)
+            
+            return response.status_code == 200
+            
+        except Exception as e:
+            logger.debug(f"Ошибка при проверке доступности Glances API: {str(e)}")
+            return False
+            
+    @staticmethod
+    def get_server_metrics(server):
+        """
+        Получает метрики сервера через Glances API.
+        
+        Args:
+            server: объект Server для получения метрик
+            
+        Returns:
+            dict: Словарь с метриками или None в случае ошибки
+        """
+        metrics = GlancesManager.get_server_metrics_via_api(server)
+        return metrics
+        
+    @staticmethod
     def get_server_metrics_via_api(server):
         """
         Получает метрики сервера через API Glances и создает запись в БД.

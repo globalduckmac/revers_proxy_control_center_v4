@@ -13,6 +13,90 @@ class ServerManager:
     """
     
     @staticmethod
+    def get_cpu_usage(server):
+        """
+        Get CPU usage from server via SSH.
+        
+        Args:
+            server: Server model instance
+            
+        Returns:
+            float: CPU usage percentage or None if cannot be determined
+        """
+        try:
+            command = "grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"
+            stdout, stderr = ServerManager.execute_command(server, command)
+            if stdout.strip():
+                return float(stdout.strip())
+            return None
+        except Exception as e:
+            logger.error(f"Error getting CPU usage: {str(e)}")
+            return None
+    
+    @staticmethod
+    def get_memory_usage(server):
+        """
+        Get memory usage from server via SSH.
+        
+        Args:
+            server: Server model instance
+            
+        Returns:
+            float: Memory usage percentage or None if cannot be determined
+        """
+        try:
+            command = "free | grep Mem | awk '{print $3/$2 * 100.0}'"
+            stdout, stderr = ServerManager.execute_command(server, command)
+            if stdout.strip():
+                return float(stdout.strip())
+            return None
+        except Exception as e:
+            logger.error(f"Error getting memory usage: {str(e)}")
+            return None
+    
+    @staticmethod
+    def get_disk_usage(server):
+        """
+        Get disk usage from server via SSH.
+        
+        Args:
+            server: Server model instance
+            
+        Returns:
+            float: Disk usage percentage or None if cannot be determined
+        """
+        try:
+            command = "df -h / | grep / | awk '{print $5}' | sed 's/%//g'"
+            stdout, stderr = ServerManager.execute_command(server, command)
+            if stdout.strip():
+                return float(stdout.strip())
+            return None
+        except Exception as e:
+            logger.error(f"Error getting disk usage: {str(e)}")
+            return None
+    
+    @staticmethod
+    def get_load_average(server):
+        """
+        Get load average from server via SSH.
+        
+        Args:
+            server: Server model instance
+            
+        Returns:
+            str: Load average string or None if cannot be determined
+        """
+        try:
+            command = "cat /proc/loadavg | awk '{print $1, $2, $3}'"
+            stdout, stderr = ServerManager.execute_command(server, command)
+            if stdout.strip():
+                return stdout.strip()
+            return None
+        except Exception as e:
+            logger.error(f"Error getting load average: {str(e)}")
+            return None
+    
+    @staticmethod
     def check_connectivity(server):
         """
         Check if the server is reachable via SSH.
