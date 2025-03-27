@@ -148,7 +148,7 @@ pip install wheel # Необходимо для установки некото�
 pip install gunicorn psycopg2-binary cryptography dnspython email-validator \
     flask flask-login flask-sqlalchemy flask-wtf jinja2 paramiko \
     python-telegram-bot pytz requests sqlalchemy werkzeug pymysql \
-    glances fastapi uvicorn
+    glances fastapi uvicorn paho-mqtt
 
 # Настройка переменных окружения
 print_header "Настройка переменных окружения"
