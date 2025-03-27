@@ -213,16 +213,8 @@
                         Убедитесь, что у пользователя SSH есть необходимые права.
                       </div>
                       
-                      <div class="mb-3">
-                        <label for="api_port" class="form-label">API порт</label>
-                        <input type="number" class="form-control" id="api_port" name="api_port" value="61208">
-                        <div class="form-text">Порт для доступа к API Glances (по умолчанию 61208)</div>
-                      </div>
-                      
-                      <div class="mb-3">
-                        <label for="web_port" class="form-label">Веб-порт</label>
-                        <input type="number" class="form-control" id="web_port" name="web_port" value="61209">
-                        <div class="form-text">Порт для доступа к веб-интерфейсу Glances (по умолчанию 61209)</div>
+                      <div class="alert alert-warning">
+                        Glances будет установлен с использованием стандартного порта 61208 для API и веб-интерфейса.
                       </div>
                     </div>
                     <div class="modal-footer">

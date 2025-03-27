@@ -21,15 +21,16 @@ class GlancesManager:
     """
     
     @staticmethod
-    def install_glances(server_id, api_port=61208, web_port=61209):
+    def install_glances(server_id, api_port=None, web_port=None):
         """
         Начинает асинхронную установку Glances на указанный сервер с Ubuntu 22.04.
+        Использует стандартный порт 61208 для API и веб-интерфейса.
         Обновляет статус сервера на 'installing' и возвращает результат.
         
         Args:
             server_id: ID сервера
-            api_port: Порт для API Glances (по умолчанию 61208)
-            web_port: Порт для веб-интерфейса Glances (по умолчанию 61209)
+            api_port: (не используется, оставлено для совместимости)
+            web_port: (не используется, оставлено для совместимости)
             
         Returns:
             dict: Результат запуска установки {'success': bool, 'message': str}
@@ -69,15 +70,16 @@ class GlancesManager:
         }
     
     @staticmethod
-    def _install_glances_worker(server_id, api_port=61208, web_port=61209):
+    def _install_glances_worker(server_id, api_port=None, web_port=None):
         """
         Рабочая функция для асинхронной установки Glances на указанный сервер с Ubuntu 22.04.
+        Использует стандартный порт 61208 для API и веб-интерфейса.
         Вызывается в отдельном потоке.
         
         Args:
             server_id: ID сервера
-            api_port: Порт для API Glances
-            web_port: Порт для веб-интерфейса Glances
+            api_port: (не используется, оставлено для совместимости)
+            web_port: (не используется, оставлено для совместимости)
         """
         from app import app
         with app.app_context():
@@ -140,7 +142,7 @@ class GlancesManager:
                 
                 # Шаг 4: Запускаем скрипт установки
                 logger.info(f"Запуск скрипта установки на сервере {server.ip_address}")
-                command = f"sudo bash {remote_script_path} {api_port} {web_port}"
+                command = f"sudo bash {remote_script_path}"
                 stdin, stdout, stderr = ssh.exec_command(command)
                 exit_status = stdout.channel.recv_exit_status()
                 
@@ -151,8 +153,8 @@ class GlancesManager:
                 # Шаг 6: Обновляем информацию о сервере в базе данных
                 if exit_status == 0:
                     server.glances_installed = True
-                    server.glances_port = api_port
-                    server.glances_web_port = web_port
+                    server.glances_port = 61208
+                    server.glances_web_port = 61208
                     server.glances_enabled = True
                     server.glances_status = 'active'
                     server.glances_last_check = datetime.datetime.now()
@@ -162,7 +164,7 @@ class GlancesManager:
                         server_id=server.id,
                         action='install_glances',
                         status='success',
-                        message=f'Glances успешно установлен. API порт: {api_port}, Web порт: {web_port}\n\nВывод:\n{stdout_data}'
+                        message=f'Glances успешно установлен. API и веб-интерфейс доступны на порту 61208\n\nВывод:\n{stdout_data}'
                     )
                     db.session.add(log)
                     db.session.commit()

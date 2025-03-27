@@ -229,7 +229,8 @@ class Server(db.Model):
         """
         if not self.glances_enabled or not self.glances_installed:
             return None
-        return f"http://{self.ip_address}:{self.glances_web_port}"
+        # Теперь и API, и веб-интерфейс находятся на одном порту 61208
+        return f"http://{self.ip_address}:61208"
         
     def get_key_file_path(self):
         """

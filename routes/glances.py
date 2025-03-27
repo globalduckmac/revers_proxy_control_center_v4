@@ -46,19 +46,8 @@ def server_detail(server_id):
 @login_required
 def install(server_id):
     """Устанавливает Glances на выбранный сервер в асинхронном режиме."""
-    # Получаем параметры из формы
-    api_port = request.form.get('api_port', 61208)
-    web_port = request.form.get('web_port', 61209)
-    
-    try:
-        api_port = int(api_port)
-        web_port = int(web_port)
-    except ValueError:
-        flash('Порты должны быть числами', 'danger')
-        return redirect(url_for('glances.index'))
-    
-    # Запускаем асинхронную установку Glances
-    result = GlancesManager.install_glances(server_id, api_port, web_port)
+    # Запускаем асинхронную установку Glances со стандартным портом 61208
+    result = GlancesManager.install_glances(server_id)
     
     if result.get('success', False):
         flash(f'Установка Glances запущена. {result.get("message", "")}', 'info')
