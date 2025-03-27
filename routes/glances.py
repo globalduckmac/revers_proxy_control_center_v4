@@ -1,132 +1,159 @@
 """
-Маршруты для работы с мониторингом серверов через Glances
+Маршруты для управления Glances на серверах.
 """
 
 import logging
-from flask import Blueprint, render_template, jsonify, request, flash, redirect, url_for
-from flask_login import login_required
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
+from flask_login import login_required, current_user
+from modules.glances_manager import GlancesManager
+from models import db, Server
 
-from app import db
-from models import Server
-from modules.glances_manager import get_server_metrics, get_server_health
-
-# Создаем блюпринт для маршрутов Glances
-bp = Blueprint('glances', __name__, url_prefix='/glances')
-
+# Настройка логирования
 logger = logging.getLogger(__name__)
 
+# Создание blueprint
+bp = Blueprint('glances', __name__, url_prefix='/glances')
 
 @bp.route('/')
 @login_required
 def index():
-    """
-    Отображает страницу со всеми серверами и их статусом мониторинга Glances
-    """
+    """Отображает основную страницу Glances мониторинга."""
     servers = Server.query.all()
     return render_template('glances/index.html', servers=servers)
-
 
 @bp.route('/server/<int:server_id>')
 @login_required
 def server_detail(server_id):
-    """
-    Отображает детальную информацию о сервере, полученную через Glances API
-    """
+    """Отображает детальную информацию о мониторинге сервера через Glances."""
     server = Server.query.get_or_404(server_id)
     
-    # Получаем текущие метрики сервера
-    metrics = get_server_metrics(server.ip_address, server.glances_port or 61208)
-    health = get_server_health(server.ip_address, server.glances_port or 61208)
+    # Проверка статуса Glances на сервере
+    status = GlancesManager.check_glances_status(server_id)
+    
+    # Получаем последние метрики, если Glances активен
+    metrics = None
+    if status.get('api_accessible', False):
+        metrics = GlancesManager.get_detailed_metrics(server_id)
     
     return render_template(
-        'glances/server_detail.html',
-        server=server,
-        metrics=metrics,
-        health=health
+        'glances/server_detail.html', 
+        server=server, 
+        status=status,
+        metrics=metrics
     )
 
-
-@bp.route('/api/server/<int:server_id>/metrics')
+@bp.route('/install/<int:server_id>', methods=['POST'])
 @login_required
-def get_server_metrics_api(server_id):
-    """
-    API-эндпоинт для получения текущих метрик сервера
-    """
+def install(server_id):
+    """Устанавливает Glances на выбранный сервер в асинхронном режиме."""
+    # Запускаем асинхронную установку Glances со стандартным портом 61208
+    result = GlancesManager.install_glances(server_id)
+    
+    if result.get('success', False):
+        flash(f'Установка Glances запущена. {result.get("message", "")}', 'info')
+    else:
+        flash(f'Ошибка запуска установки Glances: {result.get("message", "")}', 'danger')
+    
+    return redirect(url_for('glances.server_detail', server_id=server_id))
+
+@bp.route('/enable/<int:server_id>', methods=['POST'])
+@login_required
+def enable(server_id):
+    """Включает мониторинг с помощью Glances для выбранного сервера."""
     server = Server.query.get_or_404(server_id)
     
-    metrics = get_server_metrics(server.ip_address, server.glances_port or 61208)
-    if not metrics:
-        return jsonify({'error': 'Не удалось получить метрики. Сервер недоступен или Glances не настроен.'}), 404
+    # Включаем Glances
+    server.glances_enabled = True
+    db.session.commit()
     
-    return jsonify(metrics)
+    flash('Мониторинг с помощью Glances включен', 'success')
+    return redirect(url_for('glances.server_detail', server_id=server_id))
 
-
-@bp.route('/api/server/<int:server_id>/health')
+@bp.route('/disable/<int:server_id>', methods=['POST'])
 @login_required
-def get_server_health_api(server_id):
-    """
-    API-эндпоинт для получения текущего состояния здоровья сервера
-    """
+def disable(server_id):
+    """Отключает мониторинг с помощью Glances для выбранного сервера."""
     server = Server.query.get_or_404(server_id)
     
-    health = get_server_health(server.ip_address, server.glances_port or 61208)
-    if not health:
-        return jsonify({'error': 'Не удалось получить состояние. Сервер недоступен или Glances не настроен.'}), 404
+    # Отключаем Glances
+    server.glances_enabled = False
+    db.session.commit()
     
-    return jsonify(health)
+    flash('Мониторинг с помощью Glances отключен', 'success')
+    return redirect(url_for('glances.server_detail', server_id=server_id))
 
+@bp.route('/restart/<int:server_id>', methods=['POST'])
+@login_required
+def restart(server_id):
+    """Перезапускает сервис Glances на выбранном сервере."""
+    result = GlancesManager.restart_glances_service(server_id)
+    
+    if result.get('success', False):
+        flash(f'Сервис Glances успешно перезапущен: {result.get("message", "")}', 'success')
+    else:
+        flash(f'Ошибка перезапуска Glances: {result.get("message", "")}', 'danger')
+    
+    return redirect(url_for('glances.server_detail', server_id=server_id))
 
-@bp.route('/diagnose/<int:server_id>', methods=['GET', 'POST'])
+@bp.route('/collect/<int:server_id>', methods=['POST'])
+@login_required
+def collect_metrics(server_id):
+    """Вручную запускает сбор метрик с сервера."""
+    result = GlancesManager.collect_server_metrics(server_id)
+    
+    if result.get('success', False):
+        flash(f'Метрики успешно собраны: CPU={result.get("cpu_usage")}%, MEM={result.get("memory_usage")}%, DISK={result.get("disk_usage")}%', 'success')
+    else:
+        flash(f'Ошибка сбора метрик: {result.get("message", "")}', 'danger')
+    
+    return redirect(url_for('glances.server_detail', server_id=server_id))
+
+@bp.route('/check/<int:server_id>', methods=['POST'])
+@login_required
+def check_status(server_id):
+    """Проверяет статус Glances на выбранном сервере."""
+    result = GlancesManager.check_glances_status(server_id)
+    
+    if result.get('success', False):
+        status_message = f'Статус Glances: Сервис {"запущен" if result.get("running") else "остановлен"}, API {"доступен" if result.get("api_accessible") else "недоступен"}'
+        flash(status_message, 'info')
+    else:
+        flash(f'Ошибка проверки статуса Glances: {result.get("message", "")}', 'danger')
+    
+    return redirect(url_for('glances.server_detail', server_id=server_id))
+
+@bp.route('/api/metrics/<int:server_id>')
+@login_required
+def api_get_metrics(server_id):
+    """API-эндпоинт для получения текущих метрик сервера."""
+    result = GlancesManager.collect_server_metrics(server_id)
+    return jsonify(result)
+
+@bp.route('/api/detailed/<int:server_id>')
+@login_required
+def api_get_detailed(server_id):
+    """API-эндпоинт для получения детальных метрик сервера."""
+    result = GlancesManager.get_detailed_metrics(server_id)
+    return jsonify(result)
+
+@bp.route('/api/status/<int:server_id>')
+@login_required
+def api_get_status(server_id):
+    """API-эндпоинт для получения статуса Glances на сервере."""
+    result = GlancesManager.check_glances_status(server_id)
+    return jsonify(result)
+
+@bp.route('/diagnose/<int:server_id>')
 @login_required
 def diagnose(server_id):
-    """
-    Страница диагностики и исправления проблем с Glances
-    """
+    """Выполняет глубокую диагностику Glances на выбранном сервере."""
     server = Server.query.get_or_404(server_id)
     
-    if request.method == 'POST':
-        action = request.form.get('action')
-        
-        if action == 'enable_glances':
-            server.glances_enabled = True
-            server.glances_error = False
-            db.session.commit()
-            flash('Мониторинг Glances активирован для сервера', 'success')
-        
-        elif action == 'disable_glances':
-            server.glances_enabled = False
-            db.session.commit()
-            flash('Мониторинг Glances деактивирован для сервера', 'success')
-        
-        elif action == 'reset_error':
-            server.glances_error = False
-            db.session.commit()
-            flash('Статус ошибки Glances сброшен', 'success')
-        
-        elif action == 'update_port':
-            try:
-                new_port = int(request.form.get('glances_port', 61208))
-                if 1 <= new_port <= 65535:
-                    server.glances_port = new_port
-                    db.session.commit()
-                    flash(f'Порт Glances обновлен на {new_port}', 'success')
-                else:
-                    flash('Некорректный порт. Должен быть в диапазоне 1-65535', 'danger')
-            except ValueError:
-                flash('Некорректный формат порта', 'danger')
-        
-        return redirect(url_for('glances.diagnose', server_id=server.id))
-    
-    # Проверяем текущий статус Glances
-    glances_available = False
-    try:
-        metrics = get_server_metrics(server.ip_address, server.glances_port or 61208)
-        glances_available = metrics is not None
-    except Exception as e:
-        logger.error(f"Ошибка при проверке доступности Glances на сервере {server.name}: {str(e)}")
+    # Запускаем полную диагностику
+    diagnosis = GlancesManager.diagnose_glances_installation(server_id)
     
     return render_template(
-        'glances/diagnose.html',
-        server=server,
-        glances_available=glances_available
+        'glances/diagnose.html', 
+        server=server, 
+        diagnosis=diagnosis
     )

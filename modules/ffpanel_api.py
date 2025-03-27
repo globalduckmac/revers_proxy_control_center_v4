@@ -1,294 +1,274 @@
 """
 Модуль для интеграции с FFPanel API.
-
-Функции для работы с API FFPanel:
-- Аутентификация
-- Получение списка доменов
-- Добавление доменов
-- Обновление доменов
-- Удаление доменов
+Позволяет получать и управлять доменами через FFPanel API.
 """
 
-import json
-import logging
 import os
+import json
+import time
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from flask import current_app
 
-
-logger = logging.getLogger(__name__)
-
-
 class FFPanelAPI:
-    """Класс для работы с FFPanel API."""
+    """
+    Класс для работы с FFPanel API.
+    Обеспечивает аутентификацию и вызов методов API.
+    """
+    BASE_URL = "https://ffv2.ru"
+    AUTH_URL = f"{BASE_URL}/public/api"
+    API_URL = f"{BASE_URL}/api"
     
     def __init__(self, token=None):
         """
-        Инициализация API-клиента для FFPanel.
+        Инициализация с токеном API.
         
         Args:
-            token (str, optional): Токен доступа к API FFPanel. 
-                                 Если не указан, будет использован FFPANEL_TOKEN из переменных окружения.
+            token: Токен для доступа к API (если None, берется из настроек или переменных окружения)
         """
-        self.base_url = "https://ffv2.ru"
-        self.api_url = f"{self.base_url}/api"
-        self.public_api_url = f"{self.base_url}/public/api"
-        self.token = token or os.environ.get('FFPANEL_TOKEN')
+        self.token = token
         self.jwt_token = None
-        self.jwt_expiration = None
+        self.jwt_expire = 0
         
+        # Если токен не указан, пытаемся получить его из настроек или переменных окружения
         if not self.token:
-            logger.warning("FFPANEL_TOKEN не найден в переменных окружения")
-    
-    def authenticate(self):
+            try:
+                from models import SystemSetting
+                from flask import current_app
+                
+                # Получаем токен из SystemSetting
+                self.token = SystemSetting.get_value('ffpanel_token')
+                
+                # Если не нашли в настройках, проверяем переменные окружения
+                if not self.token:
+                    self.token = os.environ.get('FFPANEL_TOKEN')
+                    
+                # Логируем информацию о токене    
+                if self.token:
+                    current_app.logger.info(f"FFPanel токен найден, длина: {len(self.token)}")
+                else:
+                    current_app.logger.warning("Токен FFPanel не найден ни в настройках, ни в переменных окружения")
+            except Exception as e:
+                from flask import current_app
+                current_app.logger.error(f"Ошибка при получении токена FFPanel: {str(e)}")
+                # Пробуем использовать переменную окружения как запасной вариант
+                self.token = os.environ.get('FFPANEL_TOKEN')
+        
+    def _authenticate(self):
         """
-        Аутентификация и получение JWT-токена.
+        Аутентификация в API и получение JWT-токена.
         
         Returns:
-            bool: True, если аутентификация прошла успешно, иначе False.
+            bool: True если аутентификация успешна, иначе False
         """
-        # Проверяем, не истёк ли текущий токен
-        if self.jwt_token and self.jwt_expiration and datetime.now() < self.jwt_expiration:
+        if self.jwt_token and self.jwt_expire > time.time():
+            # Используем существующий токен, если он еще действителен
             return True
-        
-        if not self.token:
-            logger.error("Отсутствует токен FFPanel")
-            return False
-        
+            
         try:
             params = {
                 'method': 'auth',
                 'token': self.token
             }
-            
-            response = requests.get(self.public_api_url, params=params)
-            response.raise_for_status()
-            
+            response = requests.get(self.AUTH_URL, params=params)
             data = response.json()
-            if data.get('code') == 200 and 'token' in data:
+            
+            if response.status_code == 200 and 'token' in data:
                 self.jwt_token = data['token']['jwt']
-                
-                # Расчёт времени истечения токена (добавляем запас в 5 минут на всякий случай)
-                expiration_timestamp = data['token']['expire']
-                self.jwt_expiration = datetime.fromtimestamp(expiration_timestamp) - timedelta(minutes=5)
-                
-                logger.info("Успешная аутентификация в FFPanel API")
+                self.jwt_expire = data['token']['expire']
                 return True
             else:
-                logger.error(f"Ошибка при аутентификации в FFPanel API: {data.get('message', 'Неизвестная ошибка')}")
+                current_app.logger.error(f"FFPanel аутентификация неудачна: {data.get('message', 'Неизвестная ошибка')}")
                 return False
-        except requests.RequestException as e:
-            logger.error(f"Ошибка соединения с FFPanel API: {str(e)}")
-            return False
-        except (ValueError, KeyError) as e:
-            logger.error(f"Ошибка обработки ответа FFPanel API: {str(e)}")
+        except Exception as e:
+            current_app.logger.error(f"Ошибка аутентификации FFPanel: {str(e)}")
             return False
     
-    def get_authorization_header(self):
+    def _get_headers(self):
         """
-        Получение заголовка авторизации с JWT-токеном.
+        Получение заголовков для API запросов.
         
         Returns:
-            dict: Заголовок авторизации для запросов к API.
+            dict: Заголовки с авторизацией
         """
-        if not self.authenticate():
-            return {}
-        
+        if not self._authenticate():
+            raise Exception("Не удалось получить JWT-токен для доступа к API")
+            
         return {
-            'Authorization': f'Bearer {self.jwt_token}'
+            'Authorization': f'Bearer {self.jwt_token}',
+            'Content-Type': 'application/json'
         }
     
-    def get_domains(self):
+    def get_sites(self):
         """
-        Получение списка доменов из FFPanel.
+        Получение списка сайтов из FFPanel.
         
         Returns:
-            list: Список словарей с информацией о доменах, или пустой список в случае ошибки.
+            list: Список доменов или пустой список в случае ошибки
         """
-        headers = self.get_authorization_header()
-        if not headers:
-            return []
-        
         try:
-            url = f"{self.api_url}/list.site"
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
+            headers = self._get_headers()
+            response = requests.get(f"{self.API_URL}/list.site", headers=headers)
             
-            data = response.json()
-            if data.get('code') == 200 and 'domains' in data:
-                logger.info(f"Получено {len(data['domains'])} доменов из FFPanel")
-                return data['domains']
-            elif data.get('code') == 404:
-                logger.info("Домены в FFPanel не найдены")
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('domains', [])
+            elif response.status_code == 404:
+                # Нет данных
                 return []
             else:
-                logger.error(f"Ошибка при получении списка доменов из FFPanel: {data.get('message', 'Неизвестная ошибка')}")
+                current_app.logger.error(f"Ошибка получения списка сайтов: {response.text}")
                 return []
-        except requests.RequestException as e:
-            logger.error(f"Ошибка соединения с FFPanel API при получении списка доменов: {str(e)}")
-            return []
-        except (ValueError, KeyError) as e:
-            logger.error(f"Ошибка обработки ответа FFPanel API при получении списка доменов: {str(e)}")
+        except Exception as e:
+            current_app.logger.error(f"Ошибка при запросе списка сайтов: {str(e)}")
             return []
     
-    def add_domain(self, domain, ip, port=80, port_out=80, dns="ns1.digitalocean.com"):
+    def add_site(self, domain, ip_path, port="80", port_out="80", dns=""):
         """
-        Добавление нового домена в FFPanel.
+        Добавление нового сайта в FFPanel.
         
         Args:
-            domain (str): Доменное имя.
-            ip (str): IP-адрес сервера.
-            port (int, optional): Порт для подключения. По умолчанию 80.
-            port_out (int, optional): Внешний порт. По умолчанию 80.
-            dns (str, optional): DNS-сервер. По умолчанию "ns1.digitalocean.com".
+            domain: Доменное имя
+            ip_path: IP адрес или путь
+            port: Порт для подключения (по умолчанию 80)
+            port_out: Внешний порт (по умолчанию 80)
+            dns: DNS-адрес
             
         Returns:
-            dict: Словарь с информацией о результате операции.
-                'success' (bool): True, если операция успешна, иначе False.
-                'message' (str): Сообщение о результате операции.
-                'domain_id' (int): ID добавленного домена, если операция успешна.
+            dict: Словарь с результатом операции: {'success': bool, 'id': int или None, 'message': str}
         """
-        headers = self.get_authorization_header()
-        if not headers:
-            return {'success': False, 'message': 'Ошибка аутентификации в FFPanel', 'domain_id': None}
-        
         try:
-            url = f"{self.api_url}/add.site"
+            headers = self._get_headers()
+            headers.pop('Content-Type', None)  # Убираем Content-Type для multipart/form-data
             
             data = {
                 'domain': domain,
-                'ip_path': ip,
-                'port': str(port),
-                'port_out': str(port_out),
+                'ip_path': ip_path,
+                'port': port,
+                'port_out': port_out,
                 'dns': dns
             }
             
-            response = requests.post(url, data=data, headers=headers)
-            response.raise_for_status()
-            
+            response = requests.post(f"{self.API_URL}/add.site", headers=headers, data=data)
             result = response.json()
-            if result.get('code') == 200:
-                domain_id = result.get('id')
-                logger.info(f"Домен {domain} успешно добавлен в FFPanel (ID: {domain_id})")
-                return {'success': True, 'message': 'Домен успешно добавлен', 'domain_id': domain_id}
+            
+            if response.status_code == 200 and result.get('code') == 200:
+                return {
+                    'success': True,
+                    'id': result.get('id'),
+                    'message': 'Сайт успешно добавлен'
+                }
             else:
-                logger.error(f"Ошибка при добавлении домена {domain} в FFPanel: {result.get('message', 'Неизвестная ошибка')}")
-                return {'success': False, 'message': result.get('message', 'Ошибка при добавлении домена'), 'domain_id': None}
-        except requests.RequestException as e:
-            logger.error(f"Ошибка соединения с FFPanel API при добавлении домена {domain}: {str(e)}")
-            return {'success': False, 'message': f'Ошибка соединения: {str(e)}', 'domain_id': None}
-        except (ValueError, KeyError) as e:
-            logger.error(f"Ошибка обработки ответа FFPanel API при добавлении домена {domain}: {str(e)}")
-            return {'success': False, 'message': f'Ошибка обработки ответа: {str(e)}', 'domain_id': None}
+                error_message = result.get('message', 'Неизвестная ошибка')
+                current_app.logger.error(f"Ошибка добавления сайта: {error_message}")
+                return {
+                    'success': False,
+                    'id': None,
+                    'message': f"Ошибка: {error_message}"
+                }
+        except Exception as e:
+            current_app.logger.error(f"Исключение при добавлении сайта: {str(e)}")
+            return {
+                'success': False,
+                'id': None,
+                'message': f"Исключение: {str(e)}"
+            }
     
-    def update_domain(self, domain_id, ip, port=80, port_out=80, port_ssl=443, port_out_ssl=443, wildcard=0, dns_records=None):
+    def update_site(self, site_id, ip_path, port="80", port_out="80", port_ssl="443", 
+                    port_out_ssl="443", real_ip="", wildcard="0", dns=None):
         """
-        Обновление домена в FFPanel.
+        Обновление сайта в FFPanel.
         
         Args:
-            domain_id (int): ID домена в FFPanel.
-            ip (str): Новый IP-адрес сервера.
-            port (int, optional): Порт для подключения. По умолчанию 80.
-            port_out (int, optional): Внешний порт. По умолчанию 80.
-            port_ssl (int, optional): SSL порт. По умолчанию 443.
-            port_out_ssl (int, optional): Внешний SSL порт. По умолчанию 443.
-            wildcard (int, optional): Флаг использования wildcard сертификата. По умолчанию 0.
-            dns_records (list, optional): Список DNS-записей для домена. По умолчанию None.
+            site_id: ID сайта
+            ip_path: IP адрес или путь
+            port: Порт для подключения
+            port_out: Внешний порт
+            port_ssl: SSL порт
+            port_out_ssl: Внешний SSL порт
+            real_ip: Реальный IP
+            wildcard: Флаг wildcard (0 или 1)
+            dns: Список DNS-записей (список словарей)
             
         Returns:
-            dict: Словарь с информацией о результате операции.
-                'success' (bool): True, если операция успешна, иначе False.
-                'message' (str): Сообщение о результате операции.
+            dict: Словарь с результатом операции: {'success': bool, 'message': str}
         """
-        headers = self.get_authorization_header()
-        if not headers:
-            return {'success': False, 'message': 'Ошибка аутентификации в FFPanel'}
-        
         try:
-            url = f"{self.api_url}/update.site"
+            headers = self._get_headers()
+            headers.pop('Content-Type', None)  # Убираем Content-Type для multipart/form-data
             
-            dns_data = dns_records or []
-            if not isinstance(dns_data, list):
-                dns_data = []
-                
             data = {
-                'id': domain_id,
-                'ip_path': ip,
-                'port': str(port),
-                'port_out': str(port_out),
-                'port_ssl': str(port_ssl),
-                'port_out_ssl': str(port_out_ssl),
-                'real_ip': ip,
-                'wildcard': str(wildcard),
-                'dns': json.dumps(dns_data)
+                'id': site_id,
+                'ip_path': ip_path,
+                'port': port,
+                'port_out': port_out,
+                'port_ssl': port_ssl,
+                'port_out_ssl': port_out_ssl,
+                'real_ip': real_ip,
+                'wildcard': wildcard,
             }
             
-            response = requests.post(url, data=data, headers=headers)
-            response.raise_for_status()
+            if dns:
+                data['dns'] = json.dumps(dns)
             
+            response = requests.post(f"{self.API_URL}/update.site", headers=headers, data=data)
             result = response.json()
-            if result.get('code') == 200:
-                logger.info(f"Домен (ID: {domain_id}) успешно обновлен в FFPanel")
-                return {'success': True, 'message': 'Домен успешно обновлен'}
+            
+            if response.status_code == 200 and result.get('code') == 200:
+                return {
+                    'success': True,
+                    'message': 'Сайт успешно обновлен'
+                }
             else:
-                logger.error(f"Ошибка при обновлении домена (ID: {domain_id}) в FFPanel: {result.get('message', 'Неизвестная ошибка')}")
-                return {'success': False, 'message': result.get('message', 'Ошибка при обновлении домена')}
-        except requests.RequestException as e:
-            logger.error(f"Ошибка соединения с FFPanel API при обновлении домена (ID: {domain_id}): {str(e)}")
-            return {'success': False, 'message': f'Ошибка соединения: {str(e)}'}
-        except (ValueError, KeyError) as e:
-            logger.error(f"Ошибка обработки ответа FFPanel API при обновлении домена (ID: {domain_id}): {str(e)}")
-            return {'success': False, 'message': f'Ошибка обработки ответа: {str(e)}'}
+                error_message = result.get('message', 'Неизвестная ошибка')
+                current_app.logger.error(f"Ошибка обновления сайта: {error_message}")
+                return {
+                    'success': False,
+                    'message': f"Ошибка: {error_message}"
+                }
+        except Exception as e:
+            current_app.logger.error(f"Исключение при обновлении сайта: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Исключение: {str(e)}"
+            }
     
-    def delete_domain(self, domain_id):
+    def delete_site(self, site_id):
         """
-        Удаление домена из FFPanel.
+        Удаление сайта из FFPanel.
         
         Args:
-            domain_id (int): ID домена в FFPanel.
+            site_id: ID сайта для удаления
             
         Returns:
-            dict: Словарь с информацией о результате операции.
-                'success' (bool): True, если операция успешна, иначе False.
-                'message' (str): Сообщение о результате операции.
+            dict: Словарь с результатом операции: {'success': bool, 'message': str}
         """
-        headers = self.get_authorization_header()
-        if not headers:
-            return {'success': False, 'message': 'Ошибка аутентификации в FFPanel'}
-        
         try:
-            url = f"{self.api_url}/delete.site"
+            headers = self._get_headers()
+            headers.pop('Content-Type', None)  # Убираем Content-Type для multipart/form-data
             
             data = {
-                'id': domain_id
+                'id': site_id
             }
             
-            response = requests.post(url, data=data, headers=headers)
-            response.raise_for_status()
-            
+            response = requests.post(f"{self.API_URL}/delete.site", headers=headers, data=data)
             result = response.json()
-            if result.get('code') == 200:
-                logger.info(f"Домен (ID: {domain_id}) успешно удален из FFPanel")
-                return {'success': True, 'message': 'Домен успешно удален'}
+            
+            if response.status_code == 200 and result.get('code') == 200:
+                return {
+                    'success': True,
+                    'message': 'Сайт успешно удален'
+                }
             else:
-                logger.error(f"Ошибка при удалении домена (ID: {domain_id}) из FFPanel: {result.get('message', 'Неизвестная ошибка')}")
-                return {'success': False, 'message': result.get('message', 'Ошибка при удалении домена')}
-        except requests.RequestException as e:
-            logger.error(f"Ошибка соединения с FFPanel API при удалении домена (ID: {domain_id}): {str(e)}")
-            return {'success': False, 'message': f'Ошибка соединения: {str(e)}'}
-        except (ValueError, KeyError) as e:
-            logger.error(f"Ошибка обработки ответа FFPanel API при удалении домена (ID: {domain_id}): {str(e)}")
-            return {'success': False, 'message': f'Ошибка обработки ответа: {str(e)}'}
-
-
-# Создаем синглтон для использования в приложении
-def get_ffpanel_api():
-    """
-    Получение экземпляра FFPanelAPI.
-    
-    Returns:
-        FFPanelAPI: Экземпляр класса FFPanelAPI.
-    """
-    token = os.environ.get('FFPANEL_TOKEN')
-    return FFPanelAPI(token=token)
+                error_message = result.get('message', 'Неизвестная ошибка')
+                current_app.logger.error(f"Ошибка удаления сайта: {error_message}")
+                return {
+                    'success': False,
+                    'message': f"Ошибка: {error_message}"
+                }
+        except Exception as e:
+            current_app.logger.error(f"Исключение при удалении сайта: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Исключение: {str(e)}"
+            }
