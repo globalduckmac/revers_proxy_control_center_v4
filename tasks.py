@@ -17,11 +17,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Интервалы выполнения задач (в секундах)
-CHECK_SERVER_INTERVAL = 300  # 5 минут
-CHECK_DOMAIN_NS_INTERVAL = 3600  # 1 час (было 5 минут)
-COLLECT_SERVER_METRICS_INTERVAL = 300  # 5 минут
-COLLECT_DOMAIN_METRICS_INTERVAL = 300  # 5 минут
+CHECK_SERVER_INTERVAL = 300  # 5 минут - теперь через Glances API вместо SSH
+CHECK_DOMAIN_NS_INTERVAL = 3600  # 1 час
+COLLECT_SERVER_METRICS_INTERVAL = 300  # 5 минут - через Glances API вместо SSH
+COLLECT_DOMAIN_METRICS_INTERVAL = 1800  # 30 минут - оптимизировано
 DAILY_REPORT_INTERVAL = 86400  # 24 часа
+PAYMENT_REMINDER_INTERVAL = 43200  # 12 часов
 
 class BackgroundTasks:
     """
@@ -78,7 +79,7 @@ class BackgroundTasks:
         # Запускаем задачу проверки напоминаний об оплате серверов
         payment_reminder_thread = threading.Thread(
             target=self._run_task,
-            args=(self._check_payment_reminders, CHECK_SERVER_INTERVAL, "Payment reminder check"),
+            args=(self._check_payment_reminders, PAYMENT_REMINDER_INTERVAL, "Payment reminder check"),
             daemon=True
         )
         self.threads.append(payment_reminder_thread)
@@ -93,7 +94,7 @@ class BackgroundTasks:
         self.threads.append(daily_report_thread)
         daily_report_thread.start()
         
-        logger.info("Background tasks started")
+        logger.info("Background tasks started with enhanced Glances API monitoring")
     
     def stop(self):
         """Останавливает все фоновые задачи."""
@@ -191,8 +192,14 @@ class BackgroundTasks:
                 time.sleep(60)  # В случае ошибки ждем минуту перед повторной попыткой
     
     def _check_servers(self):
-        """Проверяет доступность всех серверов по SSH."""
+        """
+        Проверяет доступность всех серверов через Glances API.
+        Если Glances установлен и включен, то использует API,
+        в противном случае выполняет проверку по SSH.
+        """
         from app import app
+        from modules.glances_manager import GlancesManager
+        
         with app.app_context():
             servers = Server.query.all()
             
@@ -201,21 +208,75 @@ class BackgroundTasks:
                     # Запоминаем текущий статус перед проверкой
                     old_status = server.status
                     
-                    # Выполняем проверку соединения
-                    is_reachable = ServerManager.check_connectivity(server)
-                    
-                    # Обновляем статус и время последней проверки
-                    server.status = 'active' if is_reachable else 'error'
-                    server.last_check = datetime.utcnow()
+                    # Проверяем доступность сервера через Glances API, если доступно
+                    if server.glances_installed and server.glances_enabled:
+                        logger.info(f"Checking server {server.name} via Glances API")
+                        
+                        try:
+                            # Пытаемся получить метрики через API
+                            api_metrics = GlancesManager.get_server_metrics_via_api(server)
+                            
+                            if api_metrics:
+                                # Если API доступен - сервер активен
+                                server.status = 'active'
+                                server.last_check = datetime.utcnow()
+                                
+                                logger.info(f"Server {server.name} is active via Glances API")
+                            else:
+                                # Если API недоступен, проверяем SSH только для серверов в статусе 'active'
+                                if server.status == 'active':
+                                    logger.warning(f"Glances API on server {server.name} is not accessible, falling back to SSH check")
+                                    
+                                    # Если сервер был активен, проверим его по SSH перед отметкой ошибки
+                                    is_reachable = ServerManager.check_connectivity(server)
+                                    
+                                    if is_reachable:
+                                        logger.info(f"Server {server.name} is active via SSH")
+                                        
+                                        # Если Glances недоступен, но SSH доступен - сбрасываем статус Glances на 'error'
+                                        server.glances_status = 'error'
+                                        server.glances_last_check = datetime.utcnow()
+                                    else:
+                                        # Если и Glances и SSH недоступны - сервер недоступен
+                                        server.status = 'error'
+                                        logger.warning(f"Server {server.name} is not reachable via Glances API or SSH")
+                                else:
+                                    # Если сервер не был активен, просто отмечаем его как недоступный
+                                    server.status = 'error'
+                                    logger.warning(f"Server {server.name} is not reachable via Glances API")
+                        except Exception as e:
+                            logger.error(f"Error checking server {server.name} via Glances API: {str(e)}")
+                            
+                            # Если была ошибка при проверке Glances, попробуем SSH
+                            if server.status == 'active':
+                                is_reachable = ServerManager.check_connectivity(server)
+                                
+                                if not is_reachable:
+                                    server.status = 'error'
+                                    logger.warning(f"Server {server.name} is not reachable via SSH after Glances API failure")
+                    else:
+                        # Если Glances не установлен, проверяем по SSH
+                        logger.info(f"Checking server {server.name} via SSH (Glances not installed or enabled)")
+                        
+                        is_reachable = ServerManager.check_connectivity(server)
+                        
+                        # Обновляем статус и время последней проверки
+                        server.status = 'active' if is_reachable else 'error'
+                        server.last_check = datetime.utcnow()
+                        
+                        if is_reachable:
+                            logger.info(f"Server {server.name} is active via SSH")
+                        else:
+                            logger.warning(f"Server {server.name} is not reachable via SSH")
                     
                     # Если статус изменился, добавляем запись в лог и отправляем уведомление
                     if old_status != server.status:
-                        # Добавляем дополнительную запись в лог об изменении статуса
+                        # Добавляем запись в лог об изменении статуса
                         from models import ServerLog
                         log = ServerLog(
                             server_id=server.id,
                             action='status_change',
-                            status='success' if is_reachable else 'error',
+                            status='success' if server.status == 'active' else 'error',
                             message=f"Server status changed from {old_status} to {server.status}"
                         )
                         db.session.add(log)

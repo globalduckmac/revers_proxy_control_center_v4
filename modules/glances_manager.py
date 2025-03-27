@@ -6,10 +6,10 @@
 import logging
 import json
 import os
-import datetime
 import requests
 from paramiko import SSHClient, AutoAddPolicy
-from models import db, Server, ServerLog
+from models import db, Server, ServerLog, ServerMetric
+from datetime import datetime
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
@@ -117,7 +117,7 @@ class GlancesManager:
                     
                     # Обновляем статус сервера
                     server.glances_status = 'error'
-                    server.glances_last_check = datetime.datetime.now()
+                    server.glances_last_check = datetime.now()
                     
                     # Логируем ошибку
                     log = ServerLog(
@@ -157,7 +157,7 @@ class GlancesManager:
                     server.glances_web_port = 61208
                     server.glances_enabled = True
                     server.glances_status = 'active'
-                    server.glances_last_check = datetime.datetime.now()
+                    server.glances_last_check = datetime.now()
                     
                     # Логируем успешную установку
                     log = ServerLog(
@@ -173,7 +173,7 @@ class GlancesManager:
                 else:
                     # Обновляем статус сервера
                     server.glances_status = 'error'
-                    server.glances_last_check = datetime.datetime.now()
+                    server.glances_last_check = datetime.now()
                     
                     # Логируем ошибку установки
                     log = ServerLog(
@@ -192,7 +192,7 @@ class GlancesManager:
                 
                 # Обновляем статус сервера
                 server.glances_status = 'error'
-                server.glances_last_check = datetime.datetime.now()
+                server.glances_last_check = datetime.now()
                 
                 # Логируем исключение
                 log = ServerLog(
@@ -541,7 +541,7 @@ class GlancesManager:
             else:
                 server.glances_status = 'error'
                 
-            server.glances_last_check = datetime.datetime.now()
+            server.glances_last_check = datetime.now()
             db.session.commit()
             
             # Формируем итоговое сообщение
@@ -564,6 +564,96 @@ class GlancesManager:
                 'summary': f'Ошибка при диагностике: {str(e)}',
                 'details': []
             }
+    
+    @staticmethod
+    def get_server_metrics_via_api(server):
+        """
+        Получает метрики сервера через API Glances и создает запись в БД.
+        Проверяет доступность Glances API и обновляет статус.
+        
+        Args:
+            server: Объект сервера (Server)
+            
+        Returns:
+            ServerMetric: Объект с метриками или None в случае ошибки
+        """
+        if not server or not server.glances_enabled or not server.glances_installed:
+            logger.warning(f"Glances не включен/установлен на сервере {server.name if server else 'unknown'}")
+            return None
+            
+        try:
+            # Формируем URL для API
+            api_url = f"http://{server.ip_address}:{server.glances_port}/api/4"
+            
+            # Получаем данные о CPU
+            cpu_response = requests.get(f"{api_url}/cpu", timeout=5)
+            if cpu_response.status_code != 200:
+                raise Exception(f"Ошибка API: код {cpu_response.status_code} при запросе CPU")
+                
+            cpu_data = cpu_response.json()
+            cpu_usage = cpu_data.get('total', 0.0)
+            
+            # Получаем данные о памяти
+            mem_response = requests.get(f"{api_url}/mem", timeout=5)
+            if mem_response.status_code != 200:
+                raise Exception(f"Ошибка API: код {mem_response.status_code} при запросе MEM")
+                
+            mem_data = mem_response.json()
+            memory_usage = mem_data.get('percent', 0.0)
+            
+            # Получаем данные о диске
+            fs_response = requests.get(f"{api_url}/fs", timeout=5)
+            if fs_response.status_code != 200:
+                raise Exception(f"Ошибка API: код {fs_response.status_code} при запросе FS")
+                
+            fs_data = fs_response.json()
+            disk_usage = 0.0
+            for disk in fs_data:
+                if disk.get('mnt_point') == '/':
+                    disk_usage = disk.get('percent', 0.0)
+                    break
+            
+            # Получаем данные о загрузке системы
+            load_response = requests.get(f"{api_url}/load", timeout=5)
+            if load_response.status_code != 200:
+                raise Exception(f"Ошибка API: код {load_response.status_code} при запросе LOAD")
+                
+            load_data = load_response.json()
+            load_average = f"{load_data.get('min1', 0.0)} {load_data.get('min5', 0.0)} {load_data.get('min15', 0.0)}"
+            
+            # Создаем и сохраняем метрику
+            metric = ServerMetric(
+                server_id=server.id,
+                cpu_usage=cpu_usage,
+                memory_usage=memory_usage,
+                disk_usage=disk_usage,
+                load_average=load_average,
+                timestamp=datetime.utcnow()
+            )
+            
+            db.session.add(metric)
+            
+            # Обновляем статус Glances
+            server.glances_status = 'active'
+            server.glances_last_check = datetime.utcnow()
+            
+            db.session.commit()
+            
+            logger.info(f"Получены метрики через Glances API для сервера {server.name}: CPU {cpu_usage}%, Memory {memory_usage}%, Disk {disk_usage}%")
+            return metric
+            
+        except requests.RequestException as e:
+            logger.error(f"Ошибка соединения с Glances API на сервере {server.name}: {str(e)}")
+            
+            # Обновляем статус Glances на ошибку
+            server.glances_status = 'error'
+            server.glances_last_check = datetime.utcnow()
+            db.session.commit()
+            
+            return None
+        except Exception as e:
+            logger.exception(f"Ошибка при получении метрик через Glances API для сервера {server.name}: {str(e)}")
+            return None
     
     @staticmethod
     def check_glances_status(server_id):
@@ -675,7 +765,7 @@ class GlancesManager:
             else:
                 server.glances_status = 'error'
                 
-            server.glances_last_check = datetime.datetime.now()
+            server.glances_last_check = datetime.now()
             db.session.commit()
             
             return {
@@ -690,7 +780,7 @@ class GlancesManager:
             
             # Обновляем статус сервера
             server.glances_status = 'error'
-            server.glances_last_check = datetime.datetime.now()
+            server.glances_last_check = datetime.now()
             db.session.commit()
             
             # Логируем исключение
@@ -739,7 +829,7 @@ class GlancesManager:
             # Шаг 2: Запрашиваем основные метрики
             metrics = {
                 'success': True,
-                'timestamp': datetime.datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat()
             }
             
             # CPU (используем API v4)
@@ -794,7 +884,7 @@ class GlancesManager:
             
             # Шаг 3: Обновляем информацию о сервере в базе данных
             server.glances_status = 'active'
-            server.glances_last_check = datetime.datetime.now()
+            server.glances_last_check = datetime.now()
             db.session.commit()
             
             return metrics
@@ -1000,7 +1090,7 @@ class GlancesManager:
                 # Шаг 3: Объединяем все метрики в один объект
                 metrics = {
                     'success': True,
-                    'timestamp': datetime.datetime.now().isoformat(),
+                    'timestamp': datetime.now().isoformat(),
                     'system': system_data,
                     'cpu': cpu_data,
                     'mem': mem_data,
@@ -1013,7 +1103,7 @@ class GlancesManager:
                 
                 # Шаг 4: Обновляем информацию о сервере в базе данных
                 server.glances_status = 'active'
-                server.glances_last_check = datetime.datetime.now()
+                server.glances_last_check = datetime.now()
                 db.session.commit()
                 
                 return metrics
@@ -1023,7 +1113,7 @@ class GlancesManager:
                 
                 # Обновляем статус сервера
                 server.glances_status = 'error'
-                server.glances_last_check = datetime.datetime.now()
+                server.glances_last_check = datetime.now()
                 db.session.commit()
                 
                 return {

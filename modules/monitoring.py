@@ -5,6 +5,7 @@ from sqlalchemy import func
 
 from models import db, Server, Domain, ServerMetric, DomainMetric
 from modules.server_manager import ServerManager
+from modules.glances_manager import GlancesManager
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,8 @@ class MonitoringManager:
     def collect_server_metrics(server):
         """
         Collect server metrics and store them in the database.
+        Приоритезирует получение данных через Glances API, 
+        но может использовать SSH в качестве запасного варианта.
         
         Args:
             server: Server model instance
@@ -25,16 +28,64 @@ class MonitoringManager:
         Returns:
             ServerMetric: The created metric object or None if collection fails
         """
-        if not server or server.status != 'active':
-            logger.warning(f"Cannot collect metrics for inactive server {server.name if server else 'unknown'}")
+        if not server:
+            logger.warning(f"Cannot collect metrics: server is None")
             return None
+            
+        # Проверяем, установлен ли Glances и включена ли интеграция
+        # Если да, пытаемся получить метрики через API
+        if server.glances_installed and server.glances_enabled:
+            try:
+                # Пытаемся получить метрики через API Glances
+                metric = GlancesManager.get_server_metrics_via_api(server)
+                if metric:
+                    logger.info(f"Collected server metrics via Glances API for {server.name}: CPU {metric.cpu_usage}%, Memory {metric.memory_usage}%, Disk {metric.disk_usage}%")
+                    
+                    # Обновляем статус сервера, так как API доступен
+                    if server.status != 'active':
+                        server.status = 'active'
+                        server.last_check = datetime.utcnow()
+                        db.session.commit()
+                        
+                    return metric
+                    
+                # Если API недоступен - обновляем статус Glances на ошибку
+                # и помечаем сервер как неактивный, если не было проверки через SSH
+                server.glances_status = 'error'
+                server.glances_last_check = datetime.utcnow()
+                db.session.commit()
+                
+                logger.warning(f"Failed to collect metrics via Glances API for {server.name}, marking Glances as error")
+                
+            except Exception as e:
+                logger.error(f"Error collecting server metrics via Glances API for {server.name}: {str(e)}")
+                # Обновляем статус Glances
+                server.glances_status = 'error'
+                server.glances_last_check = datetime.utcnow()
+                db.session.commit()
         
+        # Если сервер не активен, логируем и выходим
+        if server.status != 'active':
+            logger.warning(f"Cannot collect metrics for inactive server {server.name}")
+            return None
+            
+        # В случае ошибки или если Glances не установлен - используем устаревший метод через SSH
+        # для поддержки обратной совместимости и тестирования
         try:
-            # Check connectivity
+            logger.info(f"Falling back to SSH method for server {server.name}")
+            
+            # Проверяем соединение по SSH
             if not ServerManager.check_connectivity(server):
-                logger.warning(f"Server {server.name} is not reachable, skipping metrics collection")
+                logger.warning(f"Server {server.name} is not reachable via SSH, skipping metrics collection")
+                
+                # Обновляем статус на ошибку, так как ни API, ни SSH не работают
+                server.status = 'error'
+                server.last_check = datetime.utcnow()
+                db.session.commit()
+                
                 return None
             
+            # Получаем метрики через SSH
             # Get CPU usage (%)
             stdout, _ = ServerManager.execute_command(
                 server, 
@@ -76,12 +127,17 @@ class MonitoringManager:
             db.session.add(metric)
             db.session.commit()
             
-            logger.info(f"Collected server metrics for {server.name}: CPU {cpu_usage}%, Memory {memory_usage}%, Disk {disk_usage}%")
+            logger.info(f"Collected server metrics via SSH for {server.name}: CPU {cpu_usage}%, Memory {memory_usage}%, Disk {disk_usage}%")
             return metric
             
         except Exception as e:
-            logger.exception(f"Error collecting server metrics for {server.name}: {str(e)}")
-            db.session.rollback()
+            logger.exception(f"Error collecting server metrics via SSH for {server.name}: {str(e)}")
+            
+            # Обновляем статус на ошибку, так как ни API, ни SSH не работают
+            server.status = 'error'
+            server.last_check = datetime.utcnow()
+            db.session.commit()
+            
             return None
     
     @staticmethod
