@@ -150,6 +150,10 @@ pip install gunicorn psycopg2-binary cryptography dnspython email-validator \
     python-telegram-bot pytz requests sqlalchemy werkzeug pymysql \
     glances fastapi uvicorn
 
+# Удаляем все следы MQTT, если они были установлены ранее
+print_subheader "Удаление любых следов MQTT"
+pip uninstall -y paho-mqtt
+
 # Настройка переменных окружения
 print_header "Настройка переменных окружения"
 # Генерируем случайный секретный ключ
@@ -324,9 +328,9 @@ if [ -z "$GLANCES_PATH" ]; then
     elif [ -f "/usr/local/bin/glances" ]; then
         GLANCES_PATH="/usr/local/bin/glances"
     else
-        # Пробуем установить через pip с указанием пути
-        print_subheader "Установка Glances через pip с указанием пути"
-        pip3 install --force-reinstall glances
+        # Пробуем установить через apt еще раз
+        print_subheader "Повторная попытка установки Glances через apt"
+        apt-get update && apt-get install -y glances
         
         # Создаем скрипт-обертку для glances, если его не существует
         if [ ! -f "/usr/local/bin/glances" ]; then
