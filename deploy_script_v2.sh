@@ -311,6 +311,29 @@ fi
 print_header "Установка и настройка Glances"
 print_subheader "Создание сервиса Glances для мониторинга серверов"
 
+# Проверяем путь к исполняемому файлу Glances
+GLANCES_PATH=$(which glances || echo "")
+if [ -z "$GLANCES_PATH" ]; then
+    # Если команда which не нашла glances, проверяем типичные места
+    if [ -f "/usr/bin/glances" ]; then
+        GLANCES_PATH="/usr/bin/glances"
+    elif [ -f "/usr/local/bin/glances" ]; then
+        GLANCES_PATH="/usr/local/bin/glances"
+    else
+        # Создаем symlink к возможному пути в Python
+        PYTHON_GLANCES=$(find /usr -name glances | grep "/bin/glances" | head -n 1)
+        if [ -n "$PYTHON_GLANCES" ]; then
+            ln -sf "$PYTHON_GLANCES" /usr/local/bin/glances
+            GLANCES_PATH="/usr/local/bin/glances"
+        else
+            print_error "Не удалось найти исполняемый файл Glances после установки"
+            print_warning "Служба Glances может не запуститься. Возможно, потребуется ручная настройка."
+            GLANCES_PATH="/usr/local/bin/glances"
+        fi
+    fi
+    print_subheader "Найден путь к Glances: $GLANCES_PATH"
+fi
+
 # Создаем системный сервис для Glances
 cat > /etc/systemd/system/glances.service <<EOF
 [Unit]
@@ -318,7 +341,7 @@ Description=Glances monitoring tool (web mode)
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/glances -w
+ExecStart=$GLANCES_PATH -w
 Restart=always
 
 [Install]
@@ -356,20 +379,43 @@ pip3 install --upgrade glances
 echo "Установка веб-зависимостей..."
 pip3 install fastapi uvicorn jinja2
 
+# Проверяем путь к исполняемому файлу Glances
+GLANCES_PATH=$(which glances || echo "")
+if [ -z "$GLANCES_PATH" ]; then
+    # Если команда which не нашла glances, проверяем типичные места
+    if [ -f "/usr/bin/glances" ]; then
+        GLANCES_PATH="/usr/bin/glances"
+    elif [ -f "/usr/local/bin/glances" ]; then
+        GLANCES_PATH="/usr/local/bin/glances"
+    else
+        # Создаем symlink к возможному пути в Python
+        PYTHON_GLANCES=$(find /usr -name glances | grep "/bin/glances" | head -n 1)
+        if [ -n "$PYTHON_GLANCES" ]; then
+            ln -sf "$PYTHON_GLANCES" /usr/local/bin/glances
+            GLANCES_PATH="/usr/local/bin/glances"
+        else
+            echo "Не удалось найти исполняемый файл Glances после установки"
+            echo "Служба Glances может не запуститься. Возможно, потребуется ручная настройка."
+            GLANCES_PATH="/usr/local/bin/glances"
+        fi
+    fi
+    echo "Найден путь к Glances: $GLANCES_PATH"
+fi
+
 # Создаем systemd сервис для Glances
 echo "Создание systemd сервиса..."
-cat > /etc/systemd/system/glances.service << EOF
+cat > /etc/systemd/system/glances.service << EOT
 [Unit]
 Description=Glances monitoring tool (web mode)
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/glances -w
+ExecStart=$GLANCES_PATH -w
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOT
 
 # Перезагружаем systemd, включаем и запускаем сервис
 echo "Запуск сервиса..."
