@@ -187,32 +187,9 @@ def api_domain_metrics(domain_id):
 @bp.route('/collect/domain/<int:domain_id>', methods=['POST'])
 @login_required
 def collect_domain_metrics(domain_id):
-    """Manually trigger collection of domain metrics."""
+    """Manually trigger collection of domain metrics - functionality removed."""
     domain = Domain.query.get_or_404(domain_id)
-    
-    # Find associated server
-    server = None
-    for group in domain.groups:
-        if group.server:
-            server = group.server
-            break
-    
-    if not server:
-        flash(f'Cannot collect metrics: Domain {domain.name} is not associated with any server', 'danger')
-        return redirect(url_for('monitoring.domain_metrics', domain_id=domain_id))
-    
-    try:
-        metric = MonitoringManager.collect_domain_metrics(server, domain)
-        
-        if metric:
-            flash(f'Successfully collected metrics for domain {domain.name}', 'success')
-        else:
-            flash(f'Failed to collect metrics for domain {domain.name}', 'danger')
-            
-    except Exception as e:
-        logger.exception(f"Error collecting metrics for domain {domain.name}")
-        flash(f'Error collecting metrics: {str(e)}', 'danger')
-    
+    flash('Domain metrics collection via SSH has been disabled in this version.', 'warning')
     return redirect(url_for('monitoring.domain_metrics', domain_id=domain_id))
 
 

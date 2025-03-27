@@ -17,10 +17,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Интервалы выполнения задач (в секундах)
-CHECK_SERVER_INTERVAL = 300  # 5 минут - теперь через Glances API вместо SSH
+CHECK_SERVER_INTERVAL = 300  # 5 минут - мониторинг серверов только через Glances API
 CHECK_DOMAIN_NS_INTERVAL = 3600  # 1 час
-COLLECT_SERVER_METRICS_INTERVAL = 300  # 5 минут - через Glances API вместо SSH
-COLLECT_DOMAIN_METRICS_INTERVAL = 1800  # 30 минут - оптимизировано
+COLLECT_SERVER_METRICS_INTERVAL = 300  # 5 минут - сбор метрик только через Glances API
 DAILY_REPORT_INTERVAL = 86400  # 24 часа
 PAYMENT_REMINDER_INTERVAL = 43200  # 12 часов
 
@@ -67,14 +66,7 @@ class BackgroundTasks:
         self.threads.append(server_metrics_thread)
         server_metrics_thread.start()
         
-        # Запускаем задачу сбора метрик доменов
-        domain_metrics_thread = threading.Thread(
-            target=self._run_task,
-            args=(self._collect_domain_metrics, COLLECT_DOMAIN_METRICS_INTERVAL, "Domain metrics collection"),
-            daemon=True
-        )
-        self.threads.append(domain_metrics_thread)
-        domain_metrics_thread.start()
+        # Сбор метрик доменов отключен
         
         # Запускаем задачу проверки напоминаний об оплате серверов
         payment_reminder_thread = threading.Thread(
@@ -94,7 +86,7 @@ class BackgroundTasks:
         self.threads.append(daily_report_thread)
         daily_report_thread.start()
         
-        logger.info("Background tasks started with enhanced Glances API monitoring")
+        logger.info("Background tasks started with Glances API for server monitoring only")
     
     def stop(self):
         """Останавливает все фоновые задачи."""
@@ -193,9 +185,8 @@ class BackgroundTasks:
     
     def _check_servers(self):
         """
-        Проверяет доступность всех серверов через Glances API.
-        Если Glances установлен и включен, то использует API,
-        в противном случае выполняет проверку по SSH.
+        Проверяет доступность всех серверов только через Glances API.
+        Сервера без настроенного Glances будут пропущены.
         """
         from app import app
         from modules.glances_manager import GlancesManager
@@ -223,51 +214,23 @@ class BackgroundTasks:
                                 
                                 logger.info(f"Server {server.name} is active via Glances API")
                             else:
-                                # Если API недоступен, проверяем SSH только для серверов в статусе 'active'
-                                if server.status == 'active':
-                                    logger.warning(f"Glances API on server {server.name} is not accessible, falling back to SSH check")
-                                    
-                                    # Если сервер был активен, проверим его по SSH перед отметкой ошибки
-                                    is_reachable = ServerManager.check_connectivity(server)
-                                    
-                                    if is_reachable:
-                                        logger.info(f"Server {server.name} is active via SSH")
-                                        
-                                        # Если Glances недоступен, но SSH доступен - сбрасываем статус Glances на 'error'
-                                        server.glances_status = 'error'
-                                        server.glances_last_check = datetime.utcnow()
-                                    else:
-                                        # Если и Glances и SSH недоступны - сервер недоступен
-                                        server.status = 'error'
-                                        logger.warning(f"Server {server.name} is not reachable via Glances API or SSH")
-                                else:
-                                    # Если сервер не был активен, просто отмечаем его как недоступный
-                                    server.status = 'error'
-                                    logger.warning(f"Server {server.name} is not reachable via Glances API")
+                                # Если API недоступен - отмечаем сервер как недоступный
+                                server.status = 'error'
+                                server.glances_status = 'error'
+                                server.glances_last_check = datetime.utcnow()
+                                logger.warning(f"Server {server.name} is not reachable via Glances API")
                         except Exception as e:
                             logger.error(f"Error checking server {server.name} via Glances API: {str(e)}")
                             
-                            # Если была ошибка при проверке Glances, попробуем SSH
-                            if server.status == 'active':
-                                is_reachable = ServerManager.check_connectivity(server)
-                                
-                                if not is_reachable:
-                                    server.status = 'error'
-                                    logger.warning(f"Server {server.name} is not reachable via SSH after Glances API failure")
+                            # При ошибке отмечаем сервер как недоступный
+                            server.status = 'error'
+                            server.glances_status = 'error'
+                            server.last_check = datetime.utcnow()
+                            server.glances_last_check = datetime.utcnow()
                     else:
-                        # Если Glances не установлен, проверяем по SSH
-                        logger.info(f"Checking server {server.name} via SSH (Glances not installed or enabled)")
-                        
-                        is_reachable = ServerManager.check_connectivity(server)
-                        
-                        # Обновляем статус и время последней проверки
-                        server.status = 'active' if is_reachable else 'error'
-                        server.last_check = datetime.utcnow()
-                        
-                        if is_reachable:
-                            logger.info(f"Server {server.name} is active via SSH")
-                        else:
-                            logger.warning(f"Server {server.name} is not reachable via SSH")
+                        # Если Glances не установлен или не включен - отмечаем как необработанный
+                        logger.info(f"Skipping server {server.name} check - Glances not installed or not enabled")
+                        continue
                     
                     # Если статус изменился, добавляем запись в лог и отправляем уведомление
                     if old_status != server.status:
@@ -363,7 +326,7 @@ class BackgroundTasks:
                 db.session.rollback()
     
     def _collect_server_metrics(self):
-        """Собирает метрики со всех активных серверов."""
+        """Собирает метрики со всех активных серверов только через Glances API."""
         from app import app
         with app.app_context():
             try:
@@ -392,50 +355,8 @@ class BackgroundTasks:
                 db.session.rollback()
     
     def _collect_domain_metrics(self):
-        """Собирает метрики по всем доменам, связанным с активными серверами."""
-        from app import app
-        with app.app_context():
-            try:
-                # Получаем все активные сервера
-                servers = Server.query.filter_by(status='active').all()
-                
-                for server in servers:
-                    try:
-                        # Получаем все домены, связанные с этим сервером через группы
-                        domains = []
-                        for group in server.domain_groups:
-                            domains.extend(group.domains.all())
-                        
-                        # Удаляем дубликаты
-                        domains = list(set(domains))
-                        
-                        for domain in domains:
-                            try:
-                                # Получаем маскированное имя домена для логирования
-                                from modules.telegram_notifier import mask_domain_name
-                                masked_domain_name = mask_domain_name(domain.name)
-                                
-                                # Собираем и сохраняем метрики домена
-                                logger.info(f"Collecting metrics for domain {masked_domain_name}")
-                                metric = MonitoringManager.collect_domain_metrics(server, domain)
-                                
-                                if metric:
-                                    logger.info(f"Collected metrics for domain {masked_domain_name}: Requests: {metric.requests_count}, Bandwidth: {metric.bandwidth_used/1024/1024:.2f}MB")
-                                else:
-                                    logger.warning(f"Failed to collect metrics for domain {masked_domain_name}")
-                                    
-                            except Exception as e:
-                                # Маскируем домен даже в сообщениях об ошибках
-                                from modules.telegram_notifier import mask_domain_name
-                                masked_domain_name = mask_domain_name(domain.name)
-                                logger.error(f"Error collecting metrics for domain {masked_domain_name}: {str(e)}")
-                        
-                    except Exception as e:
-                        logger.error(f"Error processing server {server.name} for domain metrics: {str(e)}")
-                
-            except Exception as e:
-                logger.error(f"Error in domain metrics collection task: {str(e)}")
-                db.session.rollback()
+        """Функция сбора метрик доменов отключена в этой версии."""
+        logger.info("Domain metrics collection via SSH has been disabled in this version.")
     
     def _send_daily_report(self):
         """Отправляет ежедневный отчет о состоянии системы."""
