@@ -23,7 +23,7 @@ class GlancesManager:
     @staticmethod
     def install_glances(server_id, api_port=61208, web_port=61209):
         """
-        Начинает асинхронную установку Glances на указанный сервер.
+        Начинает асинхронную установку Glances на указанный сервер с Ubuntu 22.04.
         Обновляет статус сервера на 'installing' и возвращает результат.
         
         Args:
@@ -71,7 +71,7 @@ class GlancesManager:
     @staticmethod
     def _install_glances_worker(server_id, api_port=61208, web_port=61209):
         """
-        Рабочая функция для асинхронной установки Glances на указанный сервер.
+        Рабочая функция для асинхронной установки Glances на указанный сервер с Ubuntu 22.04.
         Вызывается в отдельном потоке.
         
         Args:
@@ -89,8 +89,8 @@ class GlancesManager:
                 return
             
             try:
-                # Шаг 1: Получаем скрипт установки из локальной файловой системы
-                install_script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'install_glances.sh')
+                # Шаг 1: Получаем скрипт установки из локальной файловой системы для Ubuntu 22.04
+                install_script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'scripts', 'install_glances_ubuntu22.sh')
                 with open(install_script_path, 'r') as f:
                     install_script = f.read()
                 
@@ -133,7 +133,7 @@ class GlancesManager:
                 
                 # Шаг 3: Загружаем скрипт установки на сервер
                 sftp = ssh.open_sftp()
-                remote_script_path = '/tmp/install_glances.sh'
+                remote_script_path = '/tmp/install_glances_ubuntu22.sh'
                 sftp.putfo(open(install_script_path, 'rb'), remote_script_path)
                 sftp.chmod(remote_script_path, 0o755)  # Делаем скрипт исполняемым
                 sftp.close()
@@ -566,7 +566,8 @@ class GlancesManager:
     @staticmethod
     def check_glances_status(server_id):
         """
-        Проверяет статус Glances на указанном сервере.
+        Проверяет статус Glances на указанном сервере с Ubuntu 22.04.
+        Проверяет статус systemd сервиса и доступность API.
         
         Args:
             server_id: ID сервера
@@ -614,28 +615,25 @@ class GlancesManager:
             logger.debug(f"Подключение к серверу {server.ip_address}:{server.ssh_port} как {server.ssh_user}")
             ssh.connect(**connect_kwargs)
             
-            # Шаг 2: Проверяем, запущен ли сервис Glances несколькими способами
-            command = "sudo systemctl is-active glances.service 2>/dev/null || echo 'checking supervisor...' && sudo supervisorctl status glances 2>/dev/null | grep -q RUNNING && echo 'supervisor:running' || echo 'checking ps...' && ps aux | grep -v grep | grep -q 'glances -w -s' && echo 'ps:running'"
+            # Шаг 2: Проверяем, запущен ли сервис Glances через systemd (оптимизировано для Ubuntu 22.04)
+            command = "sudo systemctl is-active glances.service 2>/dev/null || echo 'inactive'"
             stdin, stdout, stderr = ssh.exec_command(command)
             exit_status = stdout.channel.recv_exit_status()
             stdout_data = stdout.read().decode('utf-8').strip()
             
-            service_running = (exit_status == 0 and 
-                              (stdout_data == "active" or 
-                               "supervisor:running" in stdout_data or 
-                               "ps:running" in stdout_data))
+            service_running = (exit_status == 0 and stdout_data == "active")
             
-            # Если сервис не запущен, пробуем запустить его
+            # Если сервис не запущен, пробуем запустить его через systemd (оптимизировано для Ubuntu 22.04)
             if not service_running:
                 logger.warning(f"Сервис Glances не запущен на сервере {server_id}, пробуем запустить")
-                restart_command = f"sudo systemctl restart glances.service || sudo supervisorctl restart glances || nohup /usr/local/bin/glances -w -s --disable-plugin docker --bind {server.ip_address} --port {server.glances_port} --webserver-port {server.glances_web_port} > /var/log/glances_nohup.log 2>&1 &"
+                restart_command = f"sudo systemctl restart glances.service || echo 'Ошибка запуска systemd'"
                 ssh.exec_command(restart_command)
                 # Даем время для запуска
                 import time
                 time.sleep(5)
                 
-                # Проверяем статус еще раз
-                command = "sudo systemctl is-active glances.service 2>/dev/null || sudo supervisorctl status glances 2>/dev/null | grep -q RUNNING || ps aux | grep -v grep | grep -q 'glances -w -s' && echo 'running'"
+                # Проверяем статус еще раз (оптимизировано для Ubuntu 22.04, используя systemd)
+                command = "sudo systemctl is-active glances.service 2>/dev/null && echo 'running'"
                 stdin, stdout, stderr = ssh.exec_command(command)
                 stdout_data = stdout.read().decode('utf-8').strip()
                 service_running = "running" in stdout_data
@@ -820,7 +818,8 @@ class GlancesManager:
     @staticmethod
     def restart_glances_service(server_id):
         """
-        Перезапускает сервис Glances на удаленном сервере.
+        Перезапускает сервис Glances на удаленном сервере с Ubuntu 22.04.
+        Использует systemd для управления сервисом.
         
         Args:
             server_id: ID сервера
@@ -859,10 +858,9 @@ class GlancesManager:
             logger.debug(f"Подключение к серверу {server.ip_address}:{server.ssh_port} как {server.ssh_user}")
             ssh.connect(**connect_kwargs)
             
-            # Шаг 2: Перезапускаем сервис Glances
+            # Шаг 2: Перезапускаем сервис Glances через systemd (основной метод для Ubuntu 22.04)
             commands = [
-                "sudo systemctl restart glances.service || true",
-                "sudo supervisorctl restart glances || true"
+                "sudo systemctl restart glances.service || echo 'Ошибка перезапуска systemd'"
             ]
             
             restart_success = False
