@@ -1,0 +1,50 @@
+[УСПЕХ] Веб-приложение доступно! Сервер успешно запущен.
+root@test8:~# sudo rpcc-diagnose
+Диагностика Reverse Proxy Control Center
+========================================
+
+Проверка статуса сервисов:
+--------------------------------------
+PostgreSQL: активен
+Nginx: активен
+RPCC: не активен
+
+Проверка сетевых портов:
+--------------------------------------
+Порт 5000 (Gunicorn): закрыт
+Порт 80 (Nginx): открыт
+Порт 5432 (PostgreSQL): открыт
+
+Последние ошибки в логах:
+--------------------------------------
+Логи RPCC:
+  File "/opt/reverse_proxy_control_center/app.py", line 42, in register_blueprints
+    import routes.domain
+ModuleNotFoundError: No module named 'routes.domain'
+[2025-03-28 01:08:18 +0000] [32021] [INFO] Worker exiting (pid: 32021)
+[2025-03-28 01:08:18 +0000] [32017] [ERROR] Worker (pid:32021) exited with code 3
+
+Логи Nginx:
+2025/03/28 01:07:57 [error] 31907#31907: *1 connect() failed (111: Unknown error) while connecting to upstream, client: 141.98.11.226, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:5000/", host: "qwerfdsa.xyz"
+2025/03/28 01:07:58 [error] 31907#31907: *3 connect() failed (111: Unknown error) while connecting to upstream, client: 127.0.0.1, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:5000/", host: "localhost"
+2025/03/28 01:08:00 [error] 31907#31907: *5 connect() failed (111: Unknown error) while connecting to upstream, client: 213.109.147.201, server: _, request: "GET / HTTP/1.1", upstream: "http://127.0.0.1:5000/", host: "62.60.246.246"
+2025/03/28 01:08:00 [error] 31907#31907: *6 connect() failed (111: Unknown error) while connecting to upstream, client: 213.109.147.201, server: _, request: "GET /favicon.ico HTTP/1.1", upstream: "http://127.0.0.1:5000/favicon.ico", host: "62.60.246.246", referrer: "http://62.60.246.246/"
+
+Логи PostgreSQL:
+Лог-файл не найден
+
+Проверка базы данных:
+--------------------------------------
+could not change directory to "/root": Permission denied
+База данных 'rpcc': существует
+could not change directory to "/root": Permission denied
+Пользователь БД 'rpcc': существует
+
+Рекомендации по устранению неполадок:
+--------------------------------------
+1. Перезапустить сервисы: systemctl restart reverse_proxy_control_center nginx postgresql
+2. Проверить полные логи: journalctl -u reverse_proxy_control_center -n 50
+3. Проверить конфигурацию Nginx: nginx -t
+4. Проверить разрешения файлов: ls -la /opt/reverse_proxy_control_center
+5. Если проблемы сохраняются, выполните полную переустановку.
+root@test8:~# 
