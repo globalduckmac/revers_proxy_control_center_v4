@@ -27,10 +27,18 @@ apt-get install -y git netcat curl wget
 TEMP_DIR=$(mktemp -d)
 cd $TEMP_DIR
 
+# Настраиваем Git для обхода проблемы с dubious ownership
+echo -e "${GREEN}[INFO]${NC} Настройка Git для безопасной работы с репозиторием..."
+git config --global --add safe.directory "$(pwd)"
+git config --global --add safe.directory "/opt/reverse_proxy_control_center"
+
 # Клонируем репозиторий
 echo -e "${GREEN}[INFO]${NC} Загрузка установщика..."
 git clone https://github.com/globalduckmac/revers_proxy_control_center_v3.git
 cd revers_proxy_control_center_v3
+
+# Добавляем директорию репозитория в безопасные
+git config --global --add safe.directory "$(pwd)"
 
 # Запускаем установщик
 echo -e "${GREEN}[INFO]${NC} Запуск установщика..."

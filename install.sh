@@ -89,6 +89,14 @@ else
     info "Директория для логов $LOG_DIR уже существует"
 fi
 
+# Настраиваем Git для обхода проблемы с dubious ownership
+info "Настройка Git для безопасной работы с репозиторием..."
+git config --global --add safe.directory $APP_DIR
+git config --global --add safe.directory "$(pwd)"
+if [ -d "revers_proxy_control_center_v3" ]; then
+    git config --global --add safe.directory "$(pwd)/revers_proxy_control_center_v3"
+fi
+
 # Копируем файлы проекта
 info "Копирование файлов проекта..."
 if [ -d "revers_proxy_control_center_v3" ]; then
