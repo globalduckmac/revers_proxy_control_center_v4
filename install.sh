@@ -115,7 +115,7 @@ if [ -f "$APP_DIR/dependencies.txt" ]; then
     pip install -r "$APP_DIR/dependencies.txt"
 else
     info "Файл dependencies.txt не найден, устанавливаем основные зависимости..."
-    pip install psycopg2-binary cryptography dnspython email-validator flask flask-login flask-sqlalchemy flask-wtf glances gunicorn jinja2 paramiko python-telegram-bot pytz requests sqlalchemy werkzeug
+    pip install psycopg2-binary cryptography dnspython email-validator flask flask-login flask-sqlalchemy flask-wtf "glances>=4.3.1" gunicorn jinja2 paramiko python-telegram-bot pytz requests sqlalchemy werkzeug
 fi
 
 # Проверяем наличие файла main.py

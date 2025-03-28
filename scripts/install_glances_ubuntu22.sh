@@ -17,9 +17,10 @@ apt-get update
 echo "Установка Python3-pip и зависимостей..."
 apt-get install -y python3-pip curl net-tools lsof jq
 
-# Устанавливаем Glances через pip для получения актуальной версии
+# Устанавливаем Glances через pip в совместимой версии
 echo "Установка Glances через pip..."
-pip3 install --upgrade glances
+pip3 install --upgrade pip setuptools wheel
+pip3 install "glances[web]<=5.0"
 
 # Устанавливаем необходимые зависимости для веб-сервера
 echo "Установка веб-зависимостей..."

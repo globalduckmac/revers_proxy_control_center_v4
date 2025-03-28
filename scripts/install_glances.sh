@@ -14,8 +14,9 @@ apt-get install -y -qq python3 python3-pip python3-dev build-essential superviso
 
 # Создаем виртуальное окружение для Glances
 echo "Создание окружения для Glances..."
-pip3 install -U pip
-pip3 install glances[web]
+pip3 install -U pip setuptools wheel
+# Устанавливаем совместимую версию Glances
+pip3 install "glances[web]<=5.0"
 
 # Создаем файл конфигурации Glances
 echo "Настройка конфигурации Glances..."
