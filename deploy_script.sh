@@ -1,494 +1,160 @@
 #!/bin/bash
 
-# Автоматический скрипт развертывания для Reverse Proxy Control Center v3
-# Этот скрипт устанавливает все зависимости и настраивает приложение на Ubuntu 20.04+
-
-# Выход при любой ошибке
-set -e
+# Скрипт установки Reverse Proxy Control Center v3
+# Обновленная версия со всеми исправлениями
 
 # Цвета для вывода
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
+YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Функция для вывода заголовков
+# Функции для вывода
 print_header() {
     echo -e "\n${GREEN}=== $1 ===${NC}"
 }
 
-# Функция для вывода предупреждений
+print_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
 print_warning() {
-    echo -e "${YELLOW}ВНИМАНИЕ: $1${NC}"
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-# Функция для вывода ошибок
 print_error() {
-    echo -e "${RED}ОШИБКА: $1${NC}"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Обработка ошибок
-handle_error() {
-    print_error "Произошла ошибка при выполнении: $1"
-    print_error "Строка: $2"
-    exit 1
-}
-
-# Настраиваем перехват ошибок
-trap 'handle_error "$BASH_COMMAND" "$LINENO"' ERR
-
-print_header "Начало развертывания Reverse Proxy Control Center v3"
-
-# Создаем каталог для приложения
-APP_DIR="/opt/reverse_proxy_control_center"
-LOG_DIR="/var/log/reverse_proxy_control_center"
-print_header "Создание каталога приложения в $APP_DIR"
-sudo mkdir -p "$APP_DIR"
-sudo mkdir -p "$LOG_DIR"
-sudo chown $USER:$USER "$APP_DIR"
-sudo chown $USER:$USER "$LOG_DIR"
-
-# Настройка Git для безопасной работы с репозиторием
-print_header "Настройка Git для безопасной работы с репозиторием"
-git config --global --add safe.directory "$APP_DIR"
-git config --global --add safe.directory "$(pwd)"
-
-# Получение исходного кода
-print_header "Клонирование репозитория из GitHub"
-if [ ! -d "$APP_DIR/.git" ]; then
-    git clone https://github.com/globalduckmac/revers_proxy_control_center_v3.git "$APP_DIR"
-    cd "$APP_DIR"
-else
-    cd "$APP_DIR"
-    # Добавляем директорию в безопасные перед использованием git pull
-    git config --global --add safe.directory "$APP_DIR"
-    git pull
+# Проверка root-прав
+if [ "$(id -u)" != "0" ]; then
+   print_error "Этот скрипт должен быть запущен с правами root (sudo)"
+   exit 1
 fi
 
-# Обновление системных пакетов
-print_header "Обновление системных пакетов"
-sudo apt-get update
-sudo apt-get upgrade -y
-
-# Установка необходимых системных пакетов
-print_header "Установка системных зависимостей"
-sudo apt-get install -y python3 python3-pip python3-venv nginx postgresql postgresql-contrib git curl net-tools lsof jq certbot python3-certbot-nginx
-
-# Генерация случайных паролей
-DB_PASSWORD=$(openssl rand -hex 8)
-SESSION_SECRET=$(openssl rand -hex 16)
-ADMIN_PASSWORD=$(openssl rand -hex 8)
+# Начальные параметры
+APP_DIR="/opt/reverse_proxy_control_center"
 SERVER_IP=$(hostname -I | awk '{print $1}')
+SESSION_SECRET=$(openssl rand -hex 32)
+ADMIN_PASSWORD=$(openssl rand -base64 8 | tr -dc 'a-zA-Z0-9')
+DB_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9')
+
+print_header "Reverse Proxy Control Center v3 - Установка"
+print_info "Сервер: $SERVER_IP"
+print_info "Директория установки: $APP_DIR"
+
+# Установка зависимостей
+print_header "Установка зависимостей"
+apt update
+apt install -y git python3 python3-pip python3-venv nginx postgresql curl apt-transport-https ca-certificates
+
+# Создание директории приложения
+print_header "Подготовка файловой системы"
+mkdir -p "$APP_DIR"
+mkdir -p /var/log/reverse_proxy_control_center
+
+# Клонирование репозитория
+print_header "Клонирование репозитория"
+if [ -d "$APP_DIR/.git" ]; then
+    print_info "Репозиторий уже существует. Обновляем..."
+    cd "$APP_DIR"
+    git config --global --add safe.directory "$APP_DIR"
+    git reset --hard HEAD
+    git pull
+else
+    print_info "Клонируем репозиторий..."
+    rm -rf "$APP_DIR"/*
+    git clone https://github.com/globalduckmac/revers_proxy_control_center_v3.git "$APP_DIR"
+    git config --global --add safe.directory "$APP_DIR"
+fi
 
 # Настройка PostgreSQL
 print_header "Настройка PostgreSQL"
-if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='rpcc'" | grep -q 1; then
-    # Создаем пользователя и базу данных PostgreSQL
-    sudo -u postgres psql -c "CREATE USER rpcc WITH PASSWORD '$DB_PASSWORD';"
-    sudo -u postgres psql -c "CREATE DATABASE rpcc WITH OWNER rpcc;"
-    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE rpcc TO rpcc;"
-    sudo -u postgres psql -c "ALTER ROLE rpcc SET client_encoding TO 'utf8';"
-    sudo -u postgres psql -c "ALTER ROLE rpcc SET default_transaction_isolation TO 'read committed';"
-    sudo -u postgres psql -c "ALTER ROLE rpcc SET timezone TO 'UTC';"
-    echo "База данных PostgreSQL и пользователь созданы"
-else
-    echo "База данных уже существует, обновляем пароль пользователя"
-    sudo -u postgres psql -c "ALTER USER rpcc WITH PASSWORD '$DB_PASSWORD';"
+print_info "Проверка статуса PostgreSQL..."
+if ! systemctl is-active --quiet postgresql; then
+    print_info "Запускаем PostgreSQL..."
+    systemctl start postgresql
+    systemctl enable postgresql
 fi
 
-# Настройка Python-окружения
-print_header "Настройка Python-окружения"
-cd "$APP_DIR"
-python3 -m venv venv
-source venv/bin/activate
+print_info "Настройка базы данных..."
+if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='rpcc'" | grep -q 1; then
+    print_info "Пользователь базы данных 'rpcc' уже существует"
+else
+    print_info "Создание пользователя базы данных 'rpcc'..."
+    sudo -u postgres psql -c "CREATE USER rpcc WITH PASSWORD '$DB_PASSWORD';"
+fi
 
-# Установка Python-зависимостей
-print_header "Установка Python-зависимостей"
-pip install --upgrade pip setuptools wheel
-pip install psycopg2-binary cryptography dnspython email-validator flask flask-login flask-sqlalchemy flask-wtf "glances[web]<=5.0" gunicorn jinja2 paramiko python-telegram-bot pytz requests sqlalchemy werkzeug
+if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='rpcc'" | grep -q 1; then
+    print_info "База данных 'rpcc' уже существует"
+else
+    print_info "Создание базы данных 'rpcc'..."
+    sudo -u postgres psql -c "CREATE DATABASE rpcc OWNER rpcc;"
+fi
 
-# Конфигурация приложения
-print_header "Настройка конфигурации приложения"
-cat > "$APP_DIR/.env" <<EOF
-# Настройки окружения для Reverse Proxy Control Center v3
-FLASK_APP=main.py
-FLASK_ENV=production
-FLASK_CONFIG=production
-SESSION_SECRET=$SESSION_SECRET
-DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc
-
-# Настройки SSH
-SSH_TIMEOUT=60
-SSH_COMMAND_TIMEOUT=300
-
-# Настройки электронной почты для SSL сертификатов
-ADMIN_EMAIL=admin@example.com
-
-# Настройки Telegram (необязательно)
-# TELEGRAM_BOT_TOKEN=your_bot_token
-# TELEGRAM_CHAT_ID=your_chat_id
-
-# Настройки FFPanel (необязательно)
-# FFPANEL_TOKEN=your_ffpanel_token
-
-# Настройки GitHub (необязательно)
-# GITHUB_TOKEN=your_github_token
-EOF
-
-# Создание systemd сервиса
-print_header "Создание systemd сервиса"
-sudo tee /etc/systemd/system/reverse_proxy_control_center.service > /dev/null <<EOF
-[Unit]
-Description=Reverse Proxy Control Center v3
-After=network.target postgresql.service
-
-[Service]
-User=$USER
-WorkingDirectory=$APP_DIR
-ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile $LOG_DIR/access.log --error-logfile $LOG_DIR/error.log main:app
-Restart=always
-RestartSec=5
-Environment="PATH=$APP_DIR/venv/bin"
-Environment="SESSION_SECRET=$SESSION_SECRET"
-Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Создаем директорию для переопределений systemd
-sudo mkdir -p /etc/systemd/system/reverse_proxy_control_center.service.d/
-sudo tee /etc/systemd/system/reverse_proxy_control_center.service.d/override.conf > /dev/null <<EOF
-[Service]
-# Увеличиваем лимиты
-LimitNOFILE=65536
-# Добавляем задержку перед запуском для уверенности, что PostgreSQL полностью готов
-ExecStartPre=/bin/sleep 2
-EOF
-
-# Создание скрипта для инициализации базы данных и администратора
-print_header "Создание скрипта инициализации"
-cat > "$APP_DIR/init_db.py" <<EOF
-from app import app, db
-from models import User
-from werkzeug.security import generate_password_hash
-import sys
-
-def init_db():
-    """Инициализация базы данных"""
-    with app.app_context():
-        # Создаем таблицы
-        db.create_all()
-        print("База данных инициализирована")
-        return True
-
-def create_admin():
-    """Создание администратора если его нет"""
-    with app.app_context():
-        # Проверяем, существует ли пользователь admin
-        admin = User.query.filter_by(username='admin').first()
-        
-        if admin:
-            print("Администратор уже существует. Обновляем пароль...")
-            admin.password_hash = generate_password_hash("$ADMIN_PASSWORD")
-        else:
-            print("Создаем нового администратора...")
-            admin = User(
-                username='admin',
-                email='admin@example.com',
-                password_hash=generate_password_hash("$ADMIN_PASSWORD"),
-                is_admin=True
-            )
-            db.session.add(admin)
-        
-        db.session.commit()
-        print("Администратор успешно создан/обновлен!")
-        return True
-
-if __name__ == "__main__":
-    success = init_db() and create_admin()
-    sys.exit(0 if success else 1)
-EOF
-
-# Настройка файлов проекта для использования PostgreSQL
-print_header "Настройка файлов для использования PostgreSQL"
-
-# Обновляем config.py для использования PostgreSQL
+# Настройка конфигурации
+print_header "Обновление файла конфигурации"
 if [ -f "$APP_DIR/config.py" ]; then
-    # Заменяем строку с MySQL на PostgreSQL
+    # Обновляем строку подключения к базе данных на PostgreSQL
     sed -i "s|'mysql://root:password@localhost/reverse_proxy_manager'|'postgresql://rpcc:$DB_PASSWORD@localhost/rpcc'|g" "$APP_DIR/config.py"
-    echo "Файл config.py успешно обновлен для использования PostgreSQL"
+    print_info "Файл config.py успешно обновлен для использования PostgreSQL"
 else
     print_warning "Файл config.py не найден. Пропускаем обновление."
 fi
 
-# Принудительно исправляем app.py для прямого подключения к PostgreSQL
-if [ -f "$APP_DIR/app.py" ]; then
-    print_header "Исправление app.py для прямого использования PostgreSQL"
-    # Создаем резервную копию оригинального файла
-    cp "$APP_DIR/app.py" "$APP_DIR/app.py.backup"
-    
-    # Заменяем настройки подключения к базе данных в app.py
-    cat > "$APP_DIR/app.py" <<EOF
-import os
-from datetime import datetime
+# Настройка виртуального окружения Python
+print_header "Настройка виртуального окружения Python"
+cd "$APP_DIR"
 
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-db = SQLAlchemy(model_class=Base)
-app = Flask(__name__)
-
-# Настройка секретного ключа
-app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
-
-# Настройка подключения к базе данных PostgreSQL
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "postgresql://rpcc:$DB_PASSWORD@localhost/rpcc")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,
-    "pool_pre_ping": True,
-}
-
-# Инициализация приложения с расширением
-db.init_app(app)
-
-
-# Функция для добавления текущей даты/времени в шаблоны
-@app.context_processor
-def inject_now():
-    return dict(now=datetime.utcnow())
-
-
-# Регистрация всех маршрутов
-def register_blueprints(app):
-    from flask_login import LoginManager
-    # Импортируем все маршруты
-    import routes.auth
-    import routes.domain
-    import routes.server
-    import routes.settings
-    import routes.admin
-    import routes.monitoring
-    import routes.glances
-    
-    # Регистрируем маршруты с правильными именами переменных
-    app.register_blueprint(routes.auth.bp)
-    app.register_blueprint(routes.server.bp)
-    app.register_blueprint(routes.domain.bp)
-    app.register_blueprint(routes.settings.bp)
-    app.register_blueprint(routes.admin.bp)
-    app.register_blueprint(routes.monitoring.bp)
-    app.register_blueprint(routes.glances.bp)
-    
-    login_manager = LoginManager()
-    login_manager.login_view = 'auth.login'
-    login_manager.init_app(app)
-    
-    from models import User
-    
-    @login_manager.user_loader
-    def load_user(user_id):
-        return User.query.get(int(user_id))
-
-
-register_blueprints(app)
-
-with app.app_context():
-    # Импортируем модели здесь, чтобы их таблицы были созданы
-    import models  # noqa: F401
-    
-    # Создаем таблицы в базе данных
-    try:
-        db.create_all()
-        print("База данных инициализирована успешно")
-    except Exception as e:
-        print(f"Ошибка инициализации базы данных: {e}")
-EOF
-    
-    echo "Файл app.py успешно обновлен для использования PostgreSQL"
+if [ -d "$APP_DIR/venv" ]; then
+    print_info "Виртуальное окружение уже существует. Обновляем..."
 else
-    print_error "Файл app.py не найден! Критическая ошибка."
-    exit 1
+    print_info "Создание виртуального окружения..."
+    python3 -m venv venv
 fi
 
-# Создаем прямой скрипт для инициализации базы данных без зависимостей
-print_header "Создание прямого скрипта инициализации базы данных"
-cat > "$APP_DIR/simple_init_db.py" <<EOF
-#!/usr/bin/env python3
-"""
-Прямой скрипт для инициализации базы данных и создания администратора
-без каких-либо импортов из приложения.
-"""
-import os
-import sys
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from werkzeug.security import generate_password_hash
-from datetime import datetime
+print_info "Установка зависимостей Python..."
+"$APP_DIR/venv/bin/pip" install --upgrade pip
+"$APP_DIR/venv/bin/pip" install flask flask-login flask-sqlalchemy flask-wtf gunicorn psycopg2-binary python-telegram-bot==13.15 pytz requests cryptography jinja2 werkzeug dnspython email-validator paramiko pymysql
 
-# Получаем строку подключения из переменной окружения или используем параметр
-db_url = os.environ.get('DATABASE_URL', 'postgresql://rpcc:$DB_PASSWORD@localhost/rpcc')
+# Установка прав доступа
+print_header "Настройка прав доступа"
+chown -R www-data:www-data "$APP_DIR"
+chmod -R 755 "$APP_DIR"
+chown -R www-data:www-data /var/log/reverse_proxy_control_center
 
-# Создаем engine и базовый класс для моделей
-Base = declarative_base()
-engine = create_engine(db_url)
-Session = sessionmaker(bind=engine)
-session = Session()
-
-# Определяем минимальную модель пользователя
-class User(Base):
-    __tablename__ = 'user'
-    
-    id = Column(Integer, primary_key=True)
-    username = Column(String(64), unique=True, nullable=False)
-    email = Column(String(120), unique=True, nullable=False)
-    password_hash = Column(String(256))
-    is_admin = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_login = Column(DateTime)
-    
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-def init_db():
-    """Создание таблиц в базе данных"""
-    print(f"Подключение к базе данных: {db_url}")
-    try:
-        # Создаем все таблицы
-        Base.metadata.create_all(engine)
-        print("Таблицы успешно созданы")
-        return True
-    except Exception as e:
-        print(f"Ошибка при создании таблиц: {e}")
-        return False
-
-def create_admin():
-    """Создание администратора"""
-    try:
-        # Проверяем, существует ли администратор
-        admin = session.query(User).filter_by(username='admin').first()
-        
-        if admin:
-            print("Обновление существующего администратора")
-            admin.password_hash = generate_password_hash('$ADMIN_PASSWORD')
-        else:
-            print("Создание нового администратора")
-            admin = User(
-                username='admin',
-                email='admin@example.com',
-                password_hash=generate_password_hash('$ADMIN_PASSWORD'),
-                is_admin=True,
-                created_at=datetime.utcnow()
-            )
-            session.add(admin)
-        
-        session.commit()
-        print("Администратор успешно создан/обновлен")
-        return True
-    except Exception as e:
-        session.rollback()
-        print(f"Ошибка при создании администратора: {e}")
-        return False
-
-if __name__ == '__main__':
-    print("Начало инициализации базы данных")
-    if init_db() and create_admin():
-        print("Инициализация базы данных успешно завершена")
-        sys.exit(0)
-    else:
-        print("Ошибка при инициализации базы данных")
-        sys.exit(1)
-EOF
-
-chmod +x "$APP_DIR/simple_init_db.py"
-
-# Инициализация базы данных и создание админа
-print_header "Инициализация базы данных и создание администратора"
-cd "$APP_DIR"
-source "$APP_DIR/venv/bin/activate"
-# Устанавливаем переменную окружения DATABASE_URL перед запуском
-export DATABASE_URL="postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
-export FLASK_APP=main.py
-export SQLALCHEMY_DATABASE_URI="postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
-
-# Запускаем прямой скрипт инициализации
-print_header "Запуск прямой инициализации БД (без зависимостей от приложения)"
-python "$APP_DIR/simple_init_db.py"
-
-# Если скрипт не сработал, пробуем напрямую через psql
-if [ $? -ne 0 ]; then
-    print_warning "Ошибка при запуске скрипта инициализации. Пробуем через SQL..."
-    
-    # Создаем SQL-скрипт для инициализации базы данных
-    cat > /tmp/init_db.sql <<EOF
--- Создаем таблицу пользователей, если она не существует
-CREATE TABLE IF NOT EXISTS "user" (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(64) NOT NULL UNIQUE,
-    email VARCHAR(120) NOT NULL UNIQUE,
-    password_hash VARCHAR(256),
-    is_admin BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    last_login TIMESTAMP WITHOUT TIME ZONE
-);
-
--- Проверяем существование администратора
-DO \$\$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM "user" WHERE username = 'admin') THEN
-        -- Добавляем администратора
-        INSERT INTO "user" (username, email, password_hash, is_admin, created_at)
-        VALUES ('admin', 'admin@example.com', '$2b$12$lW.rRKfEaAEAcePFB8N.nuk4XzRPTtA/MvO71hKL2mPyUUGc6nw7i', TRUE, CURRENT_TIMESTAMP);
-        RAISE NOTICE 'Администратор создан';
-    ELSE
-        -- Обновляем пароль администратора
-        UPDATE "user" SET password_hash = '$2b$12$lW.rRKfEaAEAcePFB8N.nuk4XzRPTtA/MvO71hKL2mPyUUGc6nw7i' WHERE username = 'admin';
-        RAISE NOTICE 'Пароль администратора обновлен';
-    END IF;
-END
-\$\$;
-EOF
-    
-    # Выполняем SQL-скрипт
-    sudo -u postgres psql -d rpcc -f /tmp/init_db.sql
-    
-    # Удаляем временный файл
-    rm /tmp/init_db.sql
-    
-    if [ $? -eq 0 ]; then
-        echo "База данных успешно инициализирована через SQL"
+# Исправление импортов если есть проблема с routes.domain vs routes.domains
+print_header "Проверка и исправление импортов"
+if [ -f "$APP_DIR/app.py" ]; then
+    # Запускаем скрипт fix_imports.sh если он есть
+    if [ -f "$APP_DIR/fix_imports.sh" ]; then
+        print_info "Запускаем скрипт исправления импортов..."
+        cd "$APP_DIR"
+        bash fix_imports.sh
     else
-        print_error "Ошибка при инициализации базы данных через SQL"
+        print_info "Исправляем импорты вручную..."
+        if grep -q "routes\.domain" "$APP_DIR/app.py"; then
+            print_info "Найдены ссылки на routes.domain, исправляем на routes.domains..."
+            sed -i 's/import routes\.domain/import routes.domains/g' "$APP_DIR/app.py"
+            sed -i 's/from routes\.domain import/from routes.domains import/g' "$APP_DIR/app.py" 
+            sed -i 's/routes\.domain\./routes.domains./g' "$APP_DIR/app.py"
+        fi
+        
+        if grep -q "routes\.server" "$APP_DIR/app.py"; then
+            print_info "Найдены ссылки на routes.server, исправляем на routes.servers..."
+            sed -i 's/import routes\.server/import routes.servers/g' "$APP_DIR/app.py"
+            sed -i 's/from routes\.server import/from routes.servers import/g' "$APP_DIR/app.py"
+            sed -i 's/routes\.server\./routes.servers./g' "$APP_DIR/app.py"
+        fi
     fi
 fi
 
-# Настройка Nginx в качестве обратного прокси
-print_header "Настройка Nginx обратного прокси"
-sudo tee /etc/nginx/sites-available/reverse_proxy_control_center > /dev/null <<EOF
+# Настройка Nginx
+print_header "Настройка Nginx"
+cat > /etc/nginx/sites-available/reverse_proxy_control_center << EOF
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;  # Замените на ваше доменное имя для продакшена
-
-    # Логи
-    access_log /var/log/nginx/rpcc_access.log;
-    error_log /var/log/nginx/rpcc_error.log;
-
-    # Основные настройки
-    client_max_body_size 50m;
-    
-    # Таймауты для лучшей совместимости с долгими запросами
-    proxy_connect_timeout 300s;
-    proxy_send_timeout 300s;
-    proxy_read_timeout 300s;
+    listen 80;
+    server_name $SERVER_IP;
 
     location / {
         proxy_pass http://localhost:5000;
@@ -496,42 +162,22 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        
-        # Параметры WebSocket (если используются)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        
-        # Буферизация ответов
-        proxy_buffering on;
-        proxy_buffer_size 8k;
-        proxy_buffers 8 8k;
-    }
-
-    location /static {
-        alias $APP_DIR/static;
-        expires 7d;
-        add_header Cache-Control "public";
-    }
-    
-    # Статус Nginx для мониторинга
-    location /nginx_status {
-        stub_status on;
-        access_log off;
-        allow 127.0.0.1;  # Разрешить доступ только с localhost
-        deny all;         # Запретить все остальные
     }
 }
 EOF
 
-# Включаем сайт и перезапускаем Nginx
-sudo ln -sf /etc/nginx/sites-available/reverse_proxy_control_center /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default  # Удаляем дефолтный сайт
-
-# Проверяем конфигурацию Nginx
-if sudo nginx -t; then
-    sudo systemctl restart nginx
+# Включение сайта Nginx
+if [ -f /etc/nginx/sites-enabled/reverse_proxy_control_center ]; then
+    print_info "Конфигурация Nginx уже включена"
 else
+    ln -s /etc/nginx/sites-available/reverse_proxy_control_center /etc/nginx/sites-enabled/
+    print_info "Конфигурация Nginx успешно включена"
+fi
+
+# Проверка конфигурации Nginx
+print_info "Проверка конфигурации Nginx..."
+nginx -t
+if [ $? -ne 0 ]; then
     print_error "Ошибка в конфигурации Nginx. Пожалуйста, проверьте и исправьте ошибки."
     exit 1
 fi
@@ -663,6 +309,28 @@ EOFGLANCES
 # Делаем скрипт исполняемым
 sudo chmod +x "$APP_DIR/install_glances.sh"
 
+# Создание systemd сервиса
+print_header "Создание systemd сервиса"
+cat > /etc/systemd/system/reverse_proxy_control_center.service << EOF
+[Unit]
+Description=Reverse Proxy Control Center v3
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=$APP_DIR
+Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
+Environment="SESSION_SECRET=$SESSION_SECRET"
+ExecStartPre=/bin/sleep 2
+ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log main:app
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # Создание инструмента для диагностики
 print_header "Создание инструмента диагностики"
 sudo tee /usr/local/bin/rpcc-diagnose > /dev/null <<'EOF'
@@ -746,6 +414,10 @@ print_header "Запуск сервиса"
 sudo systemctl daemon-reload
 sudo systemctl enable reverse_proxy_control_center
 sudo systemctl restart reverse_proxy_control_center
+
+# Перезагрузка Nginx
+print_header "Перезапуск Nginx"
+systemctl reload nginx
 
 # Сохраняем учетные данные в файл
 sudo tee /root/rpcc_credentials.txt > /dev/null <<EOF
