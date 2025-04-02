@@ -1,0 +1,164 @@
+{% extends 'layout.html' %}
+
+{% block title %}Proxy Configurations - {{ server.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Proxy Configurations</h1>
+        <p class="lead">Server: {{ server.name }} ({{ server.ip_address }})</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Servers
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Current Configuration Preview</h5>
+                <div>
+                    <a href="{{ url_for('proxy.deploy', server_id=server.id) }}" class="btn btn-sm btn-light">
+                        <i class="fas fa-upload"></i> Deploy Configuration
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if config_preview %}
+                <ul class="nav nav-tabs" id="configTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="main-tab" data-bs-toggle="tab" data-bs-target="#main-config" type="button" role="tab" aria-controls="main-config" aria-selected="true">
+                            nginx.conf
+                        </button>
+                    </li>
+                    {% for domain_name, site_config in config_preview.site_configs.items() %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="site-{{ loop.index }}-tab" data-bs-toggle="tab" data-bs-target="#site-{{ loop.index }}" type="button" role="tab" aria-controls="site-{{ loop.index }}" aria-selected="false">
+                            {{ domain_name }}
+                        </button>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <div class="tab-content p-3 border border-top-0 rounded-bottom" id="configTabsContent">
+                    <div class="tab-pane fade show active" id="main-config" role="tabpanel" aria-labelledby="main-tab">
+                        <pre class="bg-dark text-light p-3 rounded"><code>{{ config_preview.main_config }}</code></pre>
+                    </div>
+                    {% for domain_name, site_config in config_preview.site_configs.items() %}
+                    <div class="tab-pane fade" id="site-{{ loop.index }}" role="tabpanel" aria-labelledby="site-{{ loop.index }}-tab">
+                        <pre class="bg-dark text-light p-3 rounded"><code>{{ site_config }}</code></pre>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-warning alert-permanent">
+                    <h5>Configuration Preview Not Available</h5>
+                    <p>
+                        Unable to generate a configuration preview. Possible reasons:
+                    </p>
+                    <ul>
+                        <li>No domains are associated with this server</li>
+                        <li>There was an error generating the configuration</li>
+                    </ul>
+                    <p>
+                        Please assign domains to this server through domain groups and try again.
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Deployment History</h5>
+            </div>
+            <div class="card-body">
+                {% if configs %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for config in configs %}
+                            <tr>
+                                <td>{{ config.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>
+                                    {% if config.status == 'deployed' %}
+                                    <span class="badge bg-success">Deployed</span>
+                                    {% elif config.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-info" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#configModal{{ config.id }}">
+                                        <i class="fas fa-eye"></i> View
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <!-- Modal for Config Content -->
+                            <div class="modal fade" id="configModal{{ config.id }}" tabindex="-1" 
+                                 aria-labelledby="configModalLabel{{ config.id }}" aria-hidden="true">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="configModalLabel{{ config.id }}">
+                                                Configuration from {{ config.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <pre class="bg-dark text-light p-3 rounded"><code>{{ config.config_content }}</code></pre>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info alert-permanent">
+                    <p>No configurations have been deployed to this server yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Enable Bootstrap tabs
+    document.addEventListener('DOMContentLoaded', function() {
+        const triggerTabList = Array.from(document.querySelectorAll('#configTabs button'));
+        triggerTabList.forEach(function(triggerEl) {
+            const tabTrigger = new bootstrap.Tab(triggerEl);
+            triggerEl.addEventListener('click', function(event) {
+                event.preventDefault();
+                tabTrigger.show();
+            });
+        });
+    });
+</script>
+{% endblock %}

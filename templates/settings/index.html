@@ -1,0 +1,251 @@
+{% extends "layout.html" %}
+
+{% block title %}Системные настройки{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Системные настройки</h1>
+        <div>
+            <a href="{{ url_for('auth.dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Назад к панели управления
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-primary bg-opacity-75 text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-cogs me-2"></i> Настройки системы
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Настройте параметры системы для правильной работы всех компонентов. 
+                Изменения будут применены немедленно.
+            </p>
+
+            <form action="{{ url_for('settings.update') }}" method="POST">
+                <h5 class="mt-4 mb-3 border-bottom pb-2">Настройки уведомлений Telegram</h5>
+                
+                {% for setting in settings %}
+                    {% if setting.key.startswith('telegram_') %}
+                    <div class="mb-3">
+                        <label for="setting_{{ setting.key }}" class="form-label">
+                            {{ setting.description }}
+                        </label>
+                        
+                        <div class="input-group">
+                            {% if setting.is_encrypted %}
+                            <input type="password" class="form-control" 
+                                   id="setting_{{ setting.key }}" 
+                                   name="setting_{{ setting.key }}" 
+                                   placeholder="{% if setting.value %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
+                                   autocomplete="off">
+                            <input type="hidden" name="has_value_{{ setting.key }}" value="{% if setting.value %}1{% else %}0{% endif %}">
+                            <button class="btn btn-outline-secondary toggle-password-btn" type="button" data-target="setting_{{ setting.key }}">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            {% else %}
+                            <input type="text" class="form-control" 
+                                   id="setting_{{ setting.key }}" 
+                                   name="setting_{{ setting.key }}" 
+                                   value="{{ setting.get_value(setting.key) or '' }}" 
+                                   autocomplete="off">
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-text text-muted small">
+                            {% if setting.key == 'telegram_bot_token' %}
+                            Токен бота, полученный от @BotFather в Telegram.
+                            {% elif setting.key == 'telegram_chat_id' %}
+                            ID чата или группы для отправки уведомлений.
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                <h5 class="mt-4 mb-3 border-bottom pb-2">Настройки интеграции с FFPanel</h5>
+                
+                {% for setting in settings %}
+                    {% if setting.key.startswith('ffpanel_') %}
+                    <div class="mb-3">
+                        <label for="setting_{{ setting.key }}" class="form-label">
+                            {{ setting.description }}
+                        </label>
+                        
+                        <div class="input-group">
+                            {% if setting.is_encrypted %}
+                            <input type="password" class="form-control" 
+                                   id="setting_{{ setting.key }}" 
+                                   name="setting_{{ setting.key }}" 
+                                   placeholder="{% if setting.value %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
+                                   autocomplete="off">
+                            <input type="hidden" name="has_value_{{ setting.key }}" value="{% if setting.value %}1{% else %}0{% endif %}">
+                            <button class="btn btn-outline-secondary toggle-password-btn" type="button" data-target="setting_{{ setting.key }}">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            {% else %}
+                            <input type="text" class="form-control" 
+                                   id="setting_{{ setting.key }}" 
+                                   name="setting_{{ setting.key }}" 
+                                   value="{{ setting.get_value(setting.key) or '' }}" 
+                                   autocomplete="off">
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                <h5 class="mt-4 mb-3 border-bottom pb-2">Другие интеграции</h5>
+                
+                {% for setting in settings %}
+                    {% if not setting.key.startswith('telegram_') and not setting.key.startswith('ffpanel_') %}
+                    <div class="mb-3">
+                        <label for="setting_{{ setting.key }}" class="form-label">
+                            {{ setting.description }}
+                        </label>
+                        
+                        <div class="input-group">
+                            {% if setting.is_encrypted %}
+                            <input type="password" class="form-control" 
+                                   id="setting_{{ setting.key }}" 
+                                   name="setting_{{ setting.key }}" 
+                                   placeholder="{% if setting.value %}Значение установлено (скрыто){% else %}Значение не установлено{% endif %}"
+                                   autocomplete="off">
+                            <input type="hidden" name="has_value_{{ setting.key }}" value="{% if setting.value %}1{% else %}0{% endif %}">
+                            <button class="btn btn-outline-secondary toggle-password-btn" type="button" data-target="setting_{{ setting.key }}">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            {% else %}
+                            <input type="text" class="form-control" 
+                                   id="setting_{{ setting.key }}" 
+                                   name="setting_{{ setting.key }}" 
+                                   value="{{ setting.get_value(setting.key) or '' }}" 
+                                   autocomplete="off">
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i> Сохранить настройки
+                    </button>
+                    <a href="{{ url_for('auth.dashboard') }}" class="btn btn-secondary ms-2">
+                        Отмена
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-info bg-opacity-75 text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-info-circle me-2"></i> Информация о системе
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Проверка подключения Telegram:</strong> 
+                        <a href="{{ url_for('test_telegram_debug') }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-paper-plane me-1"></i> Отправить тестовое сообщение
+                        </a>
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Версия приложения:</strong> {{ version_info.version }}</p>
+                    <p><strong>Ветка:</strong> {{ version_info.branch }}</p>
+                    <p><strong>Последний коммит:</strong> {{ version_info.last_commit }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-warning bg-opacity-75 text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-sync-alt me-2"></i> Обновление приложения
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i> 
+                Внимание! Обновление приложения загрузит последнюю версию кода из GitHub и может потребовать перезапуска сервера.
+            </div>
+            
+            <form action="{{ url_for('settings.update_app') }}" method="POST" class="mt-3" onsubmit="return confirm('Вы уверены, что хотите обновить приложение? Это действие обновит код и может потребовать перезапуска сервера.');">
+                <div class="row align-items-end">
+                    <div class="col-md-6 mb-3">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-sync-alt me-1"></i> Обновить приложение из GitHub
+                        </button>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" value="true" id="restart" name="restart">
+                            <label class="form-check-label" for="restart">
+                                Перезапустить сервис после обновления
+                            </label>
+                        </div>
+                        <div class="input-group">
+                            <div class="input-group-text">Имя сервиса:</div>
+                            <input type="text" class="form-control" id="service_name" name="service_name" 
+                                   placeholder="reverseproxy" value="">
+                        </div>
+                        <small class="form-text text-muted">Укажите имя systemd сервиса для перезапуска</small>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Скрипт для показа/скрытия паролей
+    document.addEventListener('DOMContentLoaded', function() {
+        // Показ/скрытие паролей
+        const toggleButtons = document.querySelectorAll('.toggle-password-btn');
+        
+        toggleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const inputField = document.getElementById(targetId);
+                const icon = this.querySelector('i');
+                
+                if (inputField.type === 'password') {
+                    inputField.type = 'text';
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    inputField.type = 'password';
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        });
+        
+        // Управление полем ввода имени сервиса
+        const restartCheckbox = document.getElementById('restart');
+        const serviceNameInput = document.getElementById('service_name');
+        
+        // Устанавливаем начальное состояние
+        serviceNameInput.disabled = !restartCheckbox.checked;
+        
+        // Добавляем обработчик события изменения чекбокса
+        restartCheckbox.addEventListener('change', function() {
+            serviceNameInput.disabled = !this.checked;
+            
+            if (this.checked) {
+                serviceNameInput.focus();
+            }
+        });
+    });
+</script>
+{% endblock %}

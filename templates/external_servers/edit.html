@@ -1,0 +1,168 @@
+{% extends 'layout.html' %}
+
+{% block title %}Редактирование внешнего сервера{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-lg-8 col-md-10 mx-auto">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h1 class="h3 mb-0"><i class="fas fa-server"></i> Редактирование сервера: {{ server.name }}</h1>
+                    <div>
+                        <form action="{{ url_for('external_servers.test_external_server', server_id=server.id) }}" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-outline-primary">
+                                <i class="fas fa-sync-alt"></i> Проверить соединение
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('external_servers.edit_external_server', server_id=server.id) }}">
+                        {{ form.csrf_token }}
+                        
+                        <div class="mb-3">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> Внешние серверы мониторятся только через Glances API без доступа по SSH.
+                                <br>
+                                Убедитесь, что на сервере установлен и запущен Glances в режиме веб-сервера:
+                                <code>glances -w</code>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.name.id }}" class="form-label">{{ form.name.label }}</label>
+                                    {{ form.name(class="form-control") }}
+                                    {% if form.name.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.name.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.ip_address.id }}" class="form-label">{{ form.ip_address.label }}</label>
+                                    {{ form.ip_address(class="form-control") }}
+                                    {% if form.ip_address.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.ip_address.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.glances_port.id }}" class="form-label">{{ form.glances_port.label }}</label>
+                                    {{ form.glances_port(class="form-control") }}
+                                    {% if form.glances_port.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.glances_port.errors %}
+                                        {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                    <div class="form-text">Порт, на котором запущен веб-интерфейс Glances (по умолчанию 61208).</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3 mt-4">
+                                    <div class="form-check form-switch">
+                                        {{ form.is_active(class="form-check-input") }}
+                                        <label class="form-check-label" for="{{ form.is_active.id }}">{{ form.is_active.label }}</label>
+                                    </div>
+                                    <div class="form-text">Если флаг активен, сервер будет включен в регулярные проверки.</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.description.id }}" class="form-label">{{ form.description.label }}</label>
+                            {{ form.description(class="form-control", rows=3) }}
+                            {% if form.description.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.description.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h5 class="mb-0">Статус сервера</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p>
+                                            <strong>Текущий статус:</strong>
+                                            {% if server.last_status == 'online' %}
+                                            <span class="badge bg-success">Онлайн</span>
+                                            {% elif server.last_status == 'offline' %}
+                                            <span class="badge bg-danger">Оффлайн</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">Не проверялся</span>
+                                            {% endif %}
+                                        </p>
+                                        <p>
+                                            <strong>Последняя проверка:</strong>
+                                            {{ server.last_check|humanize_timestamp if server.last_check else 'Нет данных' }}
+                                        </p>
+                                        <a href="{{ url_for('external_servers.monitor_external_server', server_id=server.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-chart-line"></i> Мониторинг
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mt-4">
+                            <div>
+                                <a href="{{ url_for('external_servers.list_external_servers') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left"></i> Назад
+                                </a>
+                                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteServerModal">
+                                    <i class="fas fa-trash-alt"></i> Удалить
+                                </button>
+                            </div>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal для подтверждения удаления -->
+<div class="modal fade" id="deleteServerModal" tabindex="-1" aria-labelledby="deleteServerModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteServerModalLabel">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить сервер <strong>{{ server.name }}</strong>?</p>
+                <p>Это действие удалит все связанные с ним данные и не может быть отменено.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form action="{{ url_for('external_servers.delete_external_server', server_id=server.id) }}" method="post">
+                    <button type="submit" class="btn btn-danger">Удалить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

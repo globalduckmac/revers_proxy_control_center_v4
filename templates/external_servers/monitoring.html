@@ -1,0 +1,467 @@
+{% extends 'layout.html' %}
+
+{% block title %}Мониторинг внешнего сервера{% endblock %}
+
+{% block head %}
+<style>
+    .metric-card {
+        transition: all 0.3s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .metric-title {
+        font-size: 1rem;
+        color: #6c757d;
+    }
+    .chart-container {
+        height: 300px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>
+                    <i class="fas fa-server"></i> {{ server.name }}
+                    {% if server.last_status == 'online' %}
+                    <span class="badge bg-success">Онлайн</span>
+                    {% elif server.last_status == 'offline' %}
+                    <span class="badge bg-danger">Оффлайн</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Не проверен</span>
+                    {% endif %}
+                </h1>
+                
+                <div>
+                    <form action="{{ url_for('external_servers.check_external_server', server_id=server.id) }}" method="post" class="d-inline">
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="fas fa-sync-alt"></i> Обновить данные
+                        </button>
+                    </form>
+                    <a href="{{ url_for('external_servers.list_external_servers') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> К списку серверов
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Информация о сервере</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th style="width: 30%">IP-адрес:</th>
+                            <td>{{ server.ip_address }}</td>
+                        </tr>
+                        <tr>
+                            <th>Порт Glances:</th>
+                            <td>{{ server.glances_port }}</td>
+                        </tr>
+                        <tr>
+                            <th>Статус:</th>
+                            <td>
+                                {% if server.last_status == 'online' %}
+                                <span class="badge bg-success">Онлайн</span>
+                                {% elif server.last_status == 'offline' %}
+                                <span class="badge bg-danger">Оффлайн</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Не проверен</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Последняя проверка:</th>
+                            <td>{{ server.last_check|humanize_timestamp if server.last_check else 'Нет данных' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Описание:</th>
+                            <td>{{ server.description or 'Не указано' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100 metric-card">
+                        <div class="card-body text-center">
+                            <div class="metric-title">Загрузка CPU</div>
+                            <div class="metric-value text-primary">
+                                {% if cpu_metrics %}
+                                {{ "%.1f"|format(cpu_metrics.metric_value|float) }}%
+                                {% else %}
+                                <span class="text-muted">Нет данных</span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">
+                                {% if cpu_metrics %}
+                                Обновлено: {{ cpu_metrics.created_at|humanize_timestamp }}
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100 metric-card">
+                        <div class="card-body text-center">
+                            <div class="metric-title">Использование памяти</div>
+                            <div class="metric-value text-success">
+                                {% if memory_metrics %}
+                                {{ "%.1f"|format(memory_metrics.metric_value|float) }}%
+                                {% else %}
+                                <span class="text-muted">Нет данных</span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">
+                                {% if memory_metrics %}
+                                Обновлено: {{ memory_metrics.created_at|humanize_timestamp }}
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Графики CPU и RAM -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Загрузка CPU</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="cpuChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Использование памяти</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="memoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Дисковое пространство -->
+    {% if disk_metrics %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Дисковое пространство</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Устройство</th>
+                                    <th>Точка монтирования</th>
+                                    <th>Всего</th>
+                                    <th>Использовано</th>
+                                    <th>Свободно</th>
+                                    <th>Использование</th>
+                                </tr>
+                            </thead>
+                            <tbody id="diskTable">
+                                <!-- Данные заполняются из JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Сетевые интерфейсы -->
+    {% if network_metrics %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Сетевые интерфейсы</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Интерфейс</th>
+                                    <th>Входящий трафик</th>
+                                    <th>Исходящий трафик</th>
+                                    <th>Вх. скорость</th>
+                                    <th>Исх. скорость</th>
+                                </tr>
+                            </thead>
+                            <tbody id="networkTable">
+                                <!-- Данные заполняются из JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Подготовка данных для графика CPU
+        {% if cpu_history %}
+        const cpuData = {
+            labels: [
+                {% for metric in cpu_history %}
+                '{{ metric.created_at.strftime("%H:%M") }}',
+                {% endfor %}
+            ],
+            datasets: [{
+                label: 'Загрузка CPU (%)',
+                data: [
+                    {% for metric in cpu_history %}
+                    {{ metric.metric_value }},
+                    {% endfor %}
+                ],
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true
+            }]
+        };
+        
+        // Настройка графика CPU
+        const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+        const cpuChart = new Chart(cpuCtx, {
+            type: 'line',
+            data: cpuData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Загрузка (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Время'
+                        }
+                    }
+                }
+            }
+        });
+        {% endif %}
+        
+        // Подготовка данных для графика памяти
+        {% if memory_history %}
+        const memoryData = {
+            labels: [
+                {% for metric in memory_history %}
+                '{{ metric.created_at.strftime("%H:%M") }}',
+                {% endfor %}
+            ],
+            datasets: [{
+                label: 'Использование памяти (%)',
+                data: [
+                    {% for metric in memory_history %}
+                    {{ metric.metric_value }},
+                    {% endfor %}
+                ],
+                borderColor: 'rgba(75, 192, 192, 1)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: true
+            }]
+        };
+        
+        // Настройка графика памяти
+        const memoryCtx = document.getElementById('memoryChart').getContext('2d');
+        const memoryChart = new Chart(memoryCtx, {
+            type: 'line',
+            data: memoryData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Использование (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Время'
+                        }
+                    }
+                }
+            }
+        });
+        {% endif %}
+        
+        // Заполнение таблицы дисков
+        {% if disk_metrics %}
+        try {
+            const diskData = JSON.parse('{{ disk_metrics.metric_value|safe }}');
+            const diskTable = document.getElementById('diskTable');
+            
+            // Очистка таблицы
+            diskTable.innerHTML = '';
+            
+            // Добавление строк для каждого диска
+            for (const disk of diskData) {
+                if (disk.mnt_point && disk.size && disk.device_name) {
+                    const row = document.createElement('tr');
+                    
+                    // Функция для конвертации байтов в человеко-читаемый формат
+                    function formatBytes(bytes, decimals = 2) {
+                        if (bytes === 0) return '0 Bytes';
+                        
+                        const k = 1024;
+                        const dm = decimals < 0 ? 0 : decimals;
+                        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+                        
+                        const i = Math.floor(Math.log(bytes) / Math.log(k));
+                        
+                        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+                    }
+                    
+                    // Создание строки таблицы
+                    const totalSize = disk.size;
+                    const usedSize = disk.used;
+                    const freeSize = disk.free;
+                    const usedPercent = disk.percent;
+                    
+                    // Определение цвета для процентной полосы
+                    let progressClass = 'bg-success';
+                    if (usedPercent > 70) progressClass = 'bg-warning';
+                    if (usedPercent > 90) progressClass = 'bg-danger';
+                    
+                    row.innerHTML = `
+                        <td>${disk.device_name}</td>
+                        <td>${disk.mnt_point}</td>
+                        <td>${formatBytes(totalSize)}</td>
+                        <td>${formatBytes(usedSize)}</td>
+                        <td>${formatBytes(freeSize)}</td>
+                        <td>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar ${progressClass}" 
+                                     role="progressbar" 
+                                     style="width: ${usedPercent}%;" 
+                                     aria-valuenow="${usedPercent}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    ${usedPercent}%
+                                </div>
+                            </div>
+                        </td>
+                    `;
+                    
+                    diskTable.appendChild(row);
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка при обработке данных дисков:', e);
+        }
+        {% endif %}
+        
+        // Заполнение таблицы сетевых интерфейсов
+        {% if network_metrics %}
+        try {
+            const networkData = JSON.parse('{{ network_metrics.metric_value|safe }}');
+            const networkTable = document.getElementById('networkTable');
+            
+            // Очистка таблицы
+            networkTable.innerHTML = '';
+            
+            // Функция для форматирования байт в человеко-читаемый формат
+            function formatNetworkBytes(bytes, decimals = 2) {
+                if (bytes === 0) return '0 Bytes';
+                
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+            
+            // Функция для форматирования скорости
+            function formatSpeed(bytesPerSecond) {
+                if (bytesPerSecond < 1024) {
+                    return bytesPerSecond.toFixed(2) + ' B/s';
+                } else if (bytesPerSecond < 1048576) {
+                    return (bytesPerSecond / 1024).toFixed(2) + ' KB/s';
+                } else {
+                    return (bytesPerSecond / 1048576).toFixed(2) + ' MB/s';
+                }
+            }
+            
+            // Добавление строк для каждого интерфейса
+            for (const [key, iface] of Object.entries(networkData)) {
+                // Пропускаем loopback и неактивные интерфейсы
+                if (key === 'lo' || !iface.rx || !iface.tx) continue;
+                
+                const row = document.createElement('tr');
+                
+                // Создание строки таблицы
+                row.innerHTML = `
+                    <td>${key}</td>
+                    <td>${formatNetworkBytes(iface.rx)}</td>
+                    <td>${formatNetworkBytes(iface.tx)}</td>
+                    <td>${formatSpeed(iface.rx_rate || 0)}</td>
+                    <td>${formatSpeed(iface.tx_rate || 0)}</td>
+                `;
+                
+                networkTable.appendChild(row);
+            }
+        } catch (e) {
+            console.error('Ошибка при обработке данных сети:', e);
+        }
+        {% endif %}
+    });
+</script>
+{% endblock %}

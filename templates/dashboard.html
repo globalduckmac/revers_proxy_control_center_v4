@@ -1,0 +1,398 @@
+{% extends 'layout.html' %}
+
+{% block title %}Dashboard - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Dashboard</h1>
+        <p class="lead">Welcome to the Reverse Proxy Manager dashboard.</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title"><i class="fas fa-server me-2"></i>Servers</h5>
+                    <span class="display-6 fw-bold">{{ servers_count }}</span>
+                </div>
+                
+                {% set active_servers = servers|selectattr('status', 'equalto', 'active')|list|length %}
+                {% set error_servers = servers|selectattr('status', 'equalto', 'error')|list|length %}
+                {% set pending_servers = servers|selectattr('status', 'equalto', 'pending')|list|length %}
+                
+                <div class="progress mb-3" style="height: 25px;">
+                    {% if active_servers > 0 %}
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {{ (active_servers / servers_count * 100) | round }}%;" 
+                         aria-valuenow="{{ active_servers }}" aria-valuemin="0" aria-valuemax="{{ servers_count }}">
+                        {{ active_servers }} Active
+                    </div>
+                    {% endif %}
+                    
+                    {% if pending_servers > 0 %}
+                    <div class="progress-bar bg-warning" role="progressbar" 
+                         style="width: {{ (pending_servers / servers_count * 100) | round }}%;" 
+                         aria-valuenow="{{ pending_servers }}" aria-valuemin="0" aria-valuemax="{{ servers_count }}">
+                        {{ pending_servers }} Pending
+                    </div>
+                    {% endif %}
+                    
+                    {% if error_servers > 0 %}
+                    <div class="progress-bar bg-danger" role="progressbar" 
+                         style="width: {{ (error_servers / servers_count * 100) | round }}%;" 
+                         aria-valuenow="{{ error_servers }}" aria-valuemin="0" aria-valuemax="{{ servers_count }}">
+                        {{ error_servers }} Error
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="d-flex justify-content-between mb-3">
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-success text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                        <div>{{ active_servers }}</div>
+                        <small class="text-muted">Active</small>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-warning text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-clock fa-2x"></i>
+                        </div>
+                        <div>{{ pending_servers }}</div>
+                        <small class="text-muted">Pending</small>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-danger text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-exclamation-circle fa-2x"></i>
+                        </div>
+                        <div>{{ error_servers }}</div>
+                        <small class="text-muted">Error</small>
+                    </div>
+                </div>
+                
+                <a href="{{ url_for('servers.index') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-cog me-1"></i> Manage Servers
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title"><i class="fas fa-hdd me-2"></i>External Servers</h5>
+                    <span class="display-6 fw-bold">{{ external_servers_count }}</span>
+                </div>
+                
+                {% if external_servers_count > 0 %}
+                <div class="progress mb-3" style="height: 25px;">
+                    {% if ext_server_status_counts['active'] > 0 %}
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {{ (ext_server_status_counts['active'] / external_servers_count * 100) | round }}%;" 
+                         aria-valuenow="{{ ext_server_status_counts['active'] }}" aria-valuemin="0" aria-valuemax="{{ external_servers_count }}">
+                        {{ ext_server_status_counts['active'] }} Active
+                    </div>
+                    {% endif %}
+                    
+                    {% if ext_server_status_counts['pending'] > 0 %}
+                    <div class="progress-bar bg-warning" role="progressbar" 
+                         style="width: {{ (ext_server_status_counts['pending'] / external_servers_count * 100) | round }}%;" 
+                         aria-valuenow="{{ ext_server_status_counts['pending'] }}" aria-valuemin="0" aria-valuemax="{{ external_servers_count }}">
+                        {{ ext_server_status_counts['pending'] }} Pending
+                    </div>
+                    {% endif %}
+                    
+                    {% if ext_server_status_counts['error'] > 0 %}
+                    <div class="progress-bar bg-danger" role="progressbar" 
+                         style="width: {{ (ext_server_status_counts['error'] / external_servers_count * 100) | round }}%;" 
+                         aria-valuenow="{{ ext_server_status_counts['error'] }}" aria-valuemin="0" aria-valuemax="{{ external_servers_count }}">
+                        {{ ext_server_status_counts['error'] }} Error
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <div class="d-flex justify-content-between mb-3">
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-success text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                        <div>{{ ext_server_status_counts['active'] }}</div>
+                        <small class="text-muted">Active</small>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-warning text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-clock fa-2x"></i>
+                        </div>
+                        <div>{{ ext_server_status_counts['pending'] }}</div>
+                        <small class="text-muted">Pending</small>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-danger text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-exclamation-circle fa-2x"></i>
+                        </div>
+                        <div>{{ ext_server_status_counts['error'] }}</div>
+                        <small class="text-muted">Error</small>
+                    </div>
+                </div>
+                
+                <a href="{{ url_for('external_servers.list_external_servers') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-cog me-1"></i> Manage External Servers
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title"><i class="fas fa-globe me-2"></i>Domains</h5>
+                    <span class="display-6 fw-bold">{{ domains_count }}</span>
+                </div>
+                
+                <div class="progress mb-3" style="height: 25px;">
+                    {% if ns_status_counts.ok > 0 %}
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {{ (ns_status_counts.ok / domains_count * 100) | round }}%;" 
+                         aria-valuenow="{{ ns_status_counts.ok }}" aria-valuemin="0" aria-valuemax="{{ domains_count }}">
+                        {{ ns_status_counts.ok }} OK
+                    </div>
+                    {% endif %}
+                    
+                    {% if ns_status_counts.mismatch > 0 %}
+                    <div class="progress-bar bg-warning" role="progressbar" 
+                         style="width: {{ (ns_status_counts.mismatch / domains_count * 100) | round }}%;" 
+                         aria-valuenow="{{ ns_status_counts.mismatch }}" aria-valuemin="0" aria-valuemax="{{ domains_count }}">
+                        {{ ns_status_counts.mismatch }} Mismatch
+                    </div>
+                    {% endif %}
+                    
+                    {% if ns_status_counts.pending > 0 %}
+                    <div class="progress-bar bg-secondary" role="progressbar" 
+                         style="width: {{ (ns_status_counts.pending / domains_count * 100) | round }}%;" 
+                         aria-valuenow="{{ ns_status_counts.pending }}" aria-valuemin="0" aria-valuemax="{{ domains_count }}">
+                        {{ ns_status_counts.pending }} Pending
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="d-flex justify-content-between mb-3">
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-success text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                        <div>{{ ns_status_counts.ok }}</div>
+                        <small class="text-muted">NS OK</small>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-warning text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                        <div>{{ ns_status_counts.mismatch }}</div>
+                        <small class="text-muted">Mismatch</small>
+                    </div>
+                    
+                    <div class="text-center">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle bg-secondary text-white mb-2" style="width: 50px; height: 50px; margin: 0 auto;">
+                            <i class="fas fa-hourglass-half fa-2x"></i>
+                        </div>
+                        <div>{{ ns_status_counts.pending }}</div>
+                        <small class="text-muted">Pending</small>
+                    </div>
+                </div>
+                
+                <a href="{{ url_for('domains.index') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-cog me-1"></i> Manage Domains
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Server Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Server</th>
+                                <th>IP Address</th>
+                                <th>Status</th>
+                                <th>Last Check</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for server in servers %}
+                            <tr>
+                                <td>{{ server.name }}</td>
+                                <td>{{ server.ip_address }}</td>
+                                <td>
+                                    {% if server.status == 'active' %}
+                                    <span class="badge bg-success">Active</span>
+                                    {% elif server.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if server.last_check %}
+                                    {{ server.last_check|humanize }}
+                                    {% else %}
+                                    Never
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('servers.check_connectivity', server_id=server.id) }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-sync"></i> Check
+                                    </a>
+                                    <a href="{{ url_for('proxy.deploy', server_id=server.id) }}" class="btn btn-sm btn-outline-success">
+                                        <i class="fas fa-upload"></i> Deploy
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>External Server Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Server</th>
+                                <th>IP Address</th>
+                                <th>Status</th>
+                                <th>Last Check</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for server in external_servers %}
+                            <tr>
+                                <td>{{ server.name }}</td>
+                                <td>{{ server.ip_address }}</td>
+                                <td>
+                                    {% if server.last_status == 'online' %}
+                                    <span class="badge bg-success">Active</span>
+                                    {% elif server.last_status == 'offline' %}
+                                    <span class="badge bg-danger">Error</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if server.last_check %}
+                                    {{ server.last_check|humanize }}
+                                    {% else %}
+                                    Never
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('external_servers.check_external_server', server_id=server.id) }}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-sync"></i> Check
+                                    </a>
+                                    <a href="{{ url_for('external_servers.monitor_external_server', server_id=server.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-chart-line"></i> Metrics
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<div class="row mb-4">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-bell me-2"></i>Notification System</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary text-white mb-0 me-3" style="width: 50px; height: 50px;">
+                                <i class="fab fa-telegram-plane fa-2x"></i>
+                            </div>
+                            <div>
+                                <h5 class="mb-1">Telegram Notifications</h5>
+                                {% if telegram_configured %}
+                                <p class="mb-0 text-success"><i class="fas fa-check-circle me-1"></i> Connected and active</p>
+                                <form action="{{ url_for('monitoring.send_daily_report') }}" method="post" class="mt-2">
+                                    <button type="submit" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-paper-plane me-1"></i> Send Telegram Report
+                                    </button>
+                                </form>
+                                {% else %}
+                                <p class="mb-0 text-danger"><i class="fas fa-times-circle me-1"></i> Not configured</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6 class="mb-2">Notification Types:</h6>
+                        <div class="d-flex flex-wrap">
+                            <div class="badge bg-info text-white me-2 mb-2 p-2">
+                                <i class="fas fa-server me-1"></i> Server Status
+                            </div>
+                            <div class="badge bg-info text-white me-2 mb-2 p-2">
+                                <i class="fas fa-hdd me-1"></i> External Server Status
+                            </div>
+                            <div class="badge bg-info text-white me-2 mb-2 p-2">
+                                <i class="fas fa-globe me-1"></i> Domain NS Status
+                            </div>
+                            <div class="badge bg-info text-white me-2 mb-2 p-2">
+                                <i class="fas fa-tachometer-alt me-1"></i> High Load Alerts
+                            </div>
+                            <div class="badge bg-info text-white me-2 mb-2 p-2">
+                                <i class="fas fa-calendar-day me-1"></i> Daily Reports
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col text-center mt-4">
+        <a href="{{ url_for('monitoring.activity_logs') }}" class="btn btn-lg btn-outline-primary">
+            <i class="fas fa-clipboard-list me-2"></i> View Activity Logs
+        </a>
+    </div>
+</div>
+{% endblock %}

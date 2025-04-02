@@ -1,0 +1,240 @@
+{% extends 'layout.html' %}
+
+{% block title %}Редактирование сервера - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Редактирование сервера</h1>
+        <p class="lead">Обновление конфигурации сервера {{ server.name }}</p>
+    </div>
+    <div class="col-auto">
+        <div class="btn-group">
+            <a href="{{ url_for('servers.manage_server_groups', server_id=server.id) }}" class="btn btn-outline-primary me-2">
+                <i class="fas fa-layer-group"></i> Управление группами
+            </a>
+            <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Назад к серверам
+            </a>
+        </div>
+    </div>
+</div>
+
+{% if server.groups %}
+<div class="alert alert-info mb-4">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-layer-group me-2"></i>
+        <div>
+            <strong>Состоит в группах:</strong> 
+            {% for group in server.groups %}
+                <span class="badge bg-secondary me-1">{{ group.name }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('servers.edit', server_id=server.id) }}" id="serverForm">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="name" class="form-label">Server Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ server.name }}" required>
+                    <div class="form-text">A descriptive name for the server.</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="ip_address" class="form-label">IP Address</label>
+                    <input type="text" class="form-control" id="ip_address" name="ip_address" value="{{ server.ip_address }}" required>
+                    <div class="form-text">The public IP address of the server.</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="ssh_user" class="form-label">SSH User</label>
+                    <input type="text" class="form-control" id="ssh_user" name="ssh_user" value="{{ server.ssh_user }}" required>
+                    <div class="form-text">Username for SSH authentication.</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="ssh_port" class="form-label">SSH Port</label>
+                    <input type="number" class="form-control" id="ssh_port" name="ssh_port" value="{{ server.ssh_port }}" required>
+                    <div class="form-text">SSH port (default: 22).</div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Authentication Method</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="auth_method" id="auth_key" value="key" 
+                           {% if server.ssh_key %}checked{% endif %}>
+                    <label class="form-check-label" for="auth_key">
+                        SSH Key (More Secure)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="auth_method" id="auth_password" value="password"
+                           {% if server.ssh_password_hash %}checked{% endif %}>
+                    <label class="form-check-label" for="auth_password">
+                        Password
+                    </label>
+                </div>
+            </div>
+            
+            <div class="mb-3" id="ssh_key_section" {% if not server.ssh_key %}style="display: none;"{% endif %}>
+                <label for="ssh_key" class="form-label">SSH Private Key</label>
+                <textarea class="form-control" id="ssh_key" name="ssh_key" rows="5">{{ server.ssh_key }}</textarea>
+                <div class="form-text">
+                    Paste your private SSH key here. This is stored securely in the database.
+                    Leave blank to keep existing key.
+                </div>
+            </div>
+            
+            <div class="mb-3" id="ssh_password_section" {% if not server.ssh_password_hash %}style="display: none;"{% endif %}>
+                <label for="ssh_password" class="form-label">SSH Password</label>
+                <input type="password" class="form-control" id="ssh_password" name="ssh_password">
+                <div class="form-text">
+                    Password for SSH authentication. This will be securely hashed in the database.
+                    Leave blank to keep existing password.
+                </div>
+            </div>
+            
+            <!-- Billing Information Section -->
+            <h4 class="mt-4 mb-3">Данные биллинга и оплаты</h4>
+            
+            <div class="mb-3">
+                <label for="comment" class="form-label">Комментарий</label>
+                <textarea class="form-control" id="comment" name="comment" rows="2">{{ server.comment or '' }}</textarea>
+                <div class="form-text">
+                    Дополнительная информация о сервере (необязательно).
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="billing_provider" class="form-label">Провайдер биллинга</label>
+                    <input type="text" class="form-control" id="billing_provider" name="billing_provider" value="{{ server.billing_provider or '' }}">
+                    <div class="form-text">Название сервиса, где был куплен сервер (необязательно).</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="payment_date" class="form-label">Дата оплаты</label>
+                    <input type="date" class="form-control" id="payment_date" name="payment_date" 
+                           value="{{ server.payment_date.strftime('%Y-%m-%d') if server.payment_date else '' }}" required>
+                    <div class="form-text">Дата следующей оплаты сервера (обязательно).</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="billing_login" class="form-label">Логин биллинга</label>
+                    <input type="text" class="form-control" id="billing_login" name="billing_login" value="{{ server.billing_login or '' }}">
+                    <div class="form-text">Логин для входа в панель биллинга (необязательно).</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="billing_password" class="form-label">Пароль биллинга</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="billing_password" name="billing_password">
+                        <button class="btn btn-outline-secondary" type="button" id="toggle_billing_password">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Пароль для входа в панель биллинга. Оставьте пустым, чтобы сохранить текущий пароль (необязательно).</div>
+                </div>
+            </div>
+            
+            <div class="form-check mb-4">
+                <input class="form-check-input" type="checkbox" id="verify_connection" name="verify_connection" checked>
+                <label class="form-check-label" for="verify_connection">
+                    Verify connectivity before updating
+                </label>
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Update Server</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Server Logs Section -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5>Server Logs</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ log.action }}</td>
+                        <td>
+                            {% if log.status == 'success' %}
+                            <span class="badge bg-success">Success</span>
+                            {% elif log.status == 'pending' %}
+                            <span class="badge bg-warning">Pending</span>
+                            {% else %}
+                            <span class="badge bg-danger">Error</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#logMessage{{ log.id }}" aria-expanded="false">
+                                View Details
+                            </button>
+                            <div class="collapse mt-2" id="logMessage{{ log.id }}">
+                                <div class="card card-body">
+                                    <pre>{{ log.message }}</pre>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center">No logs found for this server.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/server-validation.js') }}"></script>
+<script>
+    // Функция для переключения видимости пароля биллинга
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggleBillingPasswordBtn = document.getElementById('toggle_billing_password');
+        const billingPasswordInput = document.getElementById('billing_password');
+        
+        if (toggleBillingPasswordBtn && billingPasswordInput) {
+            toggleBillingPasswordBtn.addEventListener('click', function() {
+                const type = billingPasswordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                billingPasswordInput.setAttribute('type', type);
+                
+                // Изменение иконки
+                const icon = toggleBillingPasswordBtn.querySelector('i');
+                if (type === 'text') {
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

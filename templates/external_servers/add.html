@@ -1,0 +1,95 @@
+{% extends 'layout.html' %}
+
+{% block title %}Добавление внешнего сервера{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-lg-8 col-md-10 mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h1 class="h3 mb-0"><i class="fas fa-server"></i> Добавление внешнего сервера</h1>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('external_servers.add_external_server') }}">
+                        {{ form.csrf_token }}
+                        
+                        <div class="mb-3">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> Внешние серверы мониторятся только через Glances API без доступа по SSH.
+                                <br>
+                                Убедитесь, что на сервере установлен и запущен Glances в режиме веб-сервера:
+                                <code>glances -w</code>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.name.id }}" class="form-label">{{ form.name.label }}</label>
+                            {{ form.name(class="form-control", placeholder="Например: Сервер разработки") }}
+                            {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.ip_address.id }}" class="form-label">{{ form.ip_address.label }}</label>
+                            {{ form.ip_address(class="form-control", placeholder="Например: 192.168.1.100") }}
+                            {% if form.ip_address.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.ip_address.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.glances_port.id }}" class="form-label">{{ form.glances_port.label }}</label>
+                            {{ form.glances_port(class="form-control", placeholder="По умолчанию: 61208") }}
+                            {% if form.glances_port.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.glances_port.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <div class="form-text">Порт, на котором запущен веб-интерфейс Glances (по умолчанию 61208).</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                {{ form.is_active(class="form-check-input") }}
+                                <label class="form-check-label" for="{{ form.is_active.id }}">{{ form.is_active.label }}</label>
+                            </div>
+                            <div class="form-text">Если флаг активен, сервер будет включен в регулярные проверки.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.description.id }}" class="form-label">{{ form.description.label }}</label>
+                            {{ form.description(class="form-control", rows=3, placeholder="Описание сервера (необязательно)") }}
+                            {% if form.description.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.description.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('external_servers.list_external_servers') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left"></i> Назад
+                            </a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

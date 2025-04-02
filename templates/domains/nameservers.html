@@ -1,0 +1,106 @@
+{% extends 'layout.html' %}
+
+{% block title %}Управление NS-записями - {{ domain.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Управление NS-записями</h1>
+        <p class="lead">Домен: {{ domain.name }}</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Назад к списку доменов
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Ожидаемые NS-записи</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('domains.nameservers', domain_id=domain.id) }}">
+                    <div class="mb-3">
+                        <label for="expected_nameservers" class="form-label">Ожидаемые NS-серверы</label>
+                        <textarea class="form-control" id="expected_nameservers" name="expected_nameservers" rows="3">{{ domain.expected_nameservers or '' }}</textarea>
+                        <div class="form-text">Введите ожидаемые NS-серверы, разделенные запятыми (например: ns1.example.com, ns2.example.com)</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Текущие NS-записи</h5>
+            </div>
+            <div class="card-body">
+                {% if domain.ns_check_date %}
+                <p><small class="text-muted">Последняя проверка: {{ domain.ns_check_date.strftime('%d.%m.%Y %H:%M') }}</small></p>
+                {% endif %}
+                
+                <div class="mb-3">
+                    <div class="d-flex mb-3">
+                        <form method="POST" action="{{ url_for('domains.check_ns', domain_id=domain.id) }}">
+                            <button type="submit" class="btn btn-info me-2">
+                                <i class="fas fa-sync"></i> Проверить сейчас
+                            </button>
+                        </form>
+                        <a href="{{ url_for('domains.domain_ns_logs', domain_id=domain.id) }}" class="btn btn-outline-primary">
+                            <i class="fas fa-history"></i> История проверок
+                        </a>
+                    </div>
+                    
+                    <h6>Статус NS-записей: 
+                        {% if domain.ns_status == 'ok' %}
+                        <span class="badge bg-success">OK</span>
+                        {% elif domain.ns_status == 'mismatch' %}
+                        <span class="badge bg-warning">Несоответствие</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Не проверено</span>
+                        {% endif %}
+                    </h6>
+                    
+                    {% if actual_ns %}
+                    <h6 class="mt-3">Фактические NS-серверы:</h6>
+                    <ul class="list-group">
+                        {% for ns in actual_ns %}
+                        <li class="list-group-item">{{ ns }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="alert alert-info">
+                        Фактические NS-записи еще не проверялись.
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="alert alert-primary">
+                    <strong>Информация:</strong> Для работы домена необходимо, чтобы фактические NS-записи соответствовали ожидаемым.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">Дополнительная информация</h5>
+    </div>
+    <div class="card-body">
+        <p>Для корректной работы вашего домена с нашим прокси-сервером необходимо:</p>
+        <ol>
+            <li>Настроить NS-записи вашего домена на указанные выше серверы имен.</li>
+            <li>Дождаться обновления DNS-записей (может занять до 24 часов).</li>
+            <li>Проверить состояние с помощью кнопки "Проверить сейчас".</li>
+        </ol>
+        
+        <p>Если статус NS-записей отображается как <span class="badge bg-success">OK</span>, значит домен правильно настроен и готов к использованию.</p>
+    </div>
+</div>
+{% endblock %}

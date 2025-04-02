@@ -1,0 +1,169 @@
+{% extends 'layout.html' %}
+
+{% block title %}Добавление сервера - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Добавление нового сервера</h1>
+        <p class="lead">Добавьте новый сервер для развертывания обратного прокси.</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Назад к серверам
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('servers.create') }}" id="serverForm">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="name" class="form-label">Название сервера</label>
+                    <input type="text" class="form-control" id="name" name="name" required>
+                    <div class="form-text">Описательное название для сервера.</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="ip_address" class="form-label">IP-адрес</label>
+                    <input type="text" class="form-control" id="ip_address" name="ip_address" required>
+                    <div class="form-text">Публичный IP-адрес сервера.</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="ssh_user" class="form-label">SSH Пользователь</label>
+                    <input type="text" class="form-control" id="ssh_user" name="ssh_user" required>
+                    <div class="form-text">Имя пользователя для SSH аутентификации.</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="ssh_port" class="form-label">SSH Порт</label>
+                    <input type="number" class="form-control" id="ssh_port" name="ssh_port" value="22" required>
+                    <div class="form-text">SSH порт (по умолчанию: 22).</div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="server_groups" class="form-label">Группы серверов</label>
+                <select class="form-select" id="server_groups" name="server_groups" multiple>
+                    {% for group in groups %}
+                    <option value="{{ group.id }}">{{ group.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Выберите группы, в которые нужно добавить этот сервер (необязательно).</div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Метод аутентификации</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="auth_method" id="auth_key" value="key" checked>
+                    <label class="form-check-label" for="auth_key">
+                        SSH ключ (более безопасно)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="auth_method" id="auth_password" value="password">
+                    <label class="form-check-label" for="auth_password">
+                        Пароль
+                    </label>
+                </div>
+            </div>
+            
+            <div class="mb-3" id="ssh_key_section">
+                <label for="ssh_key" class="form-label">SSH приватный ключ</label>
+                <textarea class="form-control" id="ssh_key" name="ssh_key" rows="5"></textarea>
+                <div class="form-text">Вставьте сюда ваш приватный SSH ключ. Он будет храниться в базе данных в защищенном виде.</div>
+            </div>
+            
+            <div class="mb-3" id="ssh_password_section" style="display: none;">
+                <label for="ssh_password" class="form-label">SSH пароль</label>
+                <input type="password" class="form-control" id="ssh_password" name="ssh_password">
+                <div class="form-text">Пароль для SSH аутентификации. Он будет храниться в базе данных в защищенном виде.</div>
+            </div>
+            
+            <!-- Billing Information Section -->
+            <h4 class="mt-4 mb-3">Данные биллинга и оплаты</h4>
+            
+            <div class="mb-3">
+                <label for="comment" class="form-label">Комментарий</label>
+                <textarea class="form-control" id="comment" name="comment" rows="2"></textarea>
+                <div class="form-text">
+                    Дополнительная информация о сервере (необязательно).
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="billing_provider" class="form-label">Провайдер биллинга</label>
+                    <input type="text" class="form-control" id="billing_provider" name="billing_provider">
+                    <div class="form-text">Название сервиса, где был куплен сервер (необязательно).</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="payment_date" class="form-label">Дата оплаты</label>
+                    <input type="date" class="form-control" id="payment_date" name="payment_date" required>
+                    <div class="form-text">Дата следующей оплаты сервера (обязательно).</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="billing_login" class="form-label">Логин биллинга</label>
+                    <input type="text" class="form-control" id="billing_login" name="billing_login">
+                    <div class="form-text">Логин для входа в панель биллинга (необязательно).</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="billing_password" class="form-label">Пароль биллинга</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="billing_password" name="billing_password">
+                        <button class="btn btn-outline-secondary" type="button" id="toggle_billing_password">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <div class="form-text">Пароль для входа в панель биллинга (необязательно).</div>
+                </div>
+            </div>
+            
+            <div class="form-check mb-4">
+                <input class="form-check-input" type="checkbox" id="verify_connection" name="verify_connection" checked>
+                <label class="form-check-label" for="verify_connection">
+                    Проверить подключение перед добавлением
+                </label>
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">Отмена</a>
+                <button type="submit" class="btn btn-primary">Добавить сервер</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/server-validation.js') }}"></script>
+<script>
+    // Функция для переключения видимости пароля биллинга
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggleBillingPasswordBtn = document.getElementById('toggle_billing_password');
+        const billingPasswordInput = document.getElementById('billing_password');
+        
+        if (toggleBillingPasswordBtn && billingPasswordInput) {
+            toggleBillingPasswordBtn.addEventListener('click', function() {
+                const type = billingPasswordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                billingPasswordInput.setAttribute('type', type);
+                
+                // Изменение иконки
+                const icon = toggleBillingPasswordBtn.querySelector('i');
+                if (type === 'text') {
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                } else {
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}
