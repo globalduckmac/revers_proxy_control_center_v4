@@ -1,0 +1,40 @@
+Исправление ошибки сортировки в панели мониторинга
+=========================================
+
+Описание проблемы:
+-----------------
+В панели мониторинга происходила ошибка при сортировке доменов по дате проверки NS (ns_check_date) и серверов по дате проверки (last_check), если у некоторых объектов эти даты были равны NULL:
+
+```
+TypeError: '<' not supported between instances of 'NoneType' and 'datetime.datetime'
+```
+
+Решение:
+--------
+Мы добавили предварительную фильтрацию объектов перед сортировкой, чтобы исключить записи с пустыми (None) значениями даты:
+
+1. Для серверов:
+   Было:
+   ```
+   {% for server in servers|sort(attribute='last_check', reverse=True)|slice(3) %}
+   ```
+   
+   Стало:
+   ```
+   {% for server in servers|selectattr('last_check', 'defined')|selectattr('last_check', 'ne', None)|sort(attribute='last_check', reverse=True)|slice(3) %}
+   ```
+
+2. Для доменов:
+   Было:
+   ```
+   {% for domain in domains|sort(attribute='ns_check_date', reverse=True)|slice(3) %}
+   ```
+   
+   Стало:
+   ```
+   {% for domain in domains|selectattr('ns_check_date', 'defined')|selectattr('ns_check_date', 'ne', None)|sort(attribute='ns_check_date', reverse=True)|slice(3) %}
+   ```
+
+Фильтры Jinja2:
+- `selectattr('атрибут', 'defined')` - выбирает только те объекты, у которых атрибут определен
+- `selectattr('атрибут', 'ne', None)` - выбирает объекты, у которых атрибут не равен None
