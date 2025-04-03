@@ -182,16 +182,34 @@ class DeploymentManager:
         if not ServerManager.check_connectivity(server):
             logger.error(f"Cannot set up SSL for server {server.name}: Server is not reachable")
             return False
+        
+        # Получаем ID сервера и доменов для передачи в поток
+        server_id = server.id
+        domain_ids = [d.id for d in domains]
+        server_name = server.name
             
         # Создаем ссылку на текущее приложение для передачи в поток
         app = current_app._get_current_object()
             
         # Функция для выполнения в фоновом потоке
-        def background_ssl_setup(app):
-            logger.info(f"Starting background SSL setup for server {server.name}")
+        def background_ssl_setup(app, server_id, domain_ids, server_name):
+            logger.info(f"Starting background SSL setup for server {server_name}")
             try:
                 # Создаем контекст приложения для фонового потока и используем его в течение всего процесса
                 with app.app_context():
+                    from models import Server, Domain, ServerLog, db
+                    
+                    # Получаем объекты из БД по ID
+                    server = Server.query.get(server_id)
+                    if not server:
+                        logger.error(f"Server with ID {server_id} not found")
+                        return
+                        
+                    domains = Domain.query.filter(Domain.id.in_(domain_ids)).all()
+                    if not domains:
+                        logger.error(f"No domains found for IDs {domain_ids}")
+                        return
+                    
                     # Create log entry
                     log = ServerLog(
                         server_id=server.id,
@@ -299,10 +317,11 @@ class DeploymentManager:
                         
             except Exception as e:
                 # Create error log entry for SSL setup
-                with current_app.app_context():
+                with app.app_context():
                     try:
+                        from models import ServerLog, db
                         error_log = ServerLog(
-                            server_id=server.id,
+                            server_id=server_id,
                             action='ssl_setup',
                             status='error',
                             message=f"SSL setup error: {str(e)}"
@@ -312,7 +331,7 @@ class DeploymentManager:
                     except Exception as log_error:
                         logger.error(f"Failed to create SSL error log: {str(log_error)}")
                         
-                    logger.error(f"Error setting up SSL on server {server.name}: {str(e)}")
+                    logger.error(f"Error setting up SSL on server {server_name}: {str(e)}")
         
         # Обновим статусы доменов перед запуском процесса
         try:
@@ -323,10 +342,26 @@ class DeploymentManager:
         except Exception as e:
             logger.error(f"Failed to update domain status: {str(e)}")
         
-        # Запускаем фоновый поток с передачей приложения как аргумент
-        background_thread = Thread(target=background_ssl_setup, args=(app,))
+        # Запускаем фоновый поток с передачей всех необходимых аргументов
+        background_thread = Thread(target=background_ssl_setup, args=(app, server_id, domain_ids, server_name))
         background_thread.daemon = True
         background_thread.start()
         
         # Возвращаем True, так как процесс успешно запущен в фоне
         return True
+        
+    @staticmethod
+    def setup_ssl_certbot_domain(server, domain):
+        """
+        Set up SSL certificate using Certbot for a single domain.
+        Wrapper around setup_ssl_certbot for single domain operation.
+        
+        Args:
+            server: Server model instance
+            domain: Domain model instance
+            
+        Returns:
+            bool: True if background task started successfully, False otherwise
+        """
+        # Используем основную функцию для выпуска сертификата, передавая один домен в списке
+        return DeploymentManager.setup_ssl_certbot(server, [domain])
