@@ -16,7 +16,7 @@
                 <i class="fas fa-plus"></i> Добавить сервер
             </a>
             {% if not hide_external %}
-            <a href="{{ url_for('external_servers.index') }}" class="btn btn-outline-info ml-2">
+            <a href="{{ url_for('external_servers.list_external_servers') }}" class="btn btn-outline-info ml-2">
                 <i class="fas fa-external-link-alt"></i> Внешние серверы
             </a>
             {% endif %}
