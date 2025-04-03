@@ -51,7 +51,7 @@
                         <tr class="{{ 'table-danger' if server.status == 'offline' else '' }}">
                             <td>{{ server.id }}</td>
                             <td>
-                                <a href="{{ url_for('servers.view', server_id=server.id) }}">{{ server.name }}</a>
+                                <a href="{{ url_for('servers.edit', server_id=server.id) }}">{{ server.name }}</a>
                                 <div class="small text-muted">
                                     {% if server.comment %}
                                     <span title="{{ server.comment }}">{{ server.comment[:20] + '...' if server.comment|length > 20 else server.comment }}</span>
