@@ -44,7 +44,23 @@ def decrypt_password(encrypted_password):
         decrypted = f.decrypt(encrypted_password.encode())
         return decrypted.decode()
     except Exception as e:
-        print(f"Ошибка дешифрования: {e}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Ошибка дешифрования: {str(e)}, ключ: {key[:5]}..., зашифрованный пароль: {encrypted_password[:10]}...")
+        
+        # Проверим, может ли ошибка быть связана с изменением SECRET_KEY
+        from flask import current_app
+        alt_secret = current_app.config.get('SECRET_KEY', None)
+        if alt_secret and alt_secret != SECRET_KEY:
+            logger.info("Пробуем альтернативный ключ из конфигурации приложения")
+            try:
+                alt_key = get_encryption_key(alt_secret)
+                alt_f = Fernet(alt_key)
+                decrypted = alt_f.decrypt(encrypted_password.encode())
+                return decrypted.decode()
+            except Exception as alt_e:
+                logger.error(f"Ошибка при использовании альтернативного ключа: {str(alt_e)}")
+        
         return None
 
 
