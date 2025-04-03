@@ -137,9 +137,7 @@
                                 <a href="{{ url_for('proxy.deploy', server_id=server.id) }}" class="btn btn-sm btn-outline-success" title="Развернуть конфигурацию">
                                     <i class="fas fa-upload"></i>
                                 </a>
-                                <a href="{{ url_for('proxy.install_nginx', server_id=server.id) }}" class="btn btn-sm btn-outline-warning" title="Установить Nginx">
-                                    <i class="fas fa-server"></i>
-                                </a>
+                                <!-- Удалено из-за отсутствия маршрута proxy.install_nginx -->
                                 <a href="{{ url_for('proxy.setup_ssl', server_id=server.id) }}" class="btn btn-sm btn-outline-info" title="Настроить SSL">
                                     <i class="fas fa-lock"></i>
                                 </a>
