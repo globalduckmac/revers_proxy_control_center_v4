@@ -129,6 +129,15 @@
                                 <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-outline-success" title="FFPanel Integration">
                                     <i class="fas fa-cloud"></i>
                                 </a>
+                                {% set ssl_button_rendered = false %}
+                                {% for group in domain.groups %}
+                                    {% if group.server and not ssl_button_rendered %}
+                                        <a href="{{ url_for('proxy.setup_ssl', server_id=group.server.id, domain_id=domain.id) }}" class="btn btn-sm btn-outline-info" title="Issue SSL Certificate">
+                                            <i class="fas fa-lock"></i>
+                                        </a>
+                                        {% set ssl_button_rendered = true %}
+                                    {% endif %}
+                                {% endfor %}
                                 <button type="button" class="btn btn-sm btn-outline-danger" 
                                         data-bs-toggle="modal" 
                                         data-bs-target="#deleteDomainModal{{ domain.id }}" 
