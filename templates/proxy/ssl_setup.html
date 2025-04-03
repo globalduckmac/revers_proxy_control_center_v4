@@ -9,9 +9,15 @@
         <p class="lead">Server: {{ server.name }} ({{ server.ip_address }})</p>
     </div>
     <div class="col-auto">
+        {% if selected_domain %}
+        <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Domains
+        </a>
+        {% else %}
         <a href="{{ url_for('servers.index') }}" class="btn btn-secondary">
             <i class="fas fa-arrow-left"></i> Back to Servers
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -19,7 +25,11 @@
     <div class="col-md-12">
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
+                {% if selected_domain %}
+                <h5 class="mb-0">SSL Certificate Setup for Domain: {{ selected_domain.name }}</h5>
+                {% else %}
                 <h5 class="mb-0">SSL Enabled Domains</h5>
+                {% endif %}
             </div>
             <div class="card-body">
                 {% if ssl_domains %}
@@ -42,8 +52,10 @@
                                         <span class="badge bg-success">SSL Configured</span>
                                     {% elif domain.ssl_status == 'error' %}
                                         <span class="badge bg-danger">Configuration Failed</span>
+                                    {% elif domain.ssl_status == 'pending' %}
+                                        <span class="badge bg-warning">Pending</span>
                                     {% else %}
-                                        <span class="badge bg-info">Pending SSL Setup</span>
+                                        <span class="badge bg-info">Ready for SSL</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -58,13 +70,13 @@
                         Setting up SSL certificates requires the following:
                     </p>
                     <ul>
-                        <li>The domain names must be properly configured with DNS records pointing to this server's IP address ({{ server.ip_address }}).</li>
+                        <li>The domain {% if selected_domain %}{{ selected_domain.name }}{% else %}names{% endif %} must be properly configured with DNS records pointing to this server's IP address ({{ server.ip_address }}).</li>
                         <li>Nginx must be installed and properly configured on the server.</li>
                         <li>Port 80 and 443 must be open on the server for the certificate validation process.</li>
                     </ul>
                 </div>
                 
-                <form action="{{ url_for('proxy.setup_ssl', server_id=server.id) }}" method="POST" class="mt-3">
+                <form action="{{ url_for('proxy.setup_ssl', server_id=server.id, domain_id=selected_domain.id if selected_domain else None) }}" method="POST" class="mt-3">
                     <div class="form-group mb-3">
                         <label for="admin_email">Email Address for Certificate Notifications</label>
                         <input type="email" class="form-control" id="admin_email" name="admin_email" 
@@ -73,11 +85,27 @@
                     </div>
                     
                     <button type="submit" class="btn btn-success btn-lg">
-                        <i class="fas fa-lock"></i> Set Up SSL Certificates
+                        <i class="fas fa-lock"></i> 
+                        {% if selected_domain %}
+                        Issue SSL Certificate for {{ selected_domain.name }}
+                        {% else %}
+                        Issue SSL Certificates for All Domains
+                        {% endif %}
                     </button>
                 </form>
                 {% else %}
                 <div class="alert alert-warning">
+                    {% if selected_domain %}
+                    <h5>SSL Not Enabled for {{ selected_domain.name }}</h5>
+                    <p>
+                        This domain does not have SSL enabled. To enable SSL:
+                    </p>
+                    <ol>
+                        <li>Go to the <a href="{{ url_for('domains.edit', domain_id=selected_domain.id) }}">Edit Domain</a> page</li>
+                        <li>Check the "Enable SSL/HTTPS" option</li>
+                        <li>Save your changes, then return to this page</li>
+                    </ol>
+                    {% else %}
                     <h5>No SSL-Enabled Domains Found</h5>
                     <p>
                         There are no domains with SSL enabled associated with this server. To enable SSL for domains:
@@ -87,6 +115,7 @@
                         <li>Edit a domain and check the "Enable SSL" option</li>
                         <li>Ensure the domain is assigned to a group associated with this server</li>
                     </ol>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
