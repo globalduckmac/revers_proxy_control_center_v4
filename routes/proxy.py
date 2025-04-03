@@ -128,8 +128,13 @@ def setup_ssl(server_id):
     
     # Set up SSL using Certbot
     try:
-        # Используем выбранные домены для настройки SSL
-        success = DeploymentManager.setup_ssl_certbot(server, ssl_domains)
+        # Используем соответствующий метод в зависимости от того, один домен или несколько
+        if selected_domain:
+            # Для одного домена используем специальный метод
+            success = DeploymentManager.setup_ssl_certbot_domain(server, selected_domain)
+        else:
+            # Для нескольких доменов используем общий метод
+            success = DeploymentManager.setup_ssl_certbot(server, ssl_domains)
         
         if success:
             if selected_domain:
