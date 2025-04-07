@@ -109,8 +109,15 @@ class ProxyManager:
                 if domain.ssl_enabled:
                     ssl_available = self.check_ssl_certificate_exists(server, domain.name)
                 
+                # Логгируем доменное имя для отладки
+                logger.info(f"Имя домена перед рендерингом: '{domain.name}', длина: {len(domain.name)}")
+                
+                # Удаляем возможные лишние пробелы в имени домена
+                clean_domain_name = domain.name.strip()
+                logger.info(f"Очищенное имя домена: '{clean_domain_name}', длина: {len(clean_domain_name)}")
+                
                 site_config = site_template.render(
-                    domain=domain.name,
+                    domain=clean_domain_name,
                     target_ip=domain.target_ip,
                     target_port=domain.target_port,
                     ssl_enabled=domain.ssl_enabled,
