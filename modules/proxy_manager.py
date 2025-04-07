@@ -532,6 +532,8 @@ class ProxyManager:
                 logger.error(f"ERROR: site_configs is empty for server {server_name}")
                 proxy_config.status = 'error'
                 db.session.commit()
+                # Импортируем ServerLog здесь
+                from models import ServerLog
                 log = ServerLog(
                     server_id=server_id,
                     action='proxy_deployment',
