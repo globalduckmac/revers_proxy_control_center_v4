@@ -191,6 +191,7 @@ class ProxyManager:
                 try:
                     # Создаем контекст приложения для фонового потока
                     with app.app_context():
+                        import json
                         from models import Server, ServerLog, ProxyConfig, db
                         from modules.server_manager import ServerManager
                         from modules.domain_manager import DomainManager
