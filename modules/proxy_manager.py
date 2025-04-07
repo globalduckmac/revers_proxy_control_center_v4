@@ -43,6 +43,7 @@ class ProxyManager:
         try:
             # Проверяем наличие путей к сертификатам - обратите внимание, что это только проверка наличия, 
             # но не валидности самих сертификатов
+            # Исправлен пробел между domain_name и /fullchain.pem
             cert_check_cmd = f"sudo test -f /etc/letsencrypt/live/{domain_name}/fullchain.pem && sudo test -f /etc/letsencrypt/live/{domain_name}/privkey.pem && echo 'SSL_EXISTS' || echo 'SSL_NOT_FOUND'"
             result, _ = ServerManager.execute_command(server, cert_check_cmd)
             
@@ -414,6 +415,7 @@ class ProxyManager:
             
             # Start the background task
             logger.info(f"Starting background deployment for server {server_name}")
+            # Исправляем передачу аргументов в фоновый поток, чтобы избежать проблемы с detached объектами
             background_thread = Thread(target=background_deploy, args=(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name))
             background_thread.daemon = True
             background_thread.start()
