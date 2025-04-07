@@ -22,9 +22,16 @@ def run_script(script_name):
         bool: True если скрипт выполнен успешно, False в случае ошибки
     """
     try:
-        result = subprocess.run(['python', f'{script_name}.py'], 
-                       stdout=subprocess.PIPE, 
-                       stderr=subprocess.PIPE)
+        # Пробуем сначала с python3, затем с python (для обратной совместимости)
+        try:
+            result = subprocess.run(['python3', f'{script_name}.py'], 
+                           stdout=subprocess.PIPE, 
+                           stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            # Если python3 не найден, пробуем с python
+            result = subprocess.run(['python', f'{script_name}.py'], 
+                           stdout=subprocess.PIPE, 
+                           stderr=subprocess.PIPE)
         
         # Выводим результаты выполнения скрипта
         if result.stdout:

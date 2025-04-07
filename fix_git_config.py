@@ -4,6 +4,8 @@
 Устанавливает опцию pull.rebase в false для использования стратегии слияния по умолчанию.
 
 Для запуска:
+python3 fix_git_config.py
+или
 python fix_git_config.py
 """
 import subprocess

@@ -4,6 +4,8 @@
 Используется, когда локальная и удаленная ветки разошлись, и git pull не может автоматически их согласовать.
 
 Для запуска:
+python3 git_auto_reset.py
+или
 python git_auto_reset.py
 """
 import os

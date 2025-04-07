@@ -18,7 +18,7 @@ TEMP_DIR=$(mktemp -d)
 echo "Создана временная директория: $TEMP_DIR"
 
 # Загружаем последнюю версию из GitHub
-echo -e "\n${YELLOW}[1/4] Загрузка последней версии из GitHub...${NC}"
+echo -e "\n${YELLOW}[1/5] Загрузка последней версии из GitHub...${NC}"
 curl -L -o "$TEMP_DIR/rpcc.zip" https://github.com/globalduckmac/revers_proxy_control_center_v4/archive/refs/heads/main.zip
 if [ $? -ne 0 ]; then
     echo -e "${RED}Ошибка при загрузке архива. Проверьте подключение к интернету.${NC}"
@@ -29,7 +29,7 @@ else
 fi
 
 # Распаковка архива
-echo -e "\n${YELLOW}[2/4] Распаковка архива...${NC}"
+echo -e "\n${YELLOW}[2/5] Распаковка архива...${NC}"
 unzip -q "$TEMP_DIR/rpcc.zip" -d "$TEMP_DIR"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Ошибка при распаковке архива.${NC}"
@@ -43,8 +43,15 @@ fi
 INSTALL_DIR=$(pwd)
 echo "Текущая директория установки: $INSTALL_DIR"
 
+# Исправляем скрипты для совместимости с python3
+echo -e "\n${YELLOW}[3/5] Адаптация скриптов для совместимости с python3...${NC}"
+# Заменяем в скриптах 'python' на 'python3'
+find "$TEMP_DIR/revers_proxy_control_center_v4-main" -type f -name "*.py" -exec sed -i 's/subprocess.run(\["python"/subprocess.run(["python3"/g' {} \;
+find "$TEMP_DIR/revers_proxy_control_center_v4-main" -type f -name "*.sh" -exec sed -i 's/python /python3 /g' {} \;
+echo -e "${GREEN}Скрипты адаптированы для работы с python3.${NC}"
+
 # Копирование файлов
-echo -e "\n${YELLOW}[3/4] Обновление файлов...${NC}"
+echo -e "\n${YELLOW}[4/5] Обновление файлов...${NC}"
 cp -r "$TEMP_DIR"/revers_proxy_control_center_v4-main/* "$INSTALL_DIR"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Ошибка при копировании файлов.${NC}"
@@ -59,7 +66,7 @@ rm -rf "$TEMP_DIR"
 echo "Временная директория удалена."
 
 # Перезапуск сервиса, если он запущен через systemd
-echo -e "\n${YELLOW}[4/4] Проверка необходимости перезапуска сервисов...${NC}"
+echo -e "\n${YELLOW}[5/5] Проверка необходимости перезапуска сервисов...${NC}"
 if systemctl is-active --quiet rpcc.service; then
     echo "Перезапуск службы RPCC..."
     sudo systemctl restart rpcc.service
