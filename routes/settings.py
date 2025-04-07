@@ -167,20 +167,20 @@ def update_app():
         # Получаем корневую директорию приложения
         app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # Выполняем git pull в директории приложения
+        # Запускаем скрипт автоматического обновления
         process = subprocess.run(
-            ['git', 'pull', 'origin', 'pre_agent'],
+            ['python', 'update_from_github.py'],
             cwd=app_root,
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=120
         )
         
         # Проверяем результат выполнения команды
         if process.returncode == 0:
             # Успешное обновление
             output = process.stdout.strip()
-            has_updates = "Already up to date" not in output
+            has_updates = "Система уже обновлена до последней версии" not in output
             
             if has_updates:
                 if restart_requested and service_name:

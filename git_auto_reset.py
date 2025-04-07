@@ -15,16 +15,8 @@ def reset_to_remote():
     Автоматически сбрасывает локальный репозиторий к состоянию удаленного репозитория.
     """
     try:
-        # Обновляем информацию о удаленном репозитории
-        token = os.environ.get('GITHUB_TOKEN')
-        if not token:
-            print("GITHUB_TOKEN не найден в переменных окружения!")
-            return False
-            
-        remote_url = f'https://{token}@github.com/globalduckmac/revers_proxy_control_center_v4.git'
-        
         # Получаем последнюю информацию с удаленного репозитория
-        fetch_cmd = ['git', 'fetch', remote_url, 'main']
+        fetch_cmd = ['git', 'fetch', 'origin', 'main']
         result = subprocess.run(fetch_cmd, 
                          stdout=subprocess.PIPE, 
                          stderr=subprocess.PIPE)
