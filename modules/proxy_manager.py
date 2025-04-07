@@ -3,6 +3,8 @@ import logging
 import tempfile
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
+from threading import Thread
+from flask import current_app
 from models import Server, Domain, DomainGroup, ProxyConfig, ServerLog, db
 from modules.server_manager import ServerManager
 from modules.domain_manager import DomainManager
@@ -122,28 +124,28 @@ class ProxyManager:
     
     def deploy_proxy_config(self, server_id):
         """
-        Deploy proxy configuration to a server.
-        
+        Deploy proxy configuration to a server in a background thread.
+
         Args:
             server_id: ID of the server to deploy to
-            
+
         Returns:
-            bool: True if deployment was successful, False otherwise
+            bool: True if deployment process was successfully started, False otherwise
         """
         try:
             server = Server.query.get(server_id)
             if not server:
                 logger.error(f"Server with ID {server_id} not found")
                 return False
-            
+
             # Check server connectivity first
             if not ServerManager.check_connectivity(server):
                 logger.error(f"Cannot deploy to server {server.name}: Server is not reachable")
                 return False
-            
+
             # Generate Nginx configurations
             main_config, site_configs = self.generate_nginx_config(server)
-            
+
             # Create ProxyConfig record
             proxy_config = ProxyConfig(
                 server_id=server.id,
@@ -153,181 +155,288 @@ class ProxyManager:
             db.session.add(proxy_config)
             db.session.commit()
             
-            # Ensure Nginx is installed
-            stdout, stderr = ServerManager.execute_command(
-                server, 
-                "dpkg -l | grep nginx || sudo apt-get update && sudo apt-get install -y nginx"
-            )
+            # Получаем нужные данные для передачи в фоновый поток
+            server_name = server.name
+            proxy_config_id = proxy_config.id
+            templates_path = self.templates_path
             
-            if "nginx" not in stdout and not "nginx" in stderr:
-                logger.error(f"Failed to verify Nginx installation on server {server.name}")
-                proxy_config.status = 'error'
-                db.session.commit()
-                return False
+            # Создаем ссылку на текущее приложение для передачи в поток
+            app = current_app._get_current_object()
             
-            # Upload main Nginx config
-            ServerManager.upload_string_to_file(
-                server,
-                main_config,
-                "/etc/nginx/nginx.conf"
-            )
-            
-            # Create sites-available and sites-enabled directories if they don't exist
-            ServerManager.execute_command(
-                server,
-                "sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
-            )
-            
-            # Upload site configurations
-            for domain_name, site_config in site_configs.items():
-                sanitized_name = domain_name.replace(".", "_")
-                site_path = f"/etc/nginx/sites-available/{sanitized_name}"
-                
-                # Upload site config
-                ServerManager.upload_string_to_file(
-                    server,
-                    site_config,
-                    site_path
-                )
-                
-                # Create symlink in sites-enabled
-                ServerManager.execute_command(
-                    server,
-                    f"sudo ln -sf {site_path} /etc/nginx/sites-enabled/{sanitized_name}"
-                )
-            
-            # Убедимся, что все каталоги для сертификатов существуют
-            ServerManager.execute_command(
-                server,
-                "sudo mkdir -p /etc/letsencrypt/live/ /etc/ssl/certs/ /etc/ssl/private/"
-            )
-            
-            # Test Nginx configuration
-            stdout, stderr = ServerManager.execute_command(
-                server,
-                "sudo nginx -t"
-            )
-            
-            if "successful" not in stdout and "successful" not in stderr:
-                # Проверяем, является ли ошибка конфликтом default_server
-                if "duplicate default server for 0.0.0.0:80" in stderr:
-                    logger.warning(f"Detected duplicate default server conflict, trying to fix it")
-                    
-                    # Пытаемся удалить существующие default_server параметры
-                    ServerManager.execute_command(
-                        server,
-                        "sudo sed -i 's/default_server//g' /etc/nginx/sites-enabled/*"
-                    )
-                    
-                    # Повторно проверяем конфигурацию
-                    stdout, stderr = ServerManager.execute_command(
-                        server,
-                        "sudo nginx -t"
-                    )
-                    
-                    if "successful" not in stdout and "successful" not in stderr:
-                        logger.error(f"Still failing after fixing default_server conflict: {stderr}")
-                        proxy_config.status = 'error'
-                        db.session.commit()
+            # Функция для выполнения в фоновом потоке
+            def background_deploy(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name):
+                logger.info(f"Starting background deployment for server {server_name}")
+                try:
+                    # Создаем контекст приложения для фонового потока
+                    with app.app_context():
+                        from models import Server, ServerLog, ProxyConfig, db
+                        from modules.server_manager import ServerManager
+                        from modules.domain_manager import DomainManager
                         
-                        # Create log entry
-                        log = ServerLog(
-                            server_id=server.id,
-                            action='proxy_deployment',
-                            status='error',
-                            message=f"Nginx configuration test failed after trying to fix: {stderr}"
-                        )
-                        db.session.add(log)
-                        db.session.commit()
-                        return False
-                    else:
-                        logger.info("Successfully fixed default_server conflict")
-                else:
-                    logger.error(f"Nginx configuration test failed on server {server.name}: {stderr}")
-                    proxy_config.status = 'error'
-                    db.session.commit()
-                    
-                    # Create log entry
-                    log = ServerLog(
-                        server_id=server.id,
-                        action='proxy_deployment',
-                        status='error',
-                        message=f"Nginx configuration test failed: {stderr}"
-                    )
-                    db.session.add(log)
-                    db.session.commit()
-                    return False
-            
-            # Проверяем наличие SSL сертификатов для каждого домена и обновляем конфигурацию
-            domains = DomainManager.get_domains_by_server(server.id)
-            ssl_domains = [d for d in domains if d.ssl_enabled]
-            
-            # Если есть домены с включенным SSL, проверяем наличие сертификатов
-            if ssl_domains:
-                logger.info(f"Checking SSL certificates for {len(ssl_domains)} domains")
-                for domain in ssl_domains:
-                    domain_safe = domain.name.replace(".", "_")
-                    site_path = f"/etc/nginx/sites-available/{domain_safe}"
-                    
-                    # Проверяем наличие сертификатов
-                    cert_check_cmd = f"sudo ls -la /etc/letsencrypt/live/{domain.name}/fullchain.pem 2>/dev/null || echo 'Not found'"
-                    cert_result, _ = ServerManager.execute_command(server, cert_check_cmd)
-                    
-                    if "Not found" not in cert_result:
-                        # Сертификаты существуют, заменяем самоподписанные на настоящие
-                        logger.info(f"Found SSL certificates for {domain.name}, updating configuration")
-                        
-                        # Команда для замены самоподписанных сертификатов на настоящие в конфигурации
-                        update_cmd = f"""sudo sed -i 's|ssl_certificate .*snakeoil.pem;|ssl_certificate /etc/letsencrypt/live/{domain.name}/fullchain.pem;|' {site_path} && \
-                                        sudo sed -i 's|ssl_certificate_key .*snakeoil.key;|ssl_certificate_key /etc/letsencrypt/live/{domain.name}/privkey.pem;|' {site_path} && \
-                                        sudo sed -i 's|# include /etc/letsencrypt/options-ssl-nginx.conf;|include /etc/letsencrypt/options-ssl-nginx.conf;|' {site_path} && \
-                                        sudo sed -i 's|# ssl_dhparam|ssl_dhparam|' {site_path}"""
-                        
+                        # Получаем объекты из БД по ID
+                        server = Server.query.get(server_id)
+                        if not server:
+                            logger.error(f"Server with ID {server_id} not found in background thread")
+                            return
+                            
+                        proxy_config = ProxyConfig.query.get(proxy_config_id)
+                        if not proxy_config:
+                            logger.error(f"ProxyConfig with ID {proxy_config_id} not found in background thread")
+                            return
+
+                        # Ensure Nginx is installed
                         try:
-                            ServerManager.execute_command(server, update_cmd)
-                            logger.info(f"SSL configuration updated for {domain.name}")
+                            stdout, stderr = ServerManager.execute_command(
+                                server, 
+                                "dpkg -l | grep nginx || sudo apt-get update && sudo apt-get install -y nginx"
+                            )
+
+                            if "nginx" not in stdout and not "nginx" in stderr:
+                                logger.error(f"Failed to verify Nginx installation on server {server.name}")
+                                proxy_config.status = 'error'
+                                db.session.commit()
+                                return
                         except Exception as e:
-                            logger.warning(f"Could not update SSL configuration for {domain.name}: {str(e)}")
+                            logger.error(f"Error installing Nginx: {str(e)}")
+                            proxy_config.status = 'error'
+                            db.session.commit()
+                            
+                            # Create error log entry
+                            log = ServerLog(
+                                server_id=server.id,
+                                action='proxy_deployment',
+                                status='error',
+                                message=f"Error installing Nginx: {str(e)}"
+                            )
+                            db.session.add(log)
+                            db.session.commit()
+                            return
+
+                        try:
+                            # Upload main Nginx config
+                            ServerManager.upload_string_to_file(
+                                server,
+                                main_config,
+                                "/etc/nginx/nginx.conf"
+                            )
+
+                            # Create sites-available and sites-enabled directories if they don't exist
+                            ServerManager.execute_command(
+                                server,
+                                "sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
+                            )
+                            
+                            # Удаляем дефолтную конфигурацию nginx, которая может конфликтовать с нашими настройками
+                            logger.info(f"Removing default nginx site configuration on server {server.name}")
+                            try:
+                                ServerManager.execute_command(
+                                    server,
+                                    "sudo rm -f /etc/nginx/sites-enabled/default"
+                                )
+                                logger.info(f"Successfully removed default nginx configuration")
+                            except Exception as e:
+                                logger.warning(f"Warning while removing default configuration: {str(e)}")
+                                # Продолжаем, так как файл может уже отсутствовать
+
+                            # Upload site configurations
+                            for domain_name, site_config in site_configs.items():
+                                sanitized_name = domain_name.replace(".", "_")
+                                site_path = f"/etc/nginx/sites-available/{sanitized_name}"
+
+                                # Upload site config
+                                ServerManager.upload_string_to_file(
+                                    server,
+                                    site_config,
+                                    site_path
+                                )
+
+                                # Create symlink in sites-enabled
+                                ServerManager.execute_command(
+                                    server,
+                                    f"sudo ln -sf {site_path} /etc/nginx/sites-enabled/{sanitized_name}"
+                                )
+
+                            # Убедимся, что все каталоги для сертификатов существуют
+                            ServerManager.execute_command(
+                                server,
+                                "sudo mkdir -p /etc/letsencrypt/live/ /etc/ssl/certs/ /etc/ssl/private/"
+                            )
+
+                            # Test Nginx configuration
+                            stdout, stderr = ServerManager.execute_command(
+                                server,
+                                "sudo nginx -t"
+                            )
+
+                            if "successful" not in stdout and "successful" not in stderr:
+                                # Проверяем, является ли ошибка конфликтом default_server
+                                if "duplicate default server for 0.0.0.0:80" in stderr:
+                                    logger.warning(f"Detected duplicate default server conflict, trying to fix it")
+
+                                    # Пытаемся удалить существующие default_server параметры
+                                    ServerManager.execute_command(
+                                        server,
+                                        "sudo sed -i 's/default_server//g' /etc/nginx/sites-enabled/*"
+                                    )
+
+                                    # Повторно проверяем конфигурацию
+                                    stdout, stderr = ServerManager.execute_command(
+                                        server,
+                                        "sudo nginx -t"
+                                    )
+
+                                    if "successful" not in stdout and "successful" not in stderr:
+                                        logger.error(f"Still failing after fixing default_server conflict: {stderr}")
+                                        proxy_config.status = 'error'
+                                        db.session.commit()
+
+                                        # Create log entry
+                                        log = ServerLog(
+                                            server_id=server.id,
+                                            action='proxy_deployment',
+                                            status='error',
+                                            message=f"Nginx configuration test failed after trying to fix: {stderr}"
+                                        )
+                                        db.session.add(log)
+                                        db.session.commit()
+                                        return
+                                    else:
+                                        logger.info("Successfully fixed default_server conflict")
+                                else:
+                                    logger.error(f"Nginx configuration test failed on server {server.name}: {stderr}")
+                                    proxy_config.status = 'error'
+                                    db.session.commit()
+
+                                    # Create log entry
+                                    log = ServerLog(
+                                        server_id=server.id,
+                                        action='proxy_deployment',
+                                        status='error',
+                                        message=f"Nginx configuration test failed: {stderr}"
+                                    )
+                                    db.session.add(log)
+                                    db.session.commit()
+                                    return
+
+                            # Проверяем наличие SSL сертификатов для каждого домена и обновляем конфигурацию
+                            domains = DomainManager.get_domains_by_server(server.id)
+                            ssl_domains = [d for d in domains if d.ssl_enabled]
+
+                            # Если есть домены с включенным SSL, проверяем наличие сертификатов
+                            if ssl_domains:
+                                logger.info(f"Checking SSL certificates for {len(ssl_domains)} domains")
+                                for domain in ssl_domains:
+                                    domain_safe = domain.name.replace(".", "_")
+                                    site_path = f"/etc/nginx/sites-available/{domain_safe}"
+
+                                    # Проверяем наличие сертификатов
+                                    cert_check_cmd = f"sudo ls -la /etc/letsencrypt/live/{domain.name}/fullchain.pem 2>/dev/null || echo 'Not found'"
+                                    cert_result, _ = ServerManager.execute_command(server, cert_check_cmd)
+
+                                    if "Not found" not in cert_result:
+                                        # Сертификаты существуют, заменяем самоподписанные на настоящие
+                                        logger.info(f"Found SSL certificates for {domain.name}, updating configuration")
+
+                                        # Команда для замены самоподписанных сертификатов на настоящие в конфигурации
+                                        update_cmd = f"""sudo sed -i 's|ssl_certificate .*snakeoil.pem;|ssl_certificate /etc/letsencrypt/live/{domain.name}/fullchain.pem;|' {site_path} && \
+                                                        sudo sed -i 's|ssl_certificate_key .*snakeoil.key;|ssl_certificate_key /etc/letsencrypt/live/{domain.name}/privkey.pem;|' {site_path} && \
+                                                        sudo sed -i 's|# include /etc/letsencrypt/options-ssl-nginx.conf;|include /etc/letsencrypt/options-ssl-nginx.conf;|' {site_path} && \
+                                                        sudo sed -i 's|# ssl_dhparam|ssl_dhparam|' {site_path}"""
+
+                                        try:
+                                            ServerManager.execute_command(server, update_cmd)
+                                            logger.info(f"SSL configuration updated for {domain.name}")
+                                        except Exception as e:
+                                            logger.warning(f"Could not update SSL configuration for {domain.name}: {str(e)}")
+
+                            # Reload Nginx to apply changes
+                            stdout, stderr = ServerManager.execute_command(
+                                server,
+                                "sudo systemctl reload nginx || sudo systemctl restart nginx"
+                            )
+
+                            # Update ProxyConfig status
+                            proxy_config.status = 'deployed'
+                            db.session.commit()
+
+                            # Create log entry
+                            log = ServerLog(
+                                server_id=server.id,
+                                action='proxy_deployment',
+                                status='success',
+                                message="Proxy configuration deployed successfully"
+                            )
+                            db.session.add(log)
+                            db.session.commit()
+
+                            logger.info(f"Successfully deployed proxy configuration to server {server.name}")
+                            
+                        except Exception as e:
+                            logger.error(f"Error in proxy deployment process: {str(e)}")
+                            
+                            # Update proxy config status
+                            proxy_config.status = 'error'
+                            db.session.commit()
+                            
+                            # Create log entry
+                            log = ServerLog(
+                                server_id=server.id,
+                                action='proxy_deployment',
+                                status='error',
+                                message=f"Deployment error: {str(e)}"
+                            )
+                            db.session.add(log)
+                            db.session.commit()
+                    
+                except Exception as e:
+                    logger.error(f"Critical error in background deployment thread: {str(e)}")
+                    # Attempt to update database with error if possible
+                    try:
+                        with app.app_context():
+                            from models import ProxyConfig, ServerLog, db
+                            
+                            # Try to get the proxy config by ID
+                            proxy_config = ProxyConfig.query.get(proxy_config_id)
+                            if proxy_config:
+                                proxy_config.status = 'error'
+                                
+                                # Create error log
+                                log = ServerLog(
+                                    server_id=server_id,
+                                    action='proxy_deployment',
+                                    status='error',
+                                    message=f"Critical background thread error: {str(e)}"
+                                )
+                                db.session.add(log)
+                                db.session.commit()
+                    except Exception as inner_e:
+                        logger.error(f"Failed to log error in database: {str(inner_e)}")
             
-            # Reload Nginx to apply changes
-            stdout, stderr = ServerManager.execute_command(
-                server,
-                "sudo systemctl reload nginx || sudo systemctl restart nginx"
-            )
+            # Start the background task
+            logger.info(f"Starting background deployment for server {server_name}")
+            background_thread = Thread(target=background_deploy, args=(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name))
+            background_thread.daemon = True
+            background_thread.start()
             
-            # Update ProxyConfig status
-            proxy_config.status = 'deployed'
-            db.session.commit()
-            
-            # Create log entry
-            log = ServerLog(
-                server_id=server.id,
-                action='proxy_deployment',
-                status='success',
-                message="Proxy configuration deployed successfully"
-            )
-            db.session.add(log)
-            db.session.commit()
-            
-            logger.info(f"Successfully deployed proxy configuration to server {server.name}")
+            # Возвращаем True, так как процесс успешно запущен в фоне
             return True
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error deploying proxy configuration to server {server_id}: {str(e)}")
+            logger.error(f"Error starting deployment process for server {server_id}: {str(e)}")
             
             # Create log entry if server exists
             try:
-                if server:
+                if 'server' in locals() and server:
                     log = ServerLog(
                         server_id=server.id,
                         action='proxy_deployment',
                         status='error',
-                        message=f"Deployment error: {str(e)}"
+                        message=f"Error starting deployment: {str(e)}"
                     )
                     db.session.add(log)
                     db.session.commit()
-            except:
-                pass
+            except Exception as inner_e:
+                logger.error(f"Failed to create error log: {str(inner_e)}")
                 
             return False
