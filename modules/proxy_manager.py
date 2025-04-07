@@ -242,23 +242,74 @@ class ProxyManager:
                             # Upload site configurations
                             for domain_name, site_config in site_configs.items():
                                 sanitized_name = domain_name.replace(".", "_")
+                                logger.info(f"Обработка конфигурации для домена {domain_name} (файл: {sanitized_name})")
                                 site_path = f"/etc/nginx/sites-available/{sanitized_name}"
 
-                                # Upload site config
-                                ServerManager.upload_string_to_file(
-                                    server,
-                                    site_config,
-                                    site_path
-                                )
-
-                                # Create symlink in sites-enabled
-                                # Сначала убедимся, что /etc/nginx/sites-enabled существует
+                                # Сначала создаем директории, если они не существуют
                                 ServerManager.execute_command(
                                     server,
-                                    "sudo mkdir -p /etc/nginx/sites-enabled"
+                                    "sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
                                 )
                                 
-                                # Создаем символическую ссылку с проверкой успешности
+                                # Проверяем, существует ли уже файл
+                                file_check, _ = ServerManager.execute_command(
+                                    server,
+                                    f"ls -la {site_path} 2>/dev/null || echo 'NOT_FOUND'"
+                                )
+                                
+                                # Upload site config - более надежным способом
+                                if "NOT_FOUND" in file_check:
+                                    logger.info(f"Файл {site_path} не существует, создаем его напрямую через команду")
+                                    # Создаем файл сразу в целевой директории через echo
+                                    config_safe = site_config.replace('"', '\\"').replace('$', '\\$').replace('`', '\\`')
+                                    ServerManager.execute_command(
+                                        server,
+                                        f'echo "{config_safe}" | sudo tee {site_path} > /dev/null && sudo chmod 644 {site_path}'
+                                    )
+                                else:
+                                    logger.info(f"Файл {site_path} существует, обновляем его через upload_string_to_file")
+                                    # Обновляем существующий файл
+                                    ServerManager.upload_string_to_file(
+                                        server,
+                                        site_config,
+                                        site_path
+                                    )
+                                
+                                # Проверяем, был ли файл создан/обновлен успешно
+                                file_exists, _ = ServerManager.execute_command(
+                                    server,
+                                    f"ls -la {site_path} 2>/dev/null || echo 'NOT_FOUND'"
+                                )
+                                
+                                if "NOT_FOUND" in file_exists:
+                                    logger.error(f"Не удалось создать файл {site_path}! Пробуем крайний метод")
+                                    # Экстренная мера - пишем напрямую через cat
+                                    config_lines = site_config.replace('"', '\\"').replace('$', '\\$').replace('`', '\\`').split('\n')
+                                    ServerManager.execute_command(
+                                        server,
+                                        f'sudo touch {site_path} && sudo chmod 666 {site_path}'
+                                    )
+                                    for line in config_lines:
+                                        if line.strip():
+                                            ServerManager.execute_command(
+                                                server,
+                                                f'echo "{line}" | sudo tee -a {site_path} > /dev/null'
+                                            )
+                                    ServerManager.execute_command(
+                                        server,
+                                        f'sudo chmod 644 {site_path}'
+                                    )
+                                
+                                # Create symlink in sites-enabled - с полной проверкой
+                                logger.info(f"Создаем символическую ссылку для {sanitized_name}")
+                                
+                                # Удаляем старую ссылку, если существует
+                                ServerManager.execute_command(
+                                    server,
+                                    f"sudo rm -f /etc/nginx/sites-enabled/{sanitized_name}"
+                                )
+                                
+                                # Создаем новую ссылку
                                 symlink_result, symlink_error = ServerManager.execute_command(
                                     server,
                                     f"sudo ln -sf {site_path} /etc/nginx/sites-enabled/{sanitized_name}"
@@ -267,12 +318,12 @@ class ProxyManager:
                                 # Проверяем, существует ли файл после создания символической ссылки
                                 exists_check, _ = ServerManager.execute_command(
                                     server,
-                                    f"ls -la /etc/nginx/sites-enabled/{sanitized_name}"
+                                    f"ls -la /etc/nginx/sites-enabled/{sanitized_name} 2>/dev/null || echo 'NOT_FOUND'"
                                 )
                                 
-                                if not exists_check:
-                                    logger.warning(f"Symlink may not have been created correctly for {sanitized_name}. Trying alternative method.")
-                                    # Альтернативный метод - копирование файла напрямую
+                                if "NOT_FOUND" in exists_check:
+                                    logger.warning(f"Ссылка не была создана корректно для {sanitized_name}. Копируем файл напрямую.")
+                                    # Копируем файл напрямую, если ссылка не работает
                                     ServerManager.execute_command(
                                         server,
                                         f"sudo cp {site_path} /etc/nginx/sites-enabled/{sanitized_name} && sudo chmod 644 /etc/nginx/sites-enabled/{sanitized_name}"
