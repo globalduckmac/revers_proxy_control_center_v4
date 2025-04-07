@@ -134,10 +134,17 @@ class ProxyManager:
         Returns:
             bool: True if deployment process was successfully started, False otherwise
         """
+        logger = current_app.logger
+        app = current_app._get_current_object()
+        templates_path = self.templates_path
+        
         # Инициализируем переменные до блока try для избежания предупреждений
         server = None
         
         try:
+            # Явно импортируем модели здесь внутри функции
+            from models import Server, ProxyConfig, ServerLog
+            
             server = Server.query.get(server_id)
             if not server:
                 logger.error(f"Server with ID {server_id} not found")
