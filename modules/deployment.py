@@ -156,11 +156,14 @@ class DeploymentManager:
         
         Args:
             server: Server model instance
-            domains: List of Domain model instances
+            domains: List of Domain model instances or a single Domain instance
             
         Returns:
             bool: True if successful, False otherwise
         """
+        # Если передан один домен (не список), конвертируем его в список для унификации кода
+        if not isinstance(domains, list):
+            domains = [domains]
         try:
             # Check connectivity first
             if not ServerManager.check_connectivity(server):

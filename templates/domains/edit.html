@@ -44,6 +44,18 @@
                             Enable SSL/HTTPS
                         </label>
                     </div>
+                    {% if domain.ssl_enabled %}
+                        <div class="mt-2">
+                            <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-sm btn-success">
+                                <i class="fas fa-lock"></i> Настроить SSL сертификат
+                            </a>
+                            {% if domain.ssl_status == 'active' %}
+                                <span class="badge bg-success ms-2">SSL активен</span>
+                            {% elif domain.ssl_status == 'error' %}
+                                <span class="badge bg-danger ms-2">Ошибка SSL</span>
+                            {% endif %}
+                        </div>
+                    {% endif %}
                 </div>
             </div>
             

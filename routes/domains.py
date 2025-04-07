@@ -315,6 +315,81 @@ def check_ns(domain_id):
     
     return redirect(url_for('domains.nameservers', domain_id=domain_id))
 
+@bp.route('/<int:domain_id>/setup-ssl', methods=['GET', 'POST'])
+@login_required
+def setup_ssl_for_domain(domain_id):
+    """Настраивает SSL-сертификат для отдельного домена."""
+    from models import Domain, Server, ServerLog, db
+    from modules.deployment import DeploymentManager
+    from flask import current_app
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    domain = Domain.query.get_or_404(domain_id)
+    
+    # Проверяем, что SSL включен для домена
+    if not domain.ssl_enabled:
+        flash(f'SSL не включен для домена {domain.name}. Включите SSL в настройках домена.', 'warning')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    # Проверяем, что домен привязан к группе и серверу
+    if not domain.groups:
+        flash(f'Домен {domain.name} не привязан ни к одной группе. Привяжите домен к группе сервера.', 'warning')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    # Находим сервер для домена (берем первую группу с сервером)
+    server = None
+    for group in domain.groups:
+        if group.server:
+            server = group.server
+            break
+    
+    if not server:
+        flash(f'Домен {domain.name} не привязан к серверу. Привяжите домен к группе с сервером.', 'warning')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    # Для GET запроса просто показываем страницу подтверждения
+    if request.method == 'GET':
+        # Логи установки SSL для домена
+        logs = ServerLog.query.filter_by(
+            server_id=server.id,
+            action='ssl_setup'
+        ).order_by(ServerLog.created_at.desc()).limit(5).all()
+        
+        # Email администратора из конфигурации
+        admin_email = current_app.config.get('ADMIN_EMAIL', 'admin@example.com')
+        
+        return render_template(
+            'domains/setup_ssl.html',
+            domain=domain,
+            server=server,
+            logs=logs,
+            admin_email=admin_email
+        )
+    
+    # Для POST запроса выполняем установку SSL
+    # Получаем email из формы
+    admin_email = request.form.get('admin_email', current_app.config.get('ADMIN_EMAIL', 'admin@example.com'))
+    
+    # Временно обновляем конфигурацию с указанным email
+    current_app.config['ADMIN_EMAIL'] = admin_email
+    
+    # Устанавливаем SSL через Certbot
+    try:
+        # Используем модифицированную функцию, которая теперь поддерживает один домен
+        success = DeploymentManager.setup_ssl_certbot(server, domain)
+        
+        if success:
+            flash(f'SSL сертификат успешно установлен для домена {domain.name}', 'success')
+        else:
+            flash(f'Не удалось установить SSL сертификат для домена {domain.name}', 'danger')
+    except Exception as e:
+        logger.exception(f"Ошибка при установке SSL сертификата для домена {domain.name}")
+        flash(f'Ошибка при установке SSL сертификата: {str(e)}', 'danger')
+    
+    return redirect(url_for('domains.edit', domain_id=domain_id))
+
 @bp.route('/check-all-ns', methods=['POST'])
 @login_required
 def check_all_ns():
