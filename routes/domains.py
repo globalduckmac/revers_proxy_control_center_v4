@@ -319,7 +319,7 @@ def check_ns(domain_id):
 @login_required
 def setup_ssl_for_domain(domain_id):
     """Настраивает SSL-сертификат для отдельного домена."""
-    from models import Domain, Server, ServerLog, db
+    from models import Domain, Server, ServerLog, ProxyConfig, db
     from modules.deployment import DeploymentManager
     from flask import current_app
     import logging
@@ -381,7 +381,30 @@ def setup_ssl_for_domain(domain_id):
         success = DeploymentManager.setup_ssl_certbot(server, domain)
         
         if success:
-            flash(f'SSL сертификат успешно установлен для домена {domain.name}', 'success')
+            # После успешной установки SSL сертификата перегенерируем и обновляем конфигурацию Nginx
+            from modules.proxy_manager import ProxyManager
+            
+            logger.info(f"SSL установлен успешно, перегенерируем конфигурацию Nginx для сервера {server.name}")
+            
+            # Получаем последнюю конфигурацию прокси для сервера
+            proxy_config = ProxyConfig.query.filter_by(server_id=server.id).order_by(ProxyConfig.id.desc()).first()
+            
+            if proxy_config:
+                # Запускаем деплой конфигурации
+                proxy_manager = ProxyManager(current_app.config.get('NGINX_TEMPLATES_PATH', 'templates/nginx'))
+                proxy_manager.deploy_proxy_config(server.id)
+                
+                flash(f'SSL сертификат успешно установлен для домена {domain.name} и конфигурация Nginx обновлена', 'success')
+            else:
+                # Если конфигурации нет, создаем новую
+                proxy_config = ProxyConfig(server_id=server.id, status='pending')
+                db.session.add(proxy_config)
+                db.session.commit()
+                
+                proxy_manager = ProxyManager(current_app.config.get('NGINX_TEMPLATES_PATH', 'templates/nginx'))
+                proxy_manager.deploy_proxy_config(server.id)
+                
+                flash(f'SSL сертификат успешно установлен для домена {domain.name} и создана новая конфигурация Nginx', 'success')
         else:
             flash(f'Не удалось установить SSL сертификат для домена {domain.name}', 'danger')
     except Exception as e:
