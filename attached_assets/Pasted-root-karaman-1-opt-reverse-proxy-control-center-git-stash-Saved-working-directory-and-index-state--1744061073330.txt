@@ -1,0 +1,79 @@
+root@karaman-1:/opt/reverse-proxy-control-center# git stash
+Saved working directory and index state WIP on main: 885e13a Feature: используем отдельный метод для выпуска SSL сертификата одного домена
+root@karaman-1:/opt/reverse-proxy-control-center# git pull --allow-unrelated-histories
+Auto-merging .gitignore
+CONFLICT (add/add): Merge conflict in .gitignore
+Auto-merging README.md
+CONFLICT (add/add): Merge conflict in README.md
+Auto-merging app.py
+CONFLICT (add/add): Merge conflict in app.py
+Auto-merging main.py
+CONFLICT (add/add): Merge conflict in main.py
+Auto-merging models.py
+CONFLICT (add/add): Merge conflict in models.py
+Auto-merging modules/deployment.py
+CONFLICT (add/add): Merge conflict in modules/deployment.py
+Auto-merging modules/domain_manager.py
+CONFLICT (add/add): Merge conflict in modules/domain_manager.py
+Auto-merging modules/ffpanel_api.py
+CONFLICT (add/add): Merge conflict in modules/ffpanel_api.py
+Auto-merging modules/glances_manager.py
+CONFLICT (add/add): Merge conflict in modules/glances_manager.py
+Auto-merging modules/proxy_manager.py
+CONFLICT (add/add): Merge conflict in modules/proxy_manager.py
+Auto-merging modules/telegram_notifier.py
+CONFLICT (add/add): Merge conflict in modules/telegram_notifier.py
+Auto-merging routes/auth.py
+CONFLICT (add/add): Merge conflict in routes/auth.py
+Auto-merging routes/domains.py
+CONFLICT (add/add): Merge conflict in routes/domains.py
+Auto-merging routes/monitoring.py
+CONFLICT (add/add): Merge conflict in routes/monitoring.py
+Auto-merging routes/proxy.py
+CONFLICT (add/add): Merge conflict in routes/proxy.py
+Auto-merging routes/settings.py
+CONFLICT (add/add): Merge conflict in routes/settings.py
+Auto-merging scripts/install_glances.sh
+CONFLICT (add/add): Merge conflict in scripts/install_glances.sh
+Auto-merging scripts/install_glances_ubuntu22.sh
+CONFLICT (add/add): Merge conflict in scripts/install_glances_ubuntu22.sh
+Auto-merging tasks.py
+CONFLICT (add/add): Merge conflict in tasks.py
+Auto-merging templates/dashboard.html
+CONFLICT (add/add): Merge conflict in templates/dashboard.html
+Auto-merging templates/domains/create.html
+CONFLICT (add/add): Merge conflict in templates/domains/create.html
+Auto-merging templates/domains/edit.html
+CONFLICT (add/add): Merge conflict in templates/domains/edit.html
+Auto-merging templates/domains/ffpanel.html
+CONFLICT (add/add): Merge conflict in templates/domains/ffpanel.html
+Auto-merging templates/domains/index.html
+CONFLICT (add/add): Merge conflict in templates/domains/index.html
+Auto-merging templates/domains/nameservers.html
+CONFLICT (add/add): Merge conflict in templates/domains/nameservers.html
+Auto-merging templates/glances/server_detail.html
+CONFLICT (add/add): Merge conflict in templates/glances/server_detail.html
+Auto-merging templates/monitoring/index.html
+CONFLICT (add/add): Merge conflict in templates/monitoring/index.html
+Auto-merging templates/monitoring/server.html
+CONFLICT (add/add): Merge conflict in templates/monitoring/server.html
+Auto-merging templates/partials/navbar.html
+CONFLICT (add/add): Merge conflict in templates/partials/navbar.html
+Auto-merging templates/proxy/ssl_setup.html
+CONFLICT (add/add): Merge conflict in templates/proxy/ssl_setup.html
+Auto-merging templates/servers/index.html
+CONFLICT (add/add): Merge conflict in templates/servers/index.html
+Automatic merge failed; fix conflicts and then commit the result.
+root@karaman-1:/opt/reverse-proxy-control-center# cd --
+root@karaman-1:~# sudo ./deplay_manual.sh
+
+=== Начало развертывания Reverse Proxy Control Center ===
+
+=== Создание каталога приложения в /opt/reverse-proxy-control-center ===
+
+=== Клонирование репозитория из GitHub ===
+error: Pulling is not possible because you have unmerged files.
+hint: Fix them up in the work tree, and then use 'git add/rm <file>'
+hint: as appropriate to mark resolution and make a commit.
+fatal: Exiting because of an unresolved conflict.
+root@karaman-1:~# 
