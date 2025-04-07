@@ -538,6 +538,19 @@ class ProxyManager:
             for domain_name, config in site_configs.items():
                 logger.info(f"Main thread: Config for {domain_name} is {len(config)} bytes")
                 
+            # Сохраняем конфигурации в БД перед запуском фонового потока
+            if site_configs:
+                try:
+                    import json
+                    # Получаем объект конфигурации
+                    proxy_config = ProxyConfig.query.get(proxy_config_id)
+                    if proxy_config:
+                        proxy_config.extra_data = json.dumps(site_configs)
+                        db.session.commit()
+                        logger.info(f"Сохранено {len(site_configs)} конфигураций сайтов в БД для сервера {server_name}")
+                except Exception as e:
+                    logger.error(f"Ошибка при сохранении конфигураций в БД: {str(e)}")
+            
             # Создаем глубокую копию конфигураций для передачи в поток
             site_configs_copy = site_configs.copy()
             
