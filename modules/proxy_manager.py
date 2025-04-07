@@ -252,10 +252,31 @@ class ProxyManager:
                                 )
 
                                 # Create symlink in sites-enabled
+                                # Сначала убедимся, что /etc/nginx/sites-enabled существует
                                 ServerManager.execute_command(
+                                    server,
+                                    "sudo mkdir -p /etc/nginx/sites-enabled"
+                                )
+                                
+                                # Создаем символическую ссылку с проверкой успешности
+                                symlink_result, symlink_error = ServerManager.execute_command(
                                     server,
                                     f"sudo ln -sf {site_path} /etc/nginx/sites-enabled/{sanitized_name}"
                                 )
+                                
+                                # Проверяем, существует ли файл после создания символической ссылки
+                                exists_check, _ = ServerManager.execute_command(
+                                    server,
+                                    f"ls -la /etc/nginx/sites-enabled/{sanitized_name}"
+                                )
+                                
+                                if not exists_check:
+                                    logger.warning(f"Symlink may not have been created correctly for {sanitized_name}. Trying alternative method.")
+                                    # Альтернативный метод - копирование файла напрямую
+                                    ServerManager.execute_command(
+                                        server,
+                                        f"sudo cp {site_path} /etc/nginx/sites-enabled/{sanitized_name} && sudo chmod 644 /etc/nginx/sites-enabled/{sanitized_name}"
+                                    )
 
                             # Убедимся, что все каталоги для сертификатов существуют
                             ServerManager.execute_command(

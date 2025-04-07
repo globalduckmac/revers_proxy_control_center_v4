@@ -317,18 +317,45 @@ class ServerManager:
             Exception: If upload fails
         """
         try:
-            client = ServerManager.get_ssh_client(server)
-            
-            # Open SFTP session
-            sftp = client.open_sftp()
-            
-            # Create file with content
-            with sftp.open(remote_path, 'w') as f:
-                f.write(content)
-            
-            # Close SFTP session and connection
-            sftp.close()
-            client.close()
+            # Проверяем, является ли путь путем к файлу с правами sudo
+            if remote_path.startswith('/etc/') or remote_path.startswith('/usr/'):
+                logger.info(f"Using sudo method for creating file at {remote_path} on server {server.name}")
+                
+                # Создаем временный файл
+                temp_path = f"/tmp/nginx_config_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                
+                client = ServerManager.get_ssh_client(server)
+                
+                # Open SFTP session
+                sftp = client.open_sftp()
+                
+                # Создаем временный файл
+                with sftp.open(temp_path, 'w') as f:
+                    f.write(content)
+                
+                # Копируем файл с sudo в нужное место
+                ServerManager.execute_command(
+                    server,
+                    f"sudo cp {temp_path} {remote_path} && sudo chmod 644 {remote_path} && rm {temp_path}"
+                )
+                
+                # Close SFTP session and connection
+                sftp.close()
+                client.close()
+            else:
+                # Стандартный метод для файлов без sudo
+                client = ServerManager.get_ssh_client(server)
+                
+                # Open SFTP session
+                sftp = client.open_sftp()
+                
+                # Create file with content
+                with sftp.open(remote_path, 'w') as f:
+                    f.write(content)
+                
+                # Close SFTP session and connection
+                sftp.close()
+                client.close()
             
             # Log file creation
             log = ServerLog(
