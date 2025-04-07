@@ -1,0 +1,57 @@
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: ERROR:app:Exception on /proxy/configs/3 [GET]
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: Traceback (most recent call last):
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     self.dialect.do_execute(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 945, in do_execute
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     cursor.execute(statement, parameters)
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: psycopg2.errors.UndefinedColumn: column proxy_config.extra_data does not exist
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: LINE 1: ...oxy_config.updated_at AS proxy_config_updated_at, proxy_conf...
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:                                                              ^
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: The above exception was the direct cause of the following exception:
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: Traceback (most recent call last):
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 1511, in wsgi_app
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     response = self.full_dispatch_request()
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 919, in full_dispatch_request
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     rv = self.handle_user_exception(e)
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 917, in full_dispatch_request
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     rv = self.dispatch_request()
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 902, in dispatch_request
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask_login/utils.py", line 290, in decorated_view
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     return current_app.ensure_sync(func)(*args, **kwargs)
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/routes/proxy.py", line 194, in view_configs
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     configs = ProxyConfig.query.filter_by(server_id=server_id).order_by(ProxyConfig.created_at.desc()).all()
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/query.py", line 2704, in all
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     return self._iter().all()  # type: ignore
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/query.py", line 2858, in _iter
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2365, in execute
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     return self._execute_internal(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2251, in _execute_internal
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     result: Result[Any] = compile_state_cls.orm_execute_statement(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     result = conn.execute(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1416, in execute
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     return meth(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/sql/elements.py", line 523, in _execute_on_connection
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     return connection._execute_clauseelement(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1638, in _execute_clauseelement
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     ret = self._execute_context(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1843, in _execute_context
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     return self._exec_single_context(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1983, in _exec_single_context
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     self._handle_dbapi_exception(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 2352, in _handle_dbapi_exception
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     self.dialect.do_execute(
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 945, in do_execute
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:     cursor.execute(statement, parameters)
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column proxy_config.extra_data does not exist
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: LINE 1: ...oxy_config.updated_at AS proxy_config_updated_at, proxy_conf...
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]:                                                              ^
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: [SQL: SELECT proxy_config.id AS proxy_config_id, proxy_config.server_id AS proxy_config_server_id, proxy_config.config_content AS proxy_config_config_content, proxy_config.status AS proxy_config_status, proxy_config.created_at AS proxy_config_created_at, proxy_config.updated_at AS proxy_config_updated_at, proxy_config.extra_data AS proxy_config_extra_data
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: FROM proxy_config
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: WHERE proxy_config.server_id = %(server_id_1)s ORDER BY proxy_config.created_at DESC]
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: [parameters: {'server_id_1': 3}]
+Apr 08 01:39:22 karaman-1.example.com gunicorn[4489]: (Background on this error at: https://sqlalche.me/e/20/f405)
