@@ -167,6 +167,15 @@ class ProxyManager:
             # Функция для выполнения в фоновом потоке
             def background_deploy(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name):
                 logger.info(f"Starting background deployment for server {server_name}")
+                
+                # Убедимся, что site_configs не потерялось и не пустое
+                if not site_configs:
+                    logger.error(f"Error: site_configs is empty for server {server_name}")
+                else:
+                    logger.info(f"Background deployment has {len(site_configs)} site configs for server {server_name}")
+                    for domain_name, config in site_configs.items():
+                        logger.info(f"Config for {domain_name} is {len(config)} bytes")
+                
                 try:
                     # Создаем контекст приложения для фонового потока
                     with app.app_context():
@@ -485,10 +494,31 @@ class ProxyManager:
                     except Exception as inner_e:
                         logger.error(f"Failed to log error in database: {str(inner_e)}")
             
-            # Start the background task
-            logger.info(f"Starting background deployment for server {server_name}")
-            # Исправляем передачу аргументов в фоновый поток, чтобы избежать проблемы с detached объектами
-            background_thread = Thread(target=background_deploy, args=(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name))
+            # Проверяем, не пустые ли конфигурации перед передачей в фоновый поток
+            if not site_configs:
+                logger.error(f"ERROR: site_configs is empty for server {server_name}")
+                proxy_config.status = 'error'
+                db.session.commit()
+                log = ServerLog(
+                    server_id=server_id,
+                    action='proxy_deployment',
+                    status='error',
+                    message=f"No site configurations found for server {server_name}"
+                )
+                db.session.add(log)
+                db.session.commit()
+                return False
+                
+            # Логируем содержимое конфигураций перед запуском потока
+            logger.info(f"Starting background deployment for server {server_name} with {len(site_configs)} site configs")
+            for domain_name, config in site_configs.items():
+                logger.info(f"Main thread: Config for {domain_name} is {len(config)} bytes")
+                
+            # Создаем глубокую копию конфигураций для передачи в поток
+            site_configs_copy = site_configs.copy()
+            
+            # Запускаем фоновый поток с копией конфигураций
+            background_thread = Thread(target=background_deploy, args=(app, server_id, proxy_config_id, templates_path, main_config, site_configs_copy, server_name))
             background_thread.daemon = True
             background_thread.start()
             
