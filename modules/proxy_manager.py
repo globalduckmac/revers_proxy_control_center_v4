@@ -134,6 +134,9 @@ class ProxyManager:
         Returns:
             bool: True if deployment process was successfully started, False otherwise
         """
+        # Инициализируем переменные до блока try для избежания предупреждений
+        server = None
+        
         try:
             server = Server.query.get(server_id)
             if not server:
@@ -153,6 +156,9 @@ class ProxyManager:
                 logger.error(f"No site configurations found for server {server.name}")
                 return False
                 
+            # Импортируем необходимые модули
+            import json
+            
             # Сохраняем site_configs в JSON для восстановления в фоновом потоке
             site_configs_json = {}
             for domain_name, config in site_configs.items():
@@ -180,6 +186,9 @@ class ProxyManager:
             def background_deploy(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name):
                 logger.info(f"Starting background deployment for server {server_name}")
                 
+                # Импортируем необходимые модули в начале функции
+                import json
+                
                 # Убедимся, что site_configs не потерялось и не пустое
                 if not site_configs:
                     logger.error(f"Error: site_configs is empty for server {server_name}")
@@ -191,7 +200,6 @@ class ProxyManager:
                 try:
                     # Создаем контекст приложения для фонового потока
                     with app.app_context():
-                        import json
                         from models import Server, ServerLog, ProxyConfig, db
                         from modules.server_manager import ServerManager
                         from modules.domain_manager import DomainManager
@@ -569,9 +577,20 @@ class ProxyManager:
             
             # Create log entry if server exists
             try:
+                # Получаем server снова, если он не определен или был очищен
+                server_obj = None
                 if 'server' in locals() and server:
+                    server_obj = server
+                else:
+                    # Импортировать модель внутри блока исключения
+                    from models import Server
+                    server_obj = Server.query.get(server_id)
+                    
+                if server_obj:
+                    # Импортировать ServerLog внутри блока исключения
+                    from models import ServerLog
                     log = ServerLog(
-                        server_id=server.id,
+                        server_id=server_obj.id,
                         action='proxy_deployment',
                         status='error',
                         message=f"Error starting deployment: {str(e)}"

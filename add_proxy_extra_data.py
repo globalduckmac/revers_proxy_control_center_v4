@@ -16,11 +16,14 @@ def add_extra_data_field():
     """
     with app.app_context():
         try:
+            # Импортируем text для SQL выражений
+            from sqlalchemy import text
+            
             # Проверяем существование колонки
-            check_column_query = """
+            check_column_query = text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='proxy_config' AND column_name='extra_data';
-            """
+            """)
             
             result = db.session.execute(check_column_query).fetchone()
             
@@ -29,9 +32,9 @@ def add_extra_data_field():
                 return
                 
             # Добавляем колонку
-            alter_table_query = """
+            alter_table_query = text("""
             ALTER TABLE proxy_config ADD COLUMN extra_data TEXT NULL;
-            """
+            """)
             
             db.session.execute(alter_table_query)
             db.session.commit()
