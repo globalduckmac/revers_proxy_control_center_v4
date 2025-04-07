@@ -1,6 +1,7 @@
 import os
 import logging
 import tempfile
+import json
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 from threading import Thread
@@ -147,11 +148,22 @@ class ProxyManager:
             # Generate Nginx configurations
             main_config, site_configs = self.generate_nginx_config(server)
 
-            # Create ProxyConfig record
+            # Проверяем, не пустые ли конфигурации
+            if not site_configs:
+                logger.error(f"No site configurations found for server {server.name}")
+                return False
+                
+            # Сохраняем site_configs в JSON для восстановления в фоновом потоке
+            site_configs_json = {}
+            for domain_name, config in site_configs.items():
+                site_configs_json[domain_name] = config
+                
+            # Create ProxyConfig record with site configs
             proxy_config = ProxyConfig(
                 server_id=server.id,
                 config_content=main_config,
-                status='pending'
+                status='pending',
+                extra_data=json.dumps(site_configs_json)  # Сохраняем все конфигурации сайтов в БД
             )
             db.session.add(proxy_config)
             db.session.commit()
@@ -182,6 +194,18 @@ class ProxyManager:
                         from models import Server, ServerLog, ProxyConfig, db
                         from modules.server_manager import ServerManager
                         from modules.domain_manager import DomainManager
+                        
+                        # Восстанавливаем конфигурации из БД (дублирующий механизм)
+                        proxy_config = ProxyConfig.query.get(proxy_config_id)
+                        if proxy_config and proxy_config.extra_data and not site_configs:
+                            logger.info(f"Восстанавливаем конфигурации из БД, т.к. site_configs пустой")
+                            try:
+                                site_configs = json.loads(proxy_config.extra_data)
+                                logger.info(f"Успешно восстановлено {len(site_configs)} конфигураций из БД")
+                                for domain_name, config in site_configs.items():
+                                    logger.info(f"Восстановлена конфигурация для {domain_name}: {len(config)} байт")
+                            except Exception as e:
+                                logger.error(f"Ошибка при восстановлении конфигураций из БД: {str(e)}")
                         
                         # Получаем объекты из БД по ID
                         server = Server.query.get(server_id)

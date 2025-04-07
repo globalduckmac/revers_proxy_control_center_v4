@@ -327,6 +327,8 @@ class ProxyConfig(db.Model):
     status = db.Column(db.String(20), default='pending')  # pending, deployed, error
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Добавляем поле для хранения дополнительных данных (конфигураций сайтов)
+    extra_data = db.Column(db.Text, nullable=True)
     
     # Relationship
     server = db.relationship('Server', backref=db.backref('proxy_configs', lazy=True, cascade='all, delete-orphan'))
