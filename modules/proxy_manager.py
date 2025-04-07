@@ -577,13 +577,15 @@ class ProxyManager:
             
             # Create log entry if server exists
             try:
+                # Импортируем модель Server заранее, чтобы избежать ошибки
+                from models import Server
+                
                 # Получаем server снова, если он не определен или был очищен
                 server_obj = None
                 if 'server' in locals() and server:
                     server_obj = server
                 else:
-                    # Импортировать модель внутри блока исключения
-                    from models import Server
+                    # Здесь модель Server уже доступна
                     server_obj = Server.query.get(server_id)
                     
                 if server_obj:
