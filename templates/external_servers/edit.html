@@ -1,0 +1,141 @@
+{% extends 'layout.html' %}
+
+{% block title %}Редактирование внешнего сервера{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-3">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('external_servers.index') }}">Внешние серверы</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('external_servers.view', server_id=server.id) }}">{{ server.name }}</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Редактирование</li>
+                </ol>
+            </nav>
+            <h1>Редактирование сервера "{{ server.name }}"</h1>
+            <p class="text-muted">Измените параметры внешнего сервера</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('external_servers.edit', server_id=server.id) }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Имя сервера *</label>
+                            <input type="text" class="form-control" id="name" name="name" value="{{ server.name }}" required>
+                            <div class="form-text">Укажите понятное имя для идентификации сервера</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="ip_address" class="form-label">IP-адрес *</label>
+                            <input type="text" class="form-control" id="ip_address" name="ip_address" value="{{ server.ip_address }}" required>
+                            <div class="form-text">Укажите IP-адрес сервера (поддерживается IPv4 и IPv6)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="glances_port" class="form-label">Порт Glances</label>
+                            <input type="number" class="form-control" id="glances_port" name="glances_port" value="{{ server.glances_port }}" min="1" max="65535">
+                            <div class="form-text">Порт, на котором запущен Glances API (по умолчанию 61208)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="glances_api_user" class="form-label">Имя пользователя Glances API</label>
+                            <input type="text" class="form-control" id="glances_api_user" name="glances_api_user" value="{{ server.glances_api_user }}">
+                            <div class="form-text">Опционально: имя пользователя для аутентификации в API (если настроено)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="glances_api_password" class="form-label">Пароль Glances API</label>
+                            <input type="password" class="form-control" id="glances_api_password" name="glances_api_password" placeholder="{% if server.glances_api_password %}Оставьте пустым, чтобы сохранить текущий пароль{% else %}Не задан{% endif %}">
+                            <div class="form-text">Опционально: пароль для аутентификации в API (если настроено)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="location" class="form-label">Местоположение</label>
+                            <input type="text" class="form-control" id="location" name="location" value="{{ server.location }}">
+                            <div class="form-text">Опционально: укажите физическое местоположение сервера</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Описание</label>
+                            <textarea class="form-control" id="description" name="description" rows="3">{{ server.description }}</textarea>
+                            <div class="form-text">Опционально: добавьте описание или заметки о сервере</div>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="is_active" name="is_active" {% if server.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">Активен</label>
+                            <div class="form-text">Если отключено, мониторинг для этого сервера будет приостановлен</div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('external_servers.view', server_id=server.id) }}" class="btn btn-secondary">Отмена</a>
+                            <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">Статус Glances</h5>
+                </div>
+                <div class="card-body">
+                    <p>Текущий URL: <a href="{{ server.get_glances_web_url() }}" target="_blank">{{ server.get_glances_web_url() }}</a></p>
+
+                    {% if server.last_check_time %}
+                        <p>Последняя проверка: {{ server.last_check_time|humanize_timestamp }}</p>
+                        
+                        {% if server.last_status == 'ok' %}
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle"></i> Сервер доступен и отвечает нормально.
+                            </div>
+                        {% elif server.last_status == 'warning' %}
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle"></i> Сервер доступен, но есть предупреждения.
+                            </div>
+                        {% elif server.last_status == 'error' %}
+                            <div class="alert alert-danger">
+                                <i class="fas fa-times-circle"></i> Ошибка при проверке сервера.
+                            </div>
+                        {% else %}
+                            <div class="alert alert-secondary">
+                                <i class="fas fa-question-circle"></i> Статус сервера неизвестен.
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> Сервер еще не проверялся.
+                        </div>
+                    {% endif %}
+
+                    <form action="{{ url_for('external_servers.check', server_id=server.id) }}" method="post">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-sync-alt"></i> Проверить доступность Glances
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0">Удаление сервера</h5>
+                </div>
+                <div class="card-body">
+                    <p>Будьте осторожны! Это действие удалит сервер и все его данные мониторинга.</p>
+                    <form action="{{ url_for('external_servers.delete', server_id=server.id) }}" method="post" onsubmit="return confirm('Вы уверены, что хотите удалить этот сервер?');">
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="fas fa-trash"></i> Удалить сервер
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

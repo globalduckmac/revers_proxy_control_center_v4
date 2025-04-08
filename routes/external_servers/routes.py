@@ -1,21 +1,23 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from flask_login import login_required, current_user
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
+from flask_login import login_required
+import json
+import datetime
+import requests
+from sqlalchemy import desc
+
 from app import db
 from models import ExternalServer, ExternalServerMetric
-import logging
-import json
-from datetime import datetime, timedelta
-import requests
 
 bp = Blueprint('external_servers', __name__, url_prefix='/external-servers')
-logger = logging.getLogger(__name__)
+
 
 @bp.route('/')
 @login_required
 def index():
-    """Отображает список внешних серверов."""
-    servers = ExternalServer.query.all()
+    """Отображает список всех внешних серверов."""
+    servers = ExternalServer.query.order_by(ExternalServer.name).all()
     return render_template('external_servers/index.html', servers=servers)
+
 
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -25,14 +27,14 @@ def create():
         name = request.form.get('name')
         ip_address = request.form.get('ip_address')
         description = request.form.get('description')
+        location = request.form.get('location')
         glances_port = request.form.get('glances_port', 61208, type=int)
         glances_api_user = request.form.get('glances_api_user')
         glances_api_password = request.form.get('glances_api_password')
-        location = request.form.get('location')
         
         # Проверка обязательных полей
         if not name or not ip_address:
-            flash('Имя и IP-адрес обязательны для заполнения', 'danger')
+            flash('Имя и IP-адрес являются обязательными полями.', 'danger')
             return render_template('external_servers/create.html')
         
         # Создание нового сервера
@@ -40,66 +42,79 @@ def create():
             name=name,
             ip_address=ip_address,
             description=description,
+            location=location,
             glances_port=glances_port,
             glances_api_user=glances_api_user,
             glances_api_password=glances_api_password,
-            location=location,
             is_active=True
         )
         
-        db.session.add(server)
-        
         try:
+            db.session.add(server)
             db.session.commit()
-            flash(f'Внешний сервер {name} успешно добавлен', 'success')
-            
-            # Проверяем доступность Glances API
-            try:
-                check_glances_availability(server)
-            except Exception as e:
-                logger.error(f"Ошибка при проверке доступности Glances API: {e}")
-                flash(f'Сервер добавлен, но Glances API не отвечает: {str(e)}', 'warning')
-            
-            return redirect(url_for('external_servers.index'))
+            flash(f'Внешний сервер "{name}" успешно создан.', 'success')
+            return redirect(url_for('external_servers.view', server_id=server.id))
         except Exception as e:
             db.session.rollback()
-            flash(f'Ошибка при добавлении сервера: {str(e)}', 'danger')
+            flash(f'Ошибка при создании сервера: {str(e)}', 'danger')
     
     return render_template('external_servers/create.html')
+
+
+@bp.route('/<int:server_id>', methods=['GET'])
+@login_required
+def view(server_id):
+    """Отображает информацию о внешнем сервере."""
+    server = ExternalServer.query.get_or_404(server_id)
+    metrics = ExternalServerMetric.query.filter_by(server_id=server_id).order_by(
+        desc(ExternalServerMetric.timestamp)).limit(100).all()
+    
+    return render_template('external_servers/view.html', server=server, metrics=metrics)
+
 
 @bp.route('/<int:server_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit(server_id):
-    """Редактирует существующий внешний сервер."""
+    """Редактирует информацию о внешнем сервере."""
     server = ExternalServer.query.get_or_404(server_id)
     
     if request.method == 'POST':
-        server.name = request.form.get('name')
-        server.ip_address = request.form.get('ip_address')
-        server.description = request.form.get('description')
-        server.glances_port = request.form.get('glances_port', 61208, type=int)
-        server.glances_api_user = request.form.get('glances_api_user')
-        server.glances_api_password = request.form.get('glances_api_password')
-        server.location = request.form.get('location')
-        server.is_active = 'is_active' in request.form
+        name = request.form.get('name')
+        ip_address = request.form.get('ip_address')
+        description = request.form.get('description')
+        location = request.form.get('location')
+        glances_port = request.form.get('glances_port', 61208, type=int)
+        glances_api_user = request.form.get('glances_api_user')
+        glances_api_password = request.form.get('glances_api_password')
+        is_active = 'is_active' in request.form
+        
+        # Проверка обязательных полей
+        if not name or not ip_address:
+            flash('Имя и IP-адрес являются обязательными полями.', 'danger')
+            return render_template('external_servers/edit.html', server=server)
+        
+        # Обновление данных сервера
+        server.name = name
+        server.ip_address = ip_address
+        server.description = description
+        server.location = location
+        server.glances_port = glances_port
+        server.glances_api_user = glances_api_user
+        # Обновляем пароль только если он был указан
+        if glances_api_password:
+            server.glances_api_password = glances_api_password
+        server.is_active = is_active
         
         try:
             db.session.commit()
-            flash(f'Внешний сервер {server.name} успешно обновлен', 'success')
-            
-            # Проверяем доступность Glances API
-            try:
-                check_glances_availability(server)
-            except Exception as e:
-                logger.error(f"Ошибка при проверке доступности Glances API: {e}")
-                flash(f'Сервер обновлен, но Glances API не отвечает: {str(e)}', 'warning')
-            
-            return redirect(url_for('external_servers.index'))
+            flash(f'Внешний сервер "{name}" успешно обновлен.', 'success')
+            return redirect(url_for('external_servers.view', server_id=server.id))
         except Exception as e:
             db.session.rollback()
             flash(f'Ошибка при обновлении сервера: {str(e)}', 'danger')
     
     return render_template('external_servers/edit.html', server=server)
+
 
 @bp.route('/<int:server_id>/delete', methods=['POST'])
 @login_required
@@ -108,126 +123,27 @@ def delete(server_id):
     server = ExternalServer.query.get_or_404(server_id)
     
     try:
+        # Удаляем все связанные метрики (на всякий случай, хотя cascade должен сработать)
+        ExternalServerMetric.query.filter_by(server_id=server_id).delete()
+        
+        # Удаляем сервер
         db.session.delete(server)
         db.session.commit()
-        flash(f'Внешний сервер {server.name} успешно удален', 'success')
+        
+        flash(f'Внешний сервер "{server.name}" и все его метрики успешно удалены.', 'success')
+        return redirect(url_for('external_servers.index'))
     except Exception as e:
         db.session.rollback()
         flash(f'Ошибка при удалении сервера: {str(e)}', 'danger')
-    
-    return redirect(url_for('external_servers.index'))
+        return redirect(url_for('external_servers.view', server_id=server_id))
 
-@bp.route('/<int:server_id>/view')
-@login_required
-def view(server_id):
-    """Просмотр подробной информации о внешнем сервере."""
-    server = ExternalServer.query.get_or_404(server_id)
-    
-    # Получаем метрики сервера за последние 24 часа
-    yesterday = datetime.utcnow() - timedelta(days=1)
-    metrics = ExternalServerMetric.query.filter(
-        ExternalServerMetric.server_id == server_id,
-        ExternalServerMetric.timestamp >= yesterday
-    ).order_by(ExternalServerMetric.timestamp.desc()).all()
-    
-    return render_template('external_servers/view.html', server=server, metrics=metrics)
 
 @bp.route('/<int:server_id>/check', methods=['POST'])
 @login_required
 def check(server_id):
-    """Проверяет доступность внешнего сервера и собирает текущие метрики."""
+    """Выполняет проверку внешнего сервера и сбор метрик."""
     server = ExternalServer.query.get_or_404(server_id)
     
-    try:
-        # Проверяем доступность Glances и собираем метрики
-        metrics = collect_server_metrics(server)
-        
-        if metrics:
-            flash(f'Сервер {server.name} доступен, метрики успешно собраны', 'success')
-        else:
-            flash(f'Не удалось собрать метрики сервера {server.name}', 'warning')
-    
-    except Exception as e:
-        logger.exception(f"Ошибка при проверке сервера {server.name}: {e}")
-        flash(f'Ошибка при проверке сервера: {str(e)}', 'danger')
-    
-    return redirect(url_for('external_servers.view', server_id=server_id))
-
-@bp.route('/<int:server_id>/metrics/json')
-@login_required
-def get_metrics_json(server_id):
-    """Возвращает метрики сервера в формате JSON для графиков."""
-    server = ExternalServer.query.get_or_404(server_id)
-    
-    # Получаем период из параметров запроса или используем 24 часа по умолчанию
-    period = request.args.get('period', '24h')
-    
-    if period == '24h':
-        start_time = datetime.utcnow() - timedelta(hours=24)
-    elif period == '7d':
-        start_time = datetime.utcnow() - timedelta(days=7)
-    elif period == '30d':
-        start_time = datetime.utcnow() - timedelta(days=30)
-    else:
-        start_time = datetime.utcnow() - timedelta(hours=24)
-    
-    # Получаем метрики за указанный период
-    metrics = ExternalServerMetric.query.filter(
-        ExternalServerMetric.server_id == server_id,
-        ExternalServerMetric.timestamp >= start_time
-    ).order_by(ExternalServerMetric.timestamp.asc()).all()
-    
-    # Формируем данные для графиков
-    timestamps = [metric.timestamp.strftime('%Y-%m-%d %H:%M:%S') for metric in metrics]
-    cpu_data = [metric.cpu_percent for metric in metrics]
-    memory_data = [metric.memory_percent for metric in metrics]
-    disk_data = [metric.disk_percent for metric in metrics]
-    load_avg_1_data = [metric.load_avg_1 for metric in metrics]
-    load_avg_5_data = [metric.load_avg_5 for metric in metrics]
-    load_avg_15_data = [metric.load_avg_15 for metric in metrics]
-    
-    return jsonify({
-        'timestamps': timestamps,
-        'cpu': cpu_data,
-        'memory': memory_data,
-        'disk': disk_data,
-        'load_avg_1': load_avg_1_data,
-        'load_avg_5': load_avg_5_data,
-        'load_avg_15': load_avg_15_data
-    })
-
-def check_glances_availability(server):
-    """
-    Проверяет доступность Glances API.
-    
-    Args:
-        server: объект ExternalServer
-        
-    Returns:
-        bool: True если Glances API доступен, иначе вызывает исключение
-    """
-    url = f"http://{server.ip_address}:{server.glances_port}/api/3/cpu"
-    
-    # Настройка аутентификации, если указаны учетные данные
-    auth = None
-    if server.glances_api_user and server.glances_api_password:
-        auth = (server.glances_api_user, server.glances_api_password)
-    
-    response = requests.get(url, auth=auth, timeout=5)
-    response.raise_for_status()
-    
-    return True
-
-def collect_server_metrics(server):
-    """
-    Собирает метрики сервера через Glances API.
-    
-    Args:
-        server: объект ExternalServer
-        
-    Returns:
-        ExternalServerMetric: созданный объект метрики или None в случае ошибки
-    """
     try:
         # Базовый URL для Glances API
         base_url = f"http://{server.ip_address}:{server.glances_port}/api/3"
@@ -282,7 +198,7 @@ def collect_server_metrics(server):
             status = 'error'
         
         # Сохраняем последние метрики в модели сервера
-        server.last_check_time = datetime.utcnow()
+        server.last_check_time = datetime.datetime.utcnow()
         server.last_status = status
         server.cpu_percent = cpu_percent
         server.memory_percent = memory_percent
@@ -317,14 +233,57 @@ def collect_server_metrics(server):
         db.session.add(metric)
         db.session.commit()
         
-        return metric
-        
+        flash(f'Метрики сервера "{server.name}" успешно обновлены.', 'success')
     except Exception as e:
-        logger.exception(f"Ошибка при сборе метрик для сервера {server.name}: {e}")
-        
-        # Обновляем статус сервера на ошибку
-        server.last_check_time = datetime.utcnow()
+        db.session.rollback()
+        server.last_check_time = datetime.datetime.utcnow()
         server.last_status = 'error'
         db.session.commit()
         
-        raise
+        flash(f'Ошибка при проверке сервера: {str(e)}', 'danger')
+    
+    return redirect(url_for('external_servers.view', server_id=server_id))
+
+
+@bp.route('/<int:server_id>/metrics', methods=['GET'])
+@login_required
+def get_metrics_json(server_id):
+    """Возвращает метрики сервера в формате JSON для построения графиков."""
+    server = ExternalServer.query.get_or_404(server_id)
+    period = request.args.get('period', '24h')
+    
+    # Определяем временной интервал
+    now = datetime.datetime.utcnow()
+    if period == '24h':
+        start_time = now - datetime.timedelta(hours=24)
+    elif period == '7d':
+        start_time = now - datetime.timedelta(days=7)
+    elif period == '30d':
+        start_time = now - datetime.timedelta(days=30)
+    else:
+        start_time = now - datetime.timedelta(hours=24)
+    
+    # Получаем метрики из базы данных
+    metrics = ExternalServerMetric.query.filter_by(server_id=server_id) \
+        .filter(ExternalServerMetric.timestamp >= start_time) \
+        .order_by(ExternalServerMetric.timestamp) \
+        .all()
+    
+    # Форматируем данные для графиков
+    timestamps = [metric.timestamp.strftime('%Y-%m-%d %H:%M:%S') for metric in metrics]
+    cpu_data = [metric.cpu_percent for metric in metrics]
+    memory_data = [metric.memory_percent for metric in metrics]
+    disk_data = [metric.disk_percent for metric in metrics]
+    load_avg_1_data = [metric.load_avg_1 for metric in metrics]
+    load_avg_5_data = [metric.load_avg_5 for metric in metrics]
+    load_avg_15_data = [metric.load_avg_15 for metric in metrics]
+    
+    return jsonify({
+        'timestamps': timestamps,
+        'cpu': cpu_data,
+        'memory': memory_data,
+        'disk': disk_data,
+        'load_avg_1': load_avg_1_data,
+        'load_avg_5': load_avg_5_data,
+        'load_avg_15': load_avg_15_data
+    })

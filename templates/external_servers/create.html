@@ -1,0 +1,106 @@
+{% extends 'layout.html' %}
+
+{% block title %}Добавление внешнего сервера{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-3">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('external_servers.index') }}">Внешние серверы</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Добавление внешнего сервера</li>
+                </ol>
+            </nav>
+            <h1>Добавление внешнего сервера</h1>
+            <p class="text-muted">Добавьте сервер с установленным Glances для мониторинга</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('external_servers.create') }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Имя сервера *</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                            <div class="form-text">Укажите понятное имя для идентификации сервера</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="ip_address" class="form-label">IP-адрес *</label>
+                            <input type="text" class="form-control" id="ip_address" name="ip_address" required>
+                            <div class="form-text">Укажите IP-адрес сервера (поддерживается IPv4 и IPv6)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="glances_port" class="form-label">Порт Glances</label>
+                            <input type="number" class="form-control" id="glances_port" name="glances_port" value="61208" min="1" max="65535">
+                            <div class="form-text">Порт, на котором запущен Glances API (по умолчанию 61208)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="glances_api_user" class="form-label">Имя пользователя Glances API</label>
+                            <input type="text" class="form-control" id="glances_api_user" name="glances_api_user">
+                            <div class="form-text">Опционально: имя пользователя для аутентификации в API (если настроено)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="glances_api_password" class="form-label">Пароль Glances API</label>
+                            <input type="password" class="form-control" id="glances_api_password" name="glances_api_password">
+                            <div class="form-text">Опционально: пароль для аутентификации в API (если настроено)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="location" class="form-label">Местоположение</label>
+                            <input type="text" class="form-control" id="location" name="location">
+                            <div class="form-text">Опционально: укажите физическое местоположение сервера</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Описание</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                            <div class="form-text">Опционально: добавьте описание или заметки о сервере</div>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="is_active" name="is_active" checked>
+                            <label class="form-check-label" for="is_active">Активен</label>
+                            <div class="form-text">Если отключено, мониторинг для этого сервера будет приостановлен</div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('external_servers.index') }}" class="btn btn-secondary">Отмена</a>
+                            <button type="submit" class="btn btn-primary">Добавить сервер</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">Инструкция по настройке Glances</h5>
+                </div>
+                <div class="card-body">
+                    <p>Для мониторинга внешнего сервера через Glances:</p>
+                    <ol>
+                        <li>Установите Glances на сервер:</li>
+                        <pre><code>pip install glances</code></pre>
+                        
+                        <li>Запустите Glances в веб-режиме:</li>
+                        <pre><code>glances -w</code></pre>
+                        
+                        <li>Чтобы Glances запускался автоматически, настройте системный сервис.</li>
+                        
+                        <li>По умолчанию Glances использует порт 61208. Убедитесь, что этот порт открыт в брандмауэре.</li>
+                    </ol>
+                    <p>Подробная документация: <a href="https://glances.readthedocs.io/en/latest/" target="_blank">Glances Documentation</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

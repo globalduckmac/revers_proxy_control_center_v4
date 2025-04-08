@@ -6,7 +6,7 @@ import pytz
 from datetime import datetime, timedelta
 
 from app import db
-from models import Server, Domain, DomainGroup
+from models import Server, Domain, DomainGroup, ExternalServer, ExternalServerMetric
 from modules.server_manager import ServerManager
 from modules.domain_manager import DomainManager
 from modules.monitoring import MonitoringManager
@@ -333,6 +333,10 @@ class BackgroundTasks:
                 # Получаем все активные сервера
                 servers = Server.query.filter_by(status='active').all()
                 
+                # Получаем все активные внешние сервера
+                external_servers = ExternalServer.query.filter_by(is_active=True).all()
+                
+                # Собираем метрики с обычных серверов
                 for server in servers:
                     try:
                         # Собираем и сохраняем метрики сервера
@@ -349,10 +353,131 @@ class BackgroundTasks:
                             
                     except Exception as e:
                         logger.error(f"Error collecting metrics for server {server.name}: {str(e)}")
-                
+                        
+                # Собираем метрики с внешних серверов
+                for server in external_servers:
+                    try:
+                        # Собираем метрики с внешнего сервера
+                        logger.info(f"Collecting metrics for external server {server.name}")
+                        self._collect_external_server_metrics(server)
+                    except Exception as e:
+                        logger.error(f"Error collecting metrics for external server {server.name}: {str(e)}")
+                        
             except Exception as e:
                 logger.error(f"Error in server metrics collection task: {str(e)}")
                 db.session.rollback()
+                
+    def _collect_external_server_metrics(self, server):
+        """
+        Собирает метрики с внешнего сервера через Glances API.
+        
+        Args:
+            server: объект ExternalServer
+        """
+        import requests
+        import json
+        
+        try:
+            # Базовый URL для Glances API
+            base_url = f"http://{server.ip_address}:{server.glances_port}/api/3"
+            
+            # Настройка аутентификации, если указаны учетные данные
+            auth = None
+            if server.glances_api_user and server.glances_api_password:
+                auth = (server.glances_api_user, server.glances_api_password)
+            
+            # Получаем данные о различных метриках
+            cpu_info = requests.get(f"{base_url}/cpu", auth=auth, timeout=5).json()
+            memory_info = requests.get(f"{base_url}/mem", auth=auth, timeout=5).json()
+            disk_info = requests.get(f"{base_url}/fs", auth=auth, timeout=5).json()
+            load_info = requests.get(f"{base_url}/load", auth=auth, timeout=5).json()
+            process_info = requests.get(f"{base_url}/processcount", auth=auth, timeout=5).json()
+            network_info = requests.get(f"{base_url}/network", auth=auth, timeout=5).json()
+            
+            # Извлекаем нужные значения из ответов
+            cpu_percent = cpu_info.get('total', 0)
+            memory_percent = memory_info.get('percent', 0)
+            
+            # Вычисляем среднее использование дисков
+            disk_percent = 0
+            if disk_info:
+                disk_percents = [fs.get('percent', 0) for fs in disk_info if fs.get('mnt_point') == '/']
+                if disk_percents:
+                    disk_percent = disk_percents[0]
+            
+            # Получаем load average
+            load_avg_1 = load_info.get('min1', 0)
+            load_avg_5 = load_info.get('min5', 0)
+            load_avg_15 = load_info.get('min15', 0)
+            
+            # Информация о процессах
+            processes_total = process_info.get('total', 0)
+            processes_running = process_info.get('running', 0)
+            
+            # Информация о сети
+            network_in_bytes = 0
+            network_out_bytes = 0
+            if network_info:
+                for interface in network_info:
+                    if interface.get('interface_name') not in ('lo', 'localhost'):
+                        network_in_bytes += interface.get('cumulative_rx', 0)
+                        network_out_bytes += interface.get('cumulative_tx', 0)
+            
+            # Определяем статус сервера на основе метрик
+            status = 'ok'
+            if cpu_percent > 80 or memory_percent > 80 or disk_percent > 80:
+                status = 'warning'
+            if cpu_percent > 95 or memory_percent > 95 or disk_percent > 95:
+                status = 'error'
+            
+            # Сохраняем последние метрики в модели сервера
+            server.last_check_time = datetime.utcnow()
+            server.last_status = status
+            server.cpu_percent = cpu_percent
+            server.memory_percent = memory_percent
+            server.disk_percent = disk_percent
+            server.load_avg_1 = load_avg_1
+            server.load_avg_5 = load_avg_5
+            server.load_avg_15 = load_avg_15
+            
+            # Создаем запись метрики
+            metric = ExternalServerMetric(
+                server_id=server.id,
+                cpu_percent=cpu_percent,
+                memory_percent=memory_percent,
+                disk_percent=disk_percent,
+                load_avg_1=load_avg_1,
+                load_avg_5=load_avg_5,
+                load_avg_15=load_avg_15,
+                processes_total=processes_total,
+                processes_running=processes_running,
+                network_in_bytes=network_in_bytes,
+                network_out_bytes=network_out_bytes,
+                metrics_data=json.dumps({
+                    'cpu': cpu_info,
+                    'memory': memory_info,
+                    'disk': disk_info,
+                    'load': load_info,
+                    'processes': process_info,
+                    'network': network_info
+                })
+            )
+            
+            db.session.add(metric)
+            db.session.commit()
+            
+            logger.info(f"Metrics collected for external server {server.name}")
+            return metric
+            
+        except Exception as e:
+            logger.exception(f"Error collecting metrics for external server {server.name}: {e}")
+            
+            # Обновляем статус сервера на ошибку
+            server.last_check_time = datetime.utcnow()
+            server.last_status = 'error'
+            db.session.commit()
+            
+            raise
     
     def _collect_domain_metrics(self):
         """Функция сбора метрик доменов отключена в этой версии."""

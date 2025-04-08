@@ -12,27 +12,27 @@
                     <i class="fas fa-plus"></i> Добавить сервер
                 </a>
             </div>
-            <p class="text-muted">
-                Внешние серверы - это серверы, которые доступны только для мониторинга через Glances API.
-                Для работы мониторинга на сервере должен быть установлен Glances в режиме сервера (с опцией -w).
-            </p>
+            <p class="text-muted">Серверы, мониторинг которых осуществляется через Glances API</p>
         </div>
     </div>
 
-    {% if servers %}
-        <div class="row mb-4">
-            <div class="col">
+    <div class="row">
+        <div class="col">
+            {% if servers %}
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="card-title mb-0">Список внешних серверов</h5>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">Список внешних серверов</h5>
+                            <span class="badge bg-primary">{{ servers|length }}</span>
+                        </div>
                     </div>
                     <div class="table-responsive">
-                        <table class="table table-hover table-striped align-middle mb-0">
+                        <table class="table table-hover table-striped mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>ID</th>
                                     <th>Имя</th>
                                     <th>IP-адрес</th>
+                                    <th>Местоположение</th>
                                     <th>Статус</th>
                                     <th>CPU</th>
                                     <th>Память</th>
@@ -43,159 +43,118 @@
                             </thead>
                             <tbody>
                                 {% for server in servers %}
-                                    <tr>
-                                        <td>{{ server.id }}</td>
-                                        <td>
-                                            <a href="{{ url_for('external_servers.view', server_id=server.id) }}" class="fw-bold text-decoration-none">
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('external_servers.view', server_id=server.id) }}" class="d-flex align-items-center text-decoration-none">
+                                            <div class="d-flex align-items-center">
+                                                <div class="me-2">
+                                                    <span class="badge {% if server.is_active %}bg-success{% else %}bg-secondary{% endif %} rounded-circle" style="width: 10px; height: 10px; display: inline-block;"></span>
+                                                </div>
                                                 {{ server.name }}
+                                            </div>
+                                        </a>
+                                    </td>
+                                    <td>{{ server.ip_address }}</td>
+                                    <td>{% if server.location %}{{ server.location }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                                    <td>
+                                        {% if server.last_status == 'ok' %}
+                                            <span class="badge bg-success">В порядке</span>
+                                        {% elif server.last_status == 'warning' %}
+                                            <span class="badge bg-warning text-dark">Предупреждение</span>
+                                        {% elif server.last_status == 'error' %}
+                                            <span class="badge bg-danger">Ошибка</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Неизвестно</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if server.cpu_percent is not none %}
+                                            <div class="progress" style="height: 6px; width: 60px;">
+                                                <div class="progress-bar {% if server.cpu_percent > 80 %}bg-danger{% elif server.cpu_percent > 60 %}bg-warning{% else %}bg-success{% endif %}" 
+                                                    role="progressbar" 
+                                                    style="width: {{ server.cpu_percent }}%;"
+                                                    aria-valuenow="{{ server.cpu_percent }}" 
+                                                    aria-valuemin="0" 
+                                                    aria-valuemax="100">
+                                                </div>
+                                            </div>
+                                            <small>{{ server.cpu_percent|round(1) }}%</small>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if server.memory_percent is not none %}
+                                            <div class="progress" style="height: 6px; width: 60px;">
+                                                <div class="progress-bar {% if server.memory_percent > 80 %}bg-danger{% elif server.memory_percent > 60 %}bg-warning{% else %}bg-success{% endif %}" 
+                                                    role="progressbar" 
+                                                    style="width: {{ server.memory_percent }}%;"
+                                                    aria-valuenow="{{ server.memory_percent }}" 
+                                                    aria-valuemin="0" 
+                                                    aria-valuemax="100">
+                                                </div>
+                                            </div>
+                                            <small>{{ server.memory_percent|round(1) }}%</small>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if server.disk_percent is not none %}
+                                            <div class="progress" style="height: 6px; width: 60px;">
+                                                <div class="progress-bar {% if server.disk_percent > 80 %}bg-danger{% elif server.disk_percent > 60 %}bg-warning{% else %}bg-success{% endif %}" 
+                                                    role="progressbar" 
+                                                    style="width: {{ server.disk_percent }}%;"
+                                                    aria-valuenow="{{ server.disk_percent }}" 
+                                                    aria-valuemin="0" 
+                                                    aria-valuemax="100">
+                                                </div>
+                                            </div>
+                                            <small>{{ server.disk_percent|round(1) }}%</small>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if server.last_check_time %}
+                                            <small class="text-muted">{{ server.last_check_time|humanize_timestamp }}</small>
+                                        {% else %}
+                                            <span class="text-muted">Никогда</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('external_servers.view', server_id=server.id) }}" class="btn btn-outline-primary" title="Просмотр">
+                                                <i class="fas fa-eye"></i>
                                             </a>
-                                            {% if server.description %}
-                                                <div class="small text-secondary">{{ server.description|truncate(50) }}</div>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-secondary">{{ server.ip_address }}</span>
-                                            <small class="d-block text-muted">Порт: {{ server.glances_port }}</small>
-                                        </td>
-                                        <td>
-                                            {% if server.last_status == 'ok' %}
-                                                <span class="badge bg-success">В порядке</span>
-                                            {% elif server.last_status == 'warning' %}
-                                                <span class="badge bg-warning text-dark">Предупреждение</span>
-                                            {% elif server.last_status == 'error' %}
-                                                <span class="badge bg-danger">Ошибка</span>
-                                            {% else %}
-                                                <span class="badge bg-secondary">Неизвестно</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if server.cpu_percent is not none %}
-                                                <div class="progress" style="height: 6px; width: 80px;">
-                                                    <div class="progress-bar 
-                                                        {% if server.cpu_percent > 80 %}bg-danger
-                                                        {% elif server.cpu_percent > 60 %}bg-warning
-                                                        {% else %}bg-success{% endif %}" 
-                                                        role="progressbar" 
-                                                        style="width: {{ server.cpu_percent }}%;" 
-                                                        aria-valuenow="{{ server.cpu_percent }}" 
-                                                        aria-valuemin="0" 
-                                                        aria-valuemax="100">
-                                                    </div>
-                                                </div>
-                                                <small>{{ server.cpu_percent|round(1) }}%</small>
-                                            {% else %}
-                                                <small class="text-muted">Нет данных</small>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if server.memory_percent is not none %}
-                                                <div class="progress" style="height: 6px; width: 80px;">
-                                                    <div class="progress-bar 
-                                                        {% if server.memory_percent > 80 %}bg-danger
-                                                        {% elif server.memory_percent > 60 %}bg-warning
-                                                        {% else %}bg-success{% endif %}" 
-                                                        role="progressbar" 
-                                                        style="width: {{ server.memory_percent }}%;" 
-                                                        aria-valuenow="{{ server.memory_percent }}" 
-                                                        aria-valuemin="0" 
-                                                        aria-valuemax="100">
-                                                    </div>
-                                                </div>
-                                                <small>{{ server.memory_percent|round(1) }}%</small>
-                                            {% else %}
-                                                <small class="text-muted">Нет данных</small>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if server.disk_percent is not none %}
-                                                <div class="progress" style="height: 6px; width: 80px;">
-                                                    <div class="progress-bar 
-                                                        {% if server.disk_percent > 80 %}bg-danger
-                                                        {% elif server.disk_percent > 60 %}bg-warning
-                                                        {% else %}bg-success{% endif %}" 
-                                                        role="progressbar" 
-                                                        style="width: {{ server.disk_percent }}%;" 
-                                                        aria-valuenow="{{ server.disk_percent }}" 
-                                                        aria-valuemin="0" 
-                                                        aria-valuemax="100">
-                                                    </div>
-                                                </div>
-                                                <small>{{ server.disk_percent|round(1) }}%</small>
-                                            {% else %}
-                                                <small class="text-muted">Нет данных</small>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if server.last_check_time %}
-                                                <small>{{ server.last_check_time|humanize_timestamp }}</small>
-                                            {% else %}
-                                                <small class="text-muted">Никогда</small>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <div class="btn-group">
-                                                <a href="{{ url_for('external_servers.view', server_id=server.id) }}" class="btn btn-sm btn-outline-primary">
-                                                    <i class="fas fa-eye"></i>
-                                                </a>
-                                                <a href="{{ url_for('external_servers.edit', server_id=server.id) }}" class="btn btn-sm btn-outline-secondary">
-                                                    <i class="fas fa-edit"></i>
-                                                </a>
-                                                <form action="{{ url_for('external_servers.check', server_id=server.id) }}" method="POST" class="d-inline">
-                                                    <button type="submit" class="btn btn-sm btn-outline-info">
-                                                        <i class="fas fa-sync-alt"></i>
-                                                    </button>
-                                                </form>
-                                                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ server.id }}">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                            
-                                            <!-- Delete Modal -->
-                                            <div class="modal fade" id="deleteModal{{ server.id }}" tabindex="-1" aria-labelledby="deleteModal{{ server.id }}Label" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title" id="deleteModal{{ server.id }}Label">Подтверждение удаления</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            Вы уверены, что хотите удалить сервер <strong>{{ server.name }}</strong> ({{ server.ip_address }})?
-                                                            <div class="alert alert-warning mt-3">
-                                                                <i class="fas fa-exclamation-triangle"></i> Это действие нельзя отменить. Все метрики этого сервера будут удалены.
-                                                            </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                                                            <form action="{{ url_for('external_servers.delete', server_id=server.id) }}" method="POST">
-                                                                <button type="submit" class="btn btn-danger">Удалить</button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                            <a href="{{ url_for('external_servers.edit', server_id=server.id) }}" class="btn btn-outline-secondary" title="Редактировать">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button class="btn btn-outline-danger" title="Удалить" 
+                                                    onclick="if(confirm('Вы уверены, что хотите удалить этот сервер?')) { document.getElementById('delete-form-{{ server.id }}').submit(); }">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            <form id="delete-form-{{ server.id }}" action="{{ url_for('external_servers.delete', server_id=server.id) }}" method="POST" style="display: none;"></form>
+                                        </div>
+                                    </td>
+                                </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </div>
-        </div>
-    {% else %}
-        <div class="row">
-            <div class="col">
-                <div class="alert alert-info">
-                    <h4 class="alert-heading"><i class="fas fa-info-circle"></i> Нет внешних серверов</h4>
-                    <p>У вас пока нет добавленных внешних серверов для мониторинга.</p>
-                    <hr>
-                    <p class="mb-0">
-                        Чтобы добавить новый сервер, нажмите на кнопку "Добавить сервер" вверху страницы.
-                        Для успешного мониторинга на сервере должен быть установлен Glances с включенным веб-сервером.
-                    </p>
+            {% else %}
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <h4 class="text-muted mb-3">Нет внешних серверов</h4>
+                        <p>У вас еще нет добавленных внешних серверов для мониторинга.</p>
+                        <a href="{{ url_for('external_servers.create') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Добавить первый сервер
+                        </a>
+                    </div>
                 </div>
-            </div>
+            {% endif %}
         </div>
-    {% endif %}
+    </div>
 </div>
 {% endblock %}
