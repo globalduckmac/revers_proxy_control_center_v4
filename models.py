@@ -387,7 +387,7 @@ class ExternalServer(db.Model):
         Returns:
             str: URL для доступа к API Glances
         """
-        return f"http://{self.ip_address}:{self.glances_port}/api/3"
+        return f"http://{self.ip_address}:{self.glances_port}/api/4"
     
     def get_glances_web_url(self):
         """
