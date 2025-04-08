@@ -355,6 +355,65 @@ class ServerMetric(db.Model):
     
     server = db.relationship('Server', backref=db.backref('metrics', lazy=True, cascade='all, delete-orphan'))
     
+class ExternalServer(db.Model):
+    """Модель для хранения информации о внешних серверах, которые нужно мониторить только по IP."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    ip_address = db.Column(db.String(45), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+    
+    # Поля для интеграции с Glances
+    glances_enabled = db.Column(db.Boolean, default=True)  # По умолчанию включено
+    glances_port = db.Column(db.Integer, default=61208)  # Порт для Glances API (по умолчанию 61208)
+    
+    # Статус
+    last_check = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(16), default='unknown')  # online, offline, unknown
+    
+    # Связи
+    metrics = db.relationship('ExternalServerMetric', backref=db.backref('server', lazy=True), lazy=True, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<ExternalServer {self.name} ({self.ip_address})>'
+    
+    def get_glances_url(self):
+        """
+        Получает URL для доступа к API Glances
+        
+        Returns:
+            str: URL для доступа к API Glances
+        """
+        return f"http://{self.ip_address}:{self.glances_port}"
+    
+    def get_glances_web_url(self):
+        """
+        Получает URL для доступа к веб-интерфейсу Glances
+        
+        Returns:
+            str: URL для доступа к веб-интерфейсу Glances
+        """
+        return f"http://{self.ip_address}:{self.glances_port}"
+
+class ExternalServerMetric(db.Model):
+    """Модель для хранения метрик внешнего сервера."""
+    
+    id = db.Column(db.Integer, primary_key=True)
+    external_server_id = db.Column(db.Integer, db.ForeignKey('external_server.id', ondelete="CASCADE"), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Метрики
+    cpu_usage = db.Column(db.Float, nullable=True)
+    memory_usage = db.Column(db.Float, nullable=True)
+    disk_usage = db.Column(db.Float, nullable=True)
+    load_average = db.Column(db.String(30), nullable=True)
+    collection_method = db.Column(db.String(20), default='glances_api', nullable=True)
+    
+    # Связь с ExternalServer определена выше
+
 class ServerGroup(db.Model):
     """Группы серверов для организации и фильтрации."""
     id = db.Column(db.Integer, primary_key=True)
