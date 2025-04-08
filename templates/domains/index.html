@@ -126,6 +126,11 @@
                                 <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-outline-success" title="FFPanel Integration">
                                     <i class="fas fa-cloud"></i>
                                 </a>
+                                <form method="POST" action="{{ url_for('domains.deploy_domain_config', domain_id=domain.id) }}" class="d-inline" style="margin-bottom: 0;">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Деплой конфигурации только для этого домена">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                </form>
                                 <button type="button" class="btn btn-sm btn-outline-danger" 
                                         data-bs-toggle="modal" 
                                         data-bs-target="#deleteDomainModal{{ domain.id }}" 

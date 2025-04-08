@@ -55,12 +55,6 @@
                                 </button>
                             </form>
                             </a>
-                            <form method="POST" action="/domains/deploy/{{ domain.id }}" class="d-inline mt-2 ms-2">
-                                <button type="submit" class="btn btn-sm btn-warning">
-                                    <i class="fas fa-sync-alt"></i> Деплой только этого домена
-                                </button>
-                            </form>
-                            </a>
                             {% if domain.ssl_status == 'active' %}
                                 <span class="badge bg-success ms-2">SSL активен</span>
                             {% elif domain.ssl_status == 'error' %}

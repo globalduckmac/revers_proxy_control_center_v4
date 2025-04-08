@@ -42,11 +42,6 @@
                             
                             <dt class="col-sm-4">Target Port:</dt>
                             <dd class="col-sm-8">{{ domain.target_port }}</dd>
-                            <dt class="col-sm-4">Target IP:</dt>
-                            <dd class="col-sm-8">{{ domain.target_ip }}</dd>
-                            
-                            <dt class="col-sm-4">Target Port:</dt>
-                            <dd class="col-sm-8">{{ domain.target_port }}</dd>
                         </dl>
                     </div>
                     <div class="col-md-6">
