@@ -217,7 +217,8 @@ class DeploymentManager:
             
             # Run certification command (can take a long time)
             logger.info(f"Obtaining SSL certificates for {len(ssl_domains)} domains on server {server.name}")
-            stdout, stderr = ServerManager.execute_command(server, cert_command, long_running=True)
+            # Увеличенный таймаут для операции выпуска сертификата (15 минут)
+            stdout, stderr = ServerManager.execute_command(server, cert_command, timeout=900, long_running=True)
             
             if "Congratulations" in stdout or "Successfully received certificate" in stdout:
                 # Certbot автоматически добавляет редирект с HTTP на HTTPS, даже если наш шаблон этого не делает
