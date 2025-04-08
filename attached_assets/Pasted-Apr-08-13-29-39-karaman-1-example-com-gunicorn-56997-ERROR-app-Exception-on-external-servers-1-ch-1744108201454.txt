@@ -1,0 +1,108 @@
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: ERROR:app:Exception on /external-servers/1/check [POST]
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: Traceback (most recent call last):
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self.dialect.do_execute(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 945, in do_execute
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     cursor.execute(statement, parameters)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: psycopg2.errors.NotNullViolation: null value in column "metric_type" of relation "external_server_metric" violates not-null constraint
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: DETAIL:  Failing row contains (2, 1, null, null, null, null, 2025-04-08 10:29:39.068764, 0, 0, 0, 0, glances_api).
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: The above exception was the direct cause of the following exception:
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: Traceback (most recent call last):
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/routes/external_servers.py", line 237, in check_server_metrics
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     db.session.commit()
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/scoping.py", line 599, in commit
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return self._proxied.commit()
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2032, in commit
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     trans.commit(_to_root=True)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "<string>", line 2, in commit
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/state_changes.py", line 139, in _go
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     ret_value = fn(self, *arg, **kw)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 1313, in commit
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self._prepare_impl()
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "<string>", line 2, in _prepare_impl
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/state_changes.py", line 139, in _go
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     ret_value = fn(self, *arg, **kw)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 1288, in _prepare_impl
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self.session.flush()
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4353, in flush
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self._flush(objects)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4488, in _flush
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     with util.safe_reraise():
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     raise exc_value.with_traceback(exc_tb)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4449, in _flush
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     flush_context.execute()
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 466, in execute
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     rec.execute(self)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 642, in execute
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     util.preloaded.orm_persistence.save_obj(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 93, in save_obj
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     _emit_insert_statements(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 1233, in _emit_insert_statements
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     result = connection.execute(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1416, in execute
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return meth(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/sql/elements.py", line 523, in _execute_on_connection
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return connection._execute_clauseelement(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1638, in _execute_clauseelement
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     ret = self._execute_context(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1843, in _execute_context
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return self._exec_single_context(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1983, in _exec_single_context
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self._handle_dbapi_exception(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 2352, in _handle_dbapi_exception
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self.dialect.do_execute(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 945, in do_execute
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     cursor.execute(statement, parameters)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: sqlalchemy.exc.IntegrityError: (psycopg2.errors.NotNullViolation) null value in column "metric_type" of relation "external_server_metric" violates not-null constraint
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: DETAIL:  Failing row contains (2, 1, null, null, null, null, 2025-04-08 10:29:39.068764, 0, 0, 0, 0, glances_api).
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: [SQL: INSERT INTO external_server_metric (external_server_id, timestamp, cpu_usage, memory_usage, disk_usage, load_average, collection_method) VALUES (%(external_server_id)s, %(timestamp)s, %(cpu_usage)s, %(memory_usage)s, %(disk_usage)s, %(load_average)s, %(collection_method)s) RETURNING external_server_metric.id]
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: [parameters: {'external_server_id': 1, 'timestamp': datetime.datetime(2025, 4, 8, 10, 29, 39, 68764), 'cpu_usage': 0, 'memory_usage': 0, 'disk_usage': 0, 'load_average': '0', 'collection_method': 'glances_api'}]
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: (Background on this error at: https://sqlalche.me/e/20/gkpj)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: During handling of the above exception, another exception occurred:
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: Traceback (most recent call last):
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 1511, in wsgi_app
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     response = self.full_dispatch_request()
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 919, in full_dispatch_request
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     rv = self.handle_user_exception(e)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 917, in full_dispatch_request
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     rv = self.dispatch_request()
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 902, in dispatch_request
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask_login/utils.py", line 290, in decorated_view
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return current_app.ensure_sync(func)(*args, **kwargs)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/routes/external_servers.py", line 185, in check_server
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     result = check_server_metrics(server_id)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/routes/external_servers.py", line 243, in check_server_metrics
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     logger.error(f"Ошибка при проверке сервера {server.name}: {str(e)}")
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/attributes.py", line 566, in __get__
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return self.impl.get(state, dict_)  # type: ignore[no-any-return]
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/attributes.py", line 1086, in get
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     value = self._fire_loader_callables(state, key, passive)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/attributes.py", line 1116, in _fire_loader_callablesApr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return state._load_expired(state, passive)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/state.py", line 803, in _load_expired
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self.manager.expired_attribute_loader(self, toload, passive)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/loading.py", line 1670, in load_scalar_attributes
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     result = load_on_ident(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/loading.py", line 509, in load_on_ident
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return load_on_pk_identity(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/loading.py", line 694, in load_on_pk_identity
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     session.execute(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2365, in execute
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return self._execute_internal(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2241, in _execute_internal
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     conn = self._connection_for_bind(bind)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2110, in _connection_for_bind
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     return trans._connection_for_bind(engine, execution_options)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "<string>", line 2, in _connection_for_bind
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/state_changes.py", line 103, in _go
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     self._raise_for_prerequisite_state(fn.__name__, current_state)
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 973, in _raise_for_prerequisite_state
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]:     raise sa_exc.PendingRollbackError(
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: sqlalchemy.exc.PendingRollbackError: This Session's transaction has been rolled back due to a previous exception during flush. To begin a new transaction with this Session, first issue Session.rollback(). Original exception was: (psycopg2.errors.NotNullViolation) null value in column "metric_type" of relation "external_server_metric" violates not-null constraint
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: DETAIL:  Failing row contains (2, 1, null, null, null, null, 2025-04-08 10:29:39.068764, 0, 0, 0, 0, glances_api).
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: [SQL: INSERT INTO external_server_metric (external_server_id, timestamp, cpu_usage, memory_usage, disk_usage, load_average, collection_method) VALUES (%(external_server_id)s, %(timestamp)s, %(cpu_usage)s, %(memory_usage)s, %(disk_usage)s, %(load_average)s, %(collection_method)s) RETURNING external_server_metric.id]
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: [parameters: {'external_server_id': 1, 'timestamp': datetime.datetime(2025, 4, 8, 10, 29, 39, 68764), 'cpu_usage': 0, 'memory_usage': 0, 'disk_usage': 0, 'load_average': '0', 'collection_method': 'glances_api'}]
+Apr 08 13:29:39 karaman-1.example.com gunicorn[56997]: (Background on this error at: https://sqlalche.me/e/20/gkpj) (Background on this error at: https://sqlalche.me/e/20/7s2a)
