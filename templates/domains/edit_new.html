@@ -1,0 +1,168 @@
+{% extends 'layout.html' %}
+
+{% block title %}Edit Domain - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Edit Domain</h1>
+        <p class="lead">Update domain settings for reverse proxying.</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('domains.view', domain_id=domain.id) }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Back to Domain
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('domains.edit', domain_id=domain.id) }}" id="editDomainForm">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="name" class="form-label">Domain Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ domain.name }}" required>
+                    <div class="form-text">The FQDN (e.g., example.com)</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="target_ip" class="form-label">Target IP</label>
+                    <input type="text" class="form-control" id="target_ip" name="target_ip" value="{{ domain.target_ip }}" required>
+                    <div class="form-text">The IP address to route traffic to</div>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="target_port" class="form-label">Target Port</label>
+                    <input type="number" class="form-control" id="target_port" name="target_port" value="{{ domain.target_port }}" required>
+                    <div class="form-text">The port to route traffic to</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" id="ssl_enabled" name="ssl_enabled" {% if domain.ssl_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="ssl_enabled">
+                            Enable SSL/HTTPS
+                        </label>
+                    </div>
+                    {% if domain.ssl_enabled %}
+                        <div class="mt-2">
+                            <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-sm btn-success">
+                                <i class="fas fa-lock"></i> Настроить SSL сертификат
+                            </a>
+                            <form method="POST" action="{{ url_for('domains.deploy_domain_config', domain_id=domain.id) }}" class="d-inline mt-2 ms-2">
+                                <button type="submit" class="btn btn-sm btn-warning">
+                                    <i class="fas fa-sync-alt"></i> Деплой только этого домена
+                                </button>
+                            </form>
+                        </div>
+                    {% elif domain.ssl_status == 'error' %}
+                        <div class="mt-2">
+                            <span class="badge bg-danger ms-2">Ошибка SSL</span>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <label for="comments" class="form-label">Comments</label>
+                    <textarea class="form-control" id="comments" name="comments" rows="2">{{ domain.comments or '' }}</textarea>
+                    <div class="form-text">Optional notes about this domain</div>
+                </div>
+            </div>
+            
+            <div class="card mb-3">
+                <div class="card-header">
+                    FFPanel Integration
+                </div>
+                <div class="card-body">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="ffpanel_enabled" name="ffpanel_enabled" {% if domain.ffpanel_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="ffpanel_enabled">
+                            Enable FFPanel Integration
+                        </label>
+                    </div>
+                    
+                    {% if domain.ffpanel_enabled %}
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="ffpanel_target_ip" class="form-label">FFPanel Target IP (Optional)</label>
+                            <input type="text" class="form-control" id="ffpanel_target_ip" name="ffpanel_target_ip" value="{{ domain.ffpanel_target_ip or '' }}">
+                            <div class="form-text">If different from the primary target IP</div>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-primary mt-3">
+                                <i class="fas fa-cog"></i> Advanced FFPanel Settings
+                            </a>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        Дополнительные настройки для FFPanel будут доступны после сохранения на странице "Интеграция с FFPanel".
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card mb-3">
+                <div class="card-header">
+                    Domain Groups
+                </div>
+                <div class="card-body">
+                    {% if domain_groups %}
+                        <select class="form-select" multiple name="domain_groups[]" id="domain_groups">
+                            {% for group in domain_groups %}
+                                <option value="{{ group.id }}" {% if group in domain.groups %}selected{% endif %}>
+                                    {{ group.name }} {% if group.server %}(Server: {{ group.server.name }}){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Hold Ctrl or ⌘ to select multiple groups. 
+                            <a href="{{ url_for('domain_groups.create') }}">Create a new group</a>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <strong>Note:</strong> You haven't created any domain groups yet. 
+                            <a href="{{ url_for('domain_groups.create') }}">Create a domain group</a> to organize your domains.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">Cancel</a>
+                <input type="submit" class="btn btn-primary" value="Update Domain" id="submitButton">
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('editDomainForm');
+    const submitButton = document.getElementById('submitButton');
+    
+    submitButton.addEventListener('click', function(event) {
+        event.preventDefault();
+        console.log('Submit button clicked');
+        
+        // Выводим состояние формы
+        console.log('Form action:', form.action);
+        console.log('Form method:', form.method);
+        
+        // Проверяем выбранные группы
+        const groupsSelect = document.getElementById('domain_groups');
+        if (groupsSelect) {
+            const selectedGroups = Array.from(groupsSelect.selectedOptions).map(option => option.value);
+            console.log('Selected groups:', selectedGroups);
+        }
+        
+        // Отправляем форму программно
+        form.submit();
+    });
+});
+</script>
+{% endblock %}

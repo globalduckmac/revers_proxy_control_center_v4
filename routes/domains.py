@@ -239,7 +239,7 @@ def edit(domain_id):
     from models import Server
     servers = Server.query.all()
     
-    return render_template('domains/edit.html', 
+    return render_template('domains/edit_new.html', 
                           domain=domain, 
                           domain_groups=domain_groups, 
                           servers=servers)
