@@ -6,7 +6,7 @@ import pytz
 from datetime import datetime, timedelta
 
 from app import db
-from models import Server, Domain, DomainGroup
+from models import Server, Domain, DomainGroup, ExternalServer, ExternalServerMetric
 from modules.server_manager import ServerManager
 from modules.domain_manager import DomainManager
 from modules.monitoring import MonitoringManager
@@ -65,6 +65,15 @@ class BackgroundTasks:
         )
         self.threads.append(server_metrics_thread)
         server_metrics_thread.start()
+        
+        # Запускаем задачу сбора метрик внешних серверов
+        external_server_metrics_thread = threading.Thread(
+            target=self._run_task,
+            args=(self._collect_external_server_metrics, COLLECT_SERVER_METRICS_INTERVAL, "External server metrics collection"),
+            daemon=True
+        )
+        self.threads.append(external_server_metrics_thread)
+        external_server_metrics_thread.start()
         
         # Сбор метрик доменов отключен
         
@@ -354,6 +363,102 @@ class BackgroundTasks:
                 logger.error(f"Error in server metrics collection task: {str(e)}")
                 db.session.rollback()
     
+    def _collect_external_server_metrics(self):
+        """Собирает метрики со всех активных внешних серверов через Glances API."""
+        from app import app
+        from routes.external_servers import get_server_metrics_via_glances
+        
+        with app.app_context():
+            try:
+                # Получаем все активные внешние сервера
+                servers = ExternalServer.query.filter_by(is_active=True).all()
+                
+                for server in servers:
+                    try:
+                        # Пропускаем сервера с отключенным Glances
+                        if not server.glances_enabled:
+                            logger.info(f"Skipping external server {server.name} - Glances not enabled")
+                            continue
+                        
+                        # Сохраняем текущий статус для отслеживания изменений
+                        old_status = server.status
+                        
+                        # Собираем метрики сервера
+                        logger.info(f"Collecting metrics for external server {server.name}")
+                        metrics = get_server_metrics_via_glances(server)
+                        
+                        if metrics:
+                            # Обновляем статус сервера
+                            server.status = 'online'
+                            server.last_check = datetime.utcnow()
+                            
+                            # Сохраняем метрики
+                            new_metric = ExternalServerMetric(
+                                external_server_id=server.id,
+                                cpu_usage=metrics.get('cpu_usage'),
+                                memory_usage=metrics.get('memory_usage'),
+                                disk_usage=metrics.get('disk_usage'),
+                                load_average=metrics.get('load_average'),
+                                collection_method='glances_api',
+                                timestamp=datetime.utcnow()
+                            )
+                            db.session.add(new_metric)
+                            
+                            logger.info(f"Collected metrics for external server {server.name}: CPU: {metrics.get('cpu_usage')}%, Memory: {metrics.get('memory_usage')}%, Disk: {metrics.get('disk_usage')}%")
+                            
+                            # Проверяем изменение статуса для уведомления
+                            if old_status != 'online' and TelegramNotifier.is_configured():
+                                try:
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
+                                    
+                                    try:
+                                        loop.run_until_complete(
+                                            TelegramNotifier.notify_external_server_status_change(
+                                                server, old_status, 'online'
+                                            )
+                                        )
+                                        logger.info(f"External server status notification sent for {server.name}")
+                                    finally:
+                                        loop.close()
+                                except Exception as e:
+                                    logger.error(f"Error sending external server status notification: {str(e)}")
+                        else:
+                            # Если не удалось получить метрики, обновляем статус
+                            server.status = 'offline'
+                            server.last_check = datetime.utcnow()
+                            
+                            logger.warning(f"Failed to collect metrics for external server {server.name}")
+                            
+                            # Отправляем уведомление об изменении статуса если сервер стал недоступен
+                            if old_status != 'offline' and TelegramNotifier.is_configured():
+                                try:
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
+                                    
+                                    try:
+                                        loop.run_until_complete(
+                                            TelegramNotifier.notify_external_server_status_change(
+                                                server, old_status, 'offline'
+                                            )
+                                        )
+                                        logger.info(f"External server status notification sent for {server.name}")
+                                    finally:
+                                        loop.close()
+                                except Exception as e:
+                                    logger.error(f"Error sending external server status notification: {str(e)}")
+                        
+                        # Сохраняем изменения в БД
+                        db.session.commit()
+                        
+                    except Exception as e:
+                        logger.error(f"Error collecting metrics for external server {server.name}: {str(e)}")
+                        db.session.rollback()
+                
+            except Exception as e:
+                logger.error(f"Error in external server metrics collection task: {str(e)}")
+                db.session.rollback()
+
     def _collect_domain_metrics(self):
         """Функция сбора метрик доменов отключена в этой версии."""
         logger.info("Domain metrics collection via SSH has been disabled in this version.")

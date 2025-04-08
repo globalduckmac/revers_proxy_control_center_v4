@@ -5,7 +5,7 @@ class Config:
     DEBUG = False
     TESTING = False
     SECRET_KEY = os.environ.get('SESSION_SECRET', 'dev-secret-key')
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://rpcc:jidVLxKX5VihdK@localhost/rpcc')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'mysql://root:password@localhost/reverse_proxy_manager')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Email for SSL certificates
@@ -28,7 +28,7 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     """Testing configuration."""
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://rpcc:jidVLxKX5VihdK@localhost/rpcc')
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
 
 
 class ProductionConfig(Config):

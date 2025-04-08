@@ -1,0 +1,17 @@
+[Unit]
+Description=Reverse Proxy Control Center v3
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/reverse_proxy_control_center
+Environment="DATABASE_URL=postgresql://rpcc:jidVLxKX5VihdK@localhost/rpcc"
+Environment="SESSION_SECRET=990f1867afae06202ece29258207dc81ce776f646ad53f9678facafeb374bd02"
+ExecStartPre=/bin/sleep 2
+ExecStart=/opt/reverse_proxy_control_center/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log main:app
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

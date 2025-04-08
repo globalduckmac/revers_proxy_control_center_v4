@@ -1,0 +1,261 @@
+{% extends 'layout.html' %}
+
+{% block title %}{{ server.name }} - Внешний сервер{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>{{ server.name }}</h1>
+                <div>
+                    <form action="{{ url_for('external_servers.check_server', server_id=server.id) }}" method="post" style="display: inline;">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-sync-alt"></i> Проверить сейчас
+                        </button>
+                    </form>
+                    <a href="{{ url_for('external_servers.edit', server_id=server.id) }}" class="btn btn-warning">
+                        <i class="fas fa-edit"></i> Изменить
+                    </a>
+                    <a href="{{ url_for('external_servers.index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Назад к списку
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    Информация о сервере
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            IP-адрес
+                            <span class="badge bg-primary">{{ server.ip_address }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Статус
+                            {% if server.status == 'online' %}
+                                <span class="badge bg-success">В сети</span>
+                            {% elif server.status == 'offline' %}
+                                <span class="badge bg-danger">Не в сети</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Неизвестно</span>
+                            {% endif %}
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Последняя проверка
+                            <span>
+                                {% if server.last_check %}
+                                    {{ server.last_check.strftime('%Y-%m-%d %H:%M:%S') }}
+                                {% else %}
+                                    Никогда
+                                {% endif %}
+                            </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Glances API
+                            {% if server.glances_enabled %}
+                                <span class="badge bg-success">Включено</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Отключено</span>
+                            {% endif %}
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Порт Glances
+                            <span class="badge bg-info">{{ server.glances_port }}</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-footer">
+                    {% if server.glances_enabled %}
+                        <a href="{{ server.get_glances_web_url() }}" target="_blank" class="btn btn-sm btn-primary w-100">
+                            <i class="fas fa-external-link-alt"></i> Открыть Glances Веб-интерфейс
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if server.description %}
+                <div class="card mb-3">
+                    <div class="card-header">
+                        Описание
+                    </div>
+                    <div class="card-body">
+                        <p>{{ server.description }}</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header">
+                    Текущие метрики
+                </div>
+                <div class="card-body">
+                    {% if metrics %}
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title">CPU</h5>
+                                        <div class="progress mb-2">
+                                            <div class="progress-bar {% if metrics.cpu_usage > 80 %}bg-danger{% elif metrics.cpu_usage > 60 %}bg-warning{% else %}bg-success{% endif %}" 
+                                                 role="progressbar" 
+                                                 style="width: {{ metrics.cpu_usage or 0 }}%;" 
+                                                 aria-valuenow="{{ metrics.cpu_usage or 0 }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                                {{ metrics.cpu_usage or 0 }}%
+                                            </div>
+                                        </div>
+                                        <p class="card-text">Использование процессора</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title">Память</h5>
+                                        <div class="progress mb-2">
+                                            <div class="progress-bar {% if metrics.memory_usage > 80 %}bg-danger{% elif metrics.memory_usage > 60 %}bg-warning{% else %}bg-success{% endif %}" 
+                                                 role="progressbar" 
+                                                 style="width: {{ metrics.memory_usage or 0 }}%;" 
+                                                 aria-valuenow="{{ metrics.memory_usage or 0 }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                                {{ metrics.memory_usage or 0 }}%
+                                            </div>
+                                        </div>
+                                        <p class="card-text">Использование памяти</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
+                                <div class="card">
+                                    <div class="card-body text-center">
+                                        <h5 class="card-title">Диск</h5>
+                                        <div class="progress mb-2">
+                                            <div class="progress-bar {% if metrics.disk_usage > 80 %}bg-danger{% elif metrics.disk_usage > 60 %}bg-warning{% else %}bg-success{% endif %}" 
+                                                 role="progressbar" 
+                                                 style="width: {{ metrics.disk_usage or 0 }}%;" 
+                                                 aria-valuenow="{{ metrics.disk_usage or 0 }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                                {{ metrics.disk_usage or 0 }}%
+                                            </div>
+                                        </div>
+                                        <p class="card-text">Использование диска</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <div class="alert alert-info">
+                                    <strong>Load Average:</strong> {{ metrics.load_average or 'Н/Д' }} | 
+                                    <strong>Время замера:</strong> {{ metrics.timestamp.strftime('%Y-%m-%d %H:%M:%S') }} | 
+                                    <strong>Метод сбора:</strong> {{ metrics.collection_method or 'Н/Д' }}
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <p>Метрики не доступны. Возможные причины:</p>
+                            <ul>
+                                <li>Сервер недоступен</li>
+                                <li>Сервис Glances не установлен или не запущен на сервере</li>
+                                <li>Неправильно указан порт для Glances API</li>
+                            </ul>
+                            <p>Нажмите кнопку "Проверить сейчас", чтобы попытаться получить метрики.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    История метрик
+                </div>
+                <div class="card-body">
+                    {% if chart_data and chart_data != '{}' %}
+                        <canvas id="metricsChart" width="100%" height="50"></canvas>
+                    {% else %}
+                        <div class="alert alert-info">
+                            Нет данных для отображения истории метрик.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if chart_data and chart_data != '{}' %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('metricsChart').getContext('2d');
+    const chartData = {{ chart_data|safe }};
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.labels,
+            datasets: [
+                {
+                    label: 'CPU (%)',
+                    data: chartData.cpu,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    tension: 0.1
+                },
+                {
+                    label: 'Память (%)',
+                    data: chartData.memory,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    tension: 0.1
+                },
+                {
+                    label: 'Диск (%)',
+                    data: chartData.disk,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Использование (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Время'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

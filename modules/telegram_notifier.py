@@ -175,6 +175,26 @@ class TelegramNotifier:
         await TelegramNotifier.send_message(message)
     
     @staticmethod
+    async def notify_external_server_status_change(server, old_status, new_status):
+        """
+        Отправляет уведомление об изменении статуса внешнего сервера
+        
+        Args:
+            server (ExternalServer): Объект внешнего сервера
+            old_status (str): Предыдущий статус
+            new_status (str): Новый статус
+        """
+        emoji = "🔴" if new_status == 'offline' else "🟢" if new_status == 'online' else "⚪"
+        
+        message = f"{emoji} <b>Изменение статуса внешнего сервера</b>\n\n" \
+                  f"Сервер: <b>{server.name}</b>\n" \
+                  f"IP: <code>{server.ip_address}</code>\n" \
+                  f"Статус: {old_status} → <b>{new_status}</b>\n\n" \
+                  f"Время: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        await TelegramNotifier.send_message(message)
+    
+    @staticmethod
     async def notify_domain_ns_status_change(domain, old_status, new_status):
         """
         Отправляет уведомление об изменении статуса NS-записей домена

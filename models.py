@@ -362,9 +362,9 @@ class ExternalServer(db.Model):
     name = db.Column(db.String(64), nullable=False)
     ip_address = db.Column(db.String(45), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    is_active = db.Column(db.Boolean, default=True)
     
     # Поля для интеграции с Glances
     glances_enabled = db.Column(db.Boolean, default=True)  # По умолчанию включено
@@ -380,14 +380,14 @@ class ExternalServer(db.Model):
     def __repr__(self):
         return f'<ExternalServer {self.name} ({self.ip_address})>'
     
-    def get_glances_url(self):
+    def get_glances_api_url(self):
         """
         Получает URL для доступа к API Glances
         
         Returns:
             str: URL для доступа к API Glances
         """
-        return f"http://{self.ip_address}:{self.glances_port}"
+        return f"http://{self.ip_address}:{self.glances_port}/api/3"
     
     def get_glances_web_url(self):
         """
