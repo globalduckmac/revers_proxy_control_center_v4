@@ -180,20 +180,44 @@ class DeploymentManager:
             db.session.add(log)
             db.session.commit()
             
-            # Install Certbot (long-running operation)
+            # Install Certbot and fix dependencies (long-running operation)
             logger.info(f"Installing Certbot on server {server.name}")
             try:
+                # Обновляем систему
                 ServerManager.execute_command(
                     server,
                     "sudo apt-get update -q", 
                     long_running=True
                 )
                 
+                # Устанавливаем Certbot
                 ServerManager.execute_command(
                     server,
                     "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx",
                     long_running=True
                 )
+                
+                # Загружаем скрипт для исправления зависимостей
+                fix_script_content = '''#!/bin/bash
+# Удаляем конфликтующие пакеты
+pip3 uninstall -y requests requests-toolbelt urllib3
+
+# Устанавливаем совместимые версии
+pip3 install requests==2.25.1
+pip3 install urllib3==1.26.6
+pip3 install requests-toolbelt==0.9.1
+'''
+                temp_file = "/tmp/fix_certbot_deps.sh"
+                
+                # Загружаем и выполняем скрипт
+                ServerManager.upload_string_to_file(server, fix_script_content, temp_file)
+                ServerManager.execute_command(server, f"chmod +x {temp_file}")
+                ServerManager.execute_command(server, f"sudo bash {temp_file}", long_running=True)
+                
+                # Удаляем временный файл
+                ServerManager.execute_command(server, f"rm {temp_file}")
+                
+                logger.info(f"Fixed Certbot dependencies on server {server.name}")
             except Exception as e:
                 logger.warning(f"Certbot installation warning on {server.name}: {str(e)}")
                 # Continue anyway, might be just a transient error
