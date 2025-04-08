@@ -2,7 +2,7 @@ import logging
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
-from models import User, Server, Domain, DomainGroup, ServerLog, db
+from models import User, Server, Domain, DomainGroup, ServerLog, ExternalServer, db
 from modules.telegram_notifier import TelegramNotifier
 
 bp = Blueprint('auth', __name__)
@@ -58,9 +58,13 @@ def dashboard():
     servers_count = Server.query.count()
     domains_count = Domain.query.count()
     domain_groups_count = DomainGroup.query.count()
+    external_servers_count = ExternalServer.query.count()
     
     # Get servers for status display
     servers = Server.query.all()
+    
+    # Get external servers for status display
+    external_servers = ExternalServer.query.all()
     
     # Get domains with NS status
     domains = Domain.query.filter(Domain.expected_nameservers != None).filter(Domain.expected_nameservers != '').all()
@@ -80,6 +84,21 @@ def dashboard():
         else:
             ns_status_counts['pending'] += 1
     
+    # Count external servers by status
+    external_status_counts = {
+        'online': 0,
+        'offline': 0,
+        'unknown': 0
+    }
+    
+    for server in external_servers:
+        if server.status == 'online':
+            external_status_counts['online'] += 1
+        elif server.status == 'offline':
+            external_status_counts['offline'] += 1
+        else:
+            external_status_counts['unknown'] += 1
+    
     # Check if Telegram notifications are configured
     telegram_configured = TelegramNotifier.is_configured()
     
@@ -87,7 +106,10 @@ def dashboard():
                          servers_count=servers_count,
                          domains_count=domains_count,
                          domain_groups_count=domain_groups_count,
+                         external_servers_count=external_servers_count,
                          servers=servers,
+                         external_servers=external_servers,
                          domains=domains,
                          ns_status_counts=ns_status_counts,
+                         external_status_counts=external_status_counts,
                          telegram_configured=telegram_configured)
