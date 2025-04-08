@@ -228,6 +228,7 @@ def check_server_metrics(server_id):
                 external_server_id=server.id,
                 metric_type='system',
                 metric_name='general',
+                metric_value='0',  # Устанавливаем значение по умолчанию
                 cpu_usage=metrics.get('cpu_usage'),
                 memory_usage=metrics.get('memory_usage'),
                 disk_usage=metrics.get('disk_usage'),

@@ -405,6 +405,7 @@ class ExternalServerMetric(db.Model):
     external_server_id = db.Column(db.Integer, db.ForeignKey('external_server.id', ondelete="CASCADE"), nullable=False)
     metric_type = db.Column(db.String(50), default='system', nullable=False)
     metric_name = db.Column(db.String(50), default='general', nullable=False)
+    metric_value = db.Column(db.Text, nullable=True)  # Добавляем поле, которое может быть NULL
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
     # Метрики
