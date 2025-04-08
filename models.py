@@ -403,6 +403,8 @@ class ExternalServerMetric(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     external_server_id = db.Column(db.Integer, db.ForeignKey('external_server.id', ondelete="CASCADE"), nullable=False)
+    metric_type = db.Column(db.String(50), default='system', nullable=False)
+    metric_name = db.Column(db.String(50), default='general', nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
     # Метрики
