@@ -224,33 +224,45 @@ def edit(domain_id):
         domain.ffpanel_target_ip = ffpanel_target_ip
         
         # Update domain groups
+        # Очищаем существующие группы перед обновлением
+        from sqlalchemy.orm import joinedload
+        
+        # Получаем текущие группы для домена (для дебага)
+        current_domain = Domain.query.options(joinedload(Domain.groups)).get(domain_id)
+        logger.info(f"Current domain groups before update: {[g.name for g in current_domain.groups]}")
+        
+        # Очищаем группы
         domain.groups = []
-        # Отладка: проверяем, есть ли 'domain_groups[]' в форме
+        
+        # Получаем группы из формы (используем только 'groups[]')
         logger.info(f"Form keys: {list(request.form.keys())}")
-        
-        # Пробуем получить из всех возможных полей формы
-        possible_fields = ['domain_groups[]', 'domain_groups', 'groups[]', 'groups']
-        
-        group_ids = []
-        for field in possible_fields:
-            values = request.form.getlist(field)
-            if values:
-                logger.info(f"Found groups in field '{field}': {values}")
-                group_ids = values
-                break
-                
-        if not group_ids:
-            logger.warning(f"No domain groups found in form for domain {domain_id}!")
+        group_ids = request.form.getlist('groups[]')
+        logger.info(f"Group IDs from form 'groups[]': {group_ids}")
         
         # Применяем группы к домену
         if group_ids:
             for group_id in group_ids:
-                group = DomainGroup.query.get(group_id)
-                if group:
-                    logger.info(f"Adding domain {domain_id} to group {group.id} ({group.name})")
-                    domain.groups.append(group)
+                try:
+                    group = DomainGroup.query.get(group_id)
+                    if group:
+                        logger.info(f"Adding domain {domain_id} to group {group.id} ({group.name})")
+                        domain.groups.append(group)
+                    else:
+                        logger.warning(f"Group with ID {group_id} not found!")
+                except Exception as e:
+                    logger.error(f"Error adding group {group_id} to domain: {str(e)}")
+        else:
+            logger.warning(f"No groups selected for domain {domain_id}")
         
-        db.session.commit()
+        # Сохраняем изменения немедленно
+        try:
+            db.session.commit()
+            # Получаем актуальные группы домена после сохранения
+            domain_after_update = Domain.query.options(joinedload(Domain.groups)).get(domain_id)
+            logger.info(f"Domain groups updated. New groups: {[g.name for g in domain_after_update.groups]}")
+        except Exception as e:
+            logger.error(f"Error saving domain groups: {str(e)}")
+            db.session.rollback()
         flash(f'Domain {name} updated successfully', 'success')
         
         return redirect(url_for('domains.index'))

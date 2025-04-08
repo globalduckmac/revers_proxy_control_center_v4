@@ -110,7 +110,7 @@
                 </div>
                 <div class="card-body">
                     {% if domain_groups %}
-                        <select class="form-select" multiple name="domain_groups[]" id="domain_groups">
+                        <select class="form-select" multiple name="groups[]" id="domain_groups">
                             {% for group in domain_groups %}
                                 <option value="{{ group.id }}" {% if group in domain.groups %}selected{% endif %}>
                                     {{ group.name }} {% if group.server %}(Server: {{ group.server.name }}){% endif %}
