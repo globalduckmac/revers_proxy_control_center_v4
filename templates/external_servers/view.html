@@ -187,7 +187,9 @@
                 </div>
                 <div class="card-body">
                     {% if chart_data and chart_data != '{}' %}
-                        <canvas id="metricsChart" width="100%" height="50"></canvas>
+                        <div style="height: 300px; width: 100%; position: relative;">
+                            <canvas id="metricsChart"></canvas>
+                        </div>
                     {% else %}
                         <div class="alert alert-info">
                             Нет данных для отображения истории метрик.
@@ -216,40 +218,105 @@ document.addEventListener('DOMContentLoaded', function() {
                     data: chartData.cpu,
                     borderColor: 'rgba(255, 99, 132, 1)',
                     backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                    tension: 0.1
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
                 },
                 {
                     label: 'Память (%)',
                     data: chartData.memory,
                     borderColor: 'rgba(54, 162, 235, 1)',
                     backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    tension: 0.1
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
                 },
                 {
                     label: 'Диск (%)',
                     data: chartData.disk,
                     borderColor: 'rgba(75, 192, 192, 1)',
                     backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    tension: 0.1
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 15,
+                        usePointStyle: true,
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    titleFont: {
+                        size: 14
+                    },
+                    bodyFont: {
+                        size: 13
+                    }
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            },
             scales: {
                 y: {
                     beginAtZero: true,
                     max: 100,
+                    grid: {
+                        color: 'rgba(200, 200, 200, 0.2)'
+                    },
+                    ticks: {
+                        stepSize: 20,
+                        font: {
+                            size: 11
+                        }
+                    },
                     title: {
                         display: true,
-                        text: 'Использование (%)'
+                        text: 'Использование (%)',
+                        font: {
+                            size: 13,
+                            weight: 'bold'
+                        }
                     }
                 },
                 x: {
+                    grid: {
+                        color: 'rgba(200, 200, 200, 0.2)'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45,
+                        font: {
+                            size: 10
+                        }
+                    },
                     title: {
                         display: true,
-                        text: 'Время'
+                        text: 'Время',
+                        font: {
+                            size: 13,
+                            weight: 'bold'
+                        }
                     }
                 }
             }
