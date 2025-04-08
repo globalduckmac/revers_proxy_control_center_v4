@@ -53,7 +53,12 @@
                                 <button type="submit" class="btn btn-sm btn-warning">
                                     <i class="fas fa-sync-alt"></i> Деплой только этого домена
                                 </button>
+                            </form
+                                </button>
                             </form>
+                            </a>
+                            {% if domain.ssl_status == 'active' %}
+                                <span class="badge bg-success ms-2">SSL активен</span>
                             {% elif domain.ssl_status == 'error' %}
                                 <span class="badge bg-danger ms-2">Ошибка SSL</span>
                             {% endif %}
@@ -66,7 +71,7 @@
                                 <button type="submit" class="btn btn-sm btn-primary">
                                     <i class="fas fa-sync-alt"></i> Обновить конфигурацию для этого домена
                                 </button>
-                            </form>>
+                            </form>
                         </div>
                     {% endif %}
                 </div>
@@ -155,7 +160,7 @@
                 <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">Cancel</a>
                 <button type="submit" class="btn btn-primary">Update Domain</button>
             </div>
-        </form>>
+        </form>
     </div>
 </div>
 

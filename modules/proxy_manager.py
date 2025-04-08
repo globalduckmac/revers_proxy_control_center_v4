@@ -100,13 +100,19 @@ class ProxyManager:
             # Get domains for the server using DomainManager
             if domain_id:
                 # Если указан конкретный домен, загружаем только его
-                from models import Domain
-                domain = Domain.query.filter_by(id=domain_id, server_id=server.id).first()
+                from models import Domain, DomainGroup
+                domain = Domain.query.get(domain_id)
                 if domain:
-                    domains = [domain]
-                    logger.info(f"Генерируем конфигурацию только для домена {domain.name} (ID: {domain.id})")
+                    # Проверим, принадлежит ли домен серверу через группы доменов
+                    domain_groups = [group for group in domain.groups if group.server_id == server.id]
+                    if domain_groups:
+                        domains = [domain]
+                        logger.info(f"Генерируем конфигурацию только для домена {domain.name} (ID: {domain.id})")
+                    else:
+                        logger.error(f"Домен {domain.name} (ID: {domain_id}) не связан с сервером {server.id}")
+                        return None, {}
                 else:
-                    logger.error(f"Домен с ID {domain_id} не найден на сервере {server.id}")
+                    logger.error(f"Домен с ID {domain_id} не найден")
                     return None, {}
             else:
                 # Если домен не указан, загружаем все домены сервера
@@ -205,7 +211,7 @@ class ProxyManager:
         
         try:
             # Явно импортируем модели здесь внутри функции
-            from models import Server, ProxyConfig, ServerLog
+            from models import Server, ProxyConfig, ServerLog, Domain, DomainGroup
             
             server = Server.query.get(server_id)
             if not server:
@@ -220,11 +226,18 @@ class ProxyManager:
             # Generate Nginx configurations
             if domain_id:
                 logger.info(f"Generating configuration for server {server.name} and domain ID {domain_id}")
-                from models import Domain
-                domain = Domain.query.filter_by(id=domain_id, server_id=server.id).first()
+                # Найдем домен сначала
+                domain = Domain.query.get(domain_id)
                 if not domain:
-                    logger.error(f"Domain ID {domain_id} not found on server {server.name}")
+                    logger.error(f"Domain ID {domain_id} not found")
                     return False
+                
+                # Проверим, принадлежит ли этот домен серверу через группы доменов
+                domain_groups = [group for group in domain.groups if group.server_id == server_id]
+                if not domain_groups:
+                    logger.error(f"Domain {domain.name} (ID: {domain_id}) is not associated with server ID {server_id}")
+                    return False
+                
                 logger.info(f"Generating proxy configuration for specific domain: {domain.name}")
                 main_config, site_configs = self.generate_nginx_config(server, domain_id)
             else:

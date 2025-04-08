@@ -650,16 +650,23 @@ def ffpanel(domain_id):
 @login_required
 def deploy_domain_config(domain_id):
     """Развертывание конфигурации только для одного домена."""
-    from models import Server, ServerLog
+    from models import Server, ServerLog, DomainGroup
     from flask import current_app
+    from modules.domain_manager import DomainManager
     
     domain = Domain.query.get_or_404(domain_id)
     
-    if not domain.server_id:
-        flash('Домен не привязан к серверу', 'danger')
+    # Найдем группы доменов, в которые входит этот домен
+    domain_groups = [group for group in domain.groups if group.server_id is not None]
+    
+    if not domain_groups:
+        flash('Домен не привязан к серверу через группу доменов', 'danger')
         return redirect(url_for('domains.view', domain_id=domain_id))
-        
-    server = Server.query.get(domain.server_id)
+    
+    # Берем первый сервер из группы доменов
+    server_id = domain_groups[0].server_id
+    server = Server.query.get(server_id)
+    
     if not server:
         flash('Сервер не найден', 'danger')
         return redirect(url_for('domains.view', domain_id=domain_id))
