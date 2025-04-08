@@ -168,6 +168,11 @@ def edit(domain_id):
     domain = Domain.query.get_or_404(domain_id)
     
     if request.method == 'POST':
+        # Отладка: выводим все данные формы
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"FORM DATA for domain_id {domain_id}: {request.form}")
+        
         name = request.form.get('name')
         target_ip = request.form.get('target_ip')
         target_port = request.form.get('target_port', 80, type=int)
@@ -220,11 +225,29 @@ def edit(domain_id):
         
         # Update domain groups
         domain.groups = []
-        group_ids = request.form.getlist('domain_groups[]')
+        # Отладка: проверяем, есть ли 'domain_groups[]' в форме
+        logger.info(f"Form keys: {list(request.form.keys())}")
+        
+        # Пробуем получить из всех возможных полей формы
+        possible_fields = ['domain_groups[]', 'domain_groups', 'groups[]', 'groups']
+        
+        group_ids = []
+        for field in possible_fields:
+            values = request.form.getlist(field)
+            if values:
+                logger.info(f"Found groups in field '{field}': {values}")
+                group_ids = values
+                break
+                
+        if not group_ids:
+            logger.warning(f"No domain groups found in form for domain {domain_id}!")
+        
+        # Применяем группы к домену
         if group_ids:
             for group_id in group_ids:
                 group = DomainGroup.query.get(group_id)
                 if group:
+                    logger.info(f"Adding domain {domain_id} to group {group.id} ({group.name})")
                     domain.groups.append(group)
         
         db.session.commit()
