@@ -686,7 +686,7 @@ def ffpanel(domain_id):
     
     return render_template('domains/ffpanel.html', domain=domain)
 
-@bp.route('/deploy/<int:domain_id>', methods=['POST'])
+@bp.route('/<int:domain_id>/deploy_config', methods=['GET', 'POST'])
 @login_required
 def deploy_domain_config(domain_id):
     """Развертывание конфигурации только для одного домена."""
