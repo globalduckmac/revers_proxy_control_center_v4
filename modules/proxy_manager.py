@@ -42,21 +42,41 @@ class ProxyManager:
             bool: True если сертификаты существуют и доступны, False в противном случае
         """
         try:
+            # Очищаем имя домена от лишних пробелов
+            clean_domain_name = domain_name.strip()
+            logger.info(f"Проверяем SSL сертификаты для домена '{clean_domain_name}'")
+            
             # Проверяем наличие путей к сертификатам - обратите внимание, что это только проверка наличия, 
             # но не валидности самих сертификатов
             # Исправлен пробел между domain_name и /fullchain.pem
-            cert_check_cmd = f"sudo test -f /etc/letsencrypt/live/{domain_name}/fullchain.pem && sudo test -f /etc/letsencrypt/live/{domain_name}/privkey.pem && echo 'SSL_EXISTS' || echo 'SSL_NOT_FOUND'"
-            result, _ = ServerManager.execute_command(server, cert_check_cmd)
+            cert_check_cmd = f"sudo test -f /etc/letsencrypt/live/{clean_domain_name}/fullchain.pem && sudo test -f /etc/letsencrypt/live/{clean_domain_name}/privkey.pem && echo 'SSL_EXISTS' || echo 'SSL_NOT_FOUND'"
+            
+            # Выводим команду для отладки
+            logger.debug(f"Команда проверки SSL: {cert_check_cmd}")
+            
+            # Выполняем команду на сервере
+            result, error = ServerManager.execute_command(server, cert_check_cmd)
+            
+            # Выводим результат команды для отладки
+            logger.debug(f"Результат проверки SSL: {result}, Ошибки: {error}")
             
             if "SSL_EXISTS" in result:
-                logger.info(f"SSL certificates found for domain {domain_name}")
+                logger.info(f"SSL сертификаты найдены для домена {clean_domain_name}")
+                
+                # Дополнительно проверяем срок действия сертификата
+                expiry_cmd = f"sudo openssl x509 -noout -dates -in /etc/letsencrypt/live/{clean_domain_name}/fullchain.pem 2>/dev/null || echo 'ERROR_CHECKING_EXPIRY'"
+                expiry_result, _ = ServerManager.execute_command(server, expiry_cmd)
+                
+                if "ERROR_CHECKING_EXPIRY" not in expiry_result:
+                    logger.info(f"Информация о сроке действия сертификата для {clean_domain_name}: {expiry_result}")
+                
                 return True
             else:
-                logger.warning(f"SSL certificates not found for domain {domain_name}")
+                logger.warning(f"SSL сертификаты не найдены для домена {clean_domain_name}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error checking SSL certificates for {domain_name}: {str(e)}")
+            logger.error(f"Ошибка при проверке SSL сертификатов для {domain_name}: {str(e)}")
             return False
     
     def generate_nginx_config(self, server):
@@ -108,6 +128,23 @@ class ProxyManager:
                 ssl_available = False
                 if domain.ssl_enabled:
                     ssl_available = self.check_ssl_certificate_exists(server, domain.name)
+                    
+                    # Обновляем статус SSL в базе данных, если он изменился
+                    from models import Domain, db
+                    from flask import current_app
+                    
+                    # Получаем актуальную версию объекта домена из базы данных
+                    domain_model = Domain.query.get(domain.id)
+                    if domain_model:
+                        # Обновляем статус SSL если он отличается от текущего
+                        if ssl_available and domain_model.ssl_status != 'active':
+                            domain_model.ssl_status = 'active'
+                            logger.info(f"Обновляем SSL статус для домена {domain.name} на 'active'")
+                            db.session.commit()
+                        elif not ssl_available and domain_model.ssl_status == 'active':
+                            domain_model.ssl_status = 'inactive'
+                            logger.info(f"Обновляем SSL статус для домена {domain.name} на 'inactive'")
+                            db.session.commit()
                 
                 # Логгируем доменное имя для отладки
                 logger.info(f"Имя домена перед рендерингом: '{domain.name}', длина: {len(domain.name)}")
@@ -115,6 +152,9 @@ class ProxyManager:
                 # Удаляем возможные лишние пробелы в имени домена
                 clean_domain_name = domain.name.strip()
                 logger.info(f"Очищенное имя домена: '{clean_domain_name}', длина: {len(clean_domain_name)}")
+                
+                # Выводим отладочную информацию о конфигурации SSL
+                logger.info(f"Конфигурация SSL для {clean_domain_name}: ssl_enabled={domain.ssl_enabled}, ssl_available={ssl_available}")
                 
                 site_config = site_template.render(
                     domain=clean_domain_name,
