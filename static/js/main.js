@@ -19,4 +19,22 @@ document.addEventListener('DOMContentLoaded', function() {
     if (firstInput) {
         firstInput.focus();
     }
+    
+    // Добавляем обработчик для всех форм на странице
+    const forms = document.querySelectorAll('form');
+    forms.forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            console.log('Form is being submitted');
+            
+            // Проверяем, есть ли в форме multiple select с именем domain_groups[]
+            const domainGroupsSelect = form.querySelector('select[name="domain_groups[]"]');
+            if (domainGroupsSelect) {
+                console.log('Found domain_groups[] select, selected options:', domainGroupsSelect.selectedOptions.length);
+                
+                // Выводим выбранные значения
+                const selectedValues = Array.from(domainGroupsSelect.selectedOptions).map(option => option.value);
+                console.log('Selected values:', selectedValues);
+            }
+        });
+    });
 });
