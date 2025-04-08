@@ -168,13 +168,23 @@ def update_app():
         app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         # Запускаем скрипт автоматического обновления
-        process = subprocess.run(
-            ['python', 'update_from_github.py'],
-            cwd=app_root,
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
+        # Пробуем запустить с python3, а если не получится, то с python
+        try:
+            process = subprocess.run(
+                ['python3', 'update_from_github.py'],
+                cwd=app_root,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+        except FileNotFoundError:
+            process = subprocess.run(
+                ['python', 'update_from_github.py'],
+                cwd=app_root,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
         
         # Проверяем результат выполнения команды
         if process.returncode == 0:
