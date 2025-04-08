@@ -693,6 +693,10 @@ def deploy_domain_config(domain_id):
     from models import Server, ServerLog, DomainGroup
     from flask import current_app
     from modules.domain_manager import DomainManager
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Начало развертывания конфигурации для домена {domain_id}")
     
     domain = Domain.query.get_or_404(domain_id)
     
@@ -701,7 +705,7 @@ def deploy_domain_config(domain_id):
     
     if not domain_groups:
         flash('Домен не привязан к серверу через группу доменов', 'danger')
-        return redirect(url_for('domains.view', domain_id=domain_id))
+        return redirect(url_for('domains.edit', domain_id=domain_id))
     
     # Берем первый сервер из группы доменов
     server_id = domain_groups[0].server_id
@@ -709,13 +713,15 @@ def deploy_domain_config(domain_id):
     
     if not server:
         flash('Сервер не найден', 'danger')
-        return redirect(url_for('domains.view', domain_id=domain_id))
+        return redirect(url_for('domains.edit', domain_id=domain_id))
     
     # Проверяем соединение с сервером
     from modules.server_manager import ServerManager
+    logger.info(f"Проверка соединения с сервером {server.name} ({server.ip_address})")
+    
     if not ServerManager.check_connectivity(server):
         flash(f'Не удалось подключиться к серверу {server.name}', 'danger')
-        return redirect(url_for('domains.view', domain_id=domain_id))
+        return redirect(url_for('domains.edit', domain_id=domain_id))
     
     # Создаем лог операции
     log = ServerLog(
@@ -730,6 +736,8 @@ def deploy_domain_config(domain_id):
     try:
         # Разворачиваем конфигурацию для домена
         from modules.proxy_manager import ProxyManager
+        logger.info(f"Запуск деплоя конфигурации для домена {domain.name} на сервере {server.name}")
+        
         proxy_manager = ProxyManager(current_app.config.get('NGINX_TEMPLATES_PATH', 'templates/nginx'))
         success = proxy_manager.deploy_proxy_config(server.id, domain.id)
         
@@ -739,6 +747,7 @@ def deploy_domain_config(domain_id):
             log.message = f'Конфигурация прокси для домена {domain.name} успешно развернута'
             db.session.commit()
             
+            logger.info(f"Деплой конфигурации для домена {domain.name} выполнен успешно")
             flash(f'Конфигурация для домена {domain.name} успешно развернута', 'success')
         else:
             # Обновляем статус лога в случае ошибки
@@ -746,6 +755,7 @@ def deploy_domain_config(domain_id):
             log.message = f'Ошибка при развертывании конфигурации для домена {domain.name}'
             db.session.commit()
             
+            logger.error(f"Ошибка при деплое конфигурации для домена {domain.name}")
             flash(f'Ошибка при развертывании конфигурации для домена {domain.name}', 'danger')
             
     except Exception as e:
@@ -754,9 +764,10 @@ def deploy_domain_config(domain_id):
         log.message = f'Исключение при развертывании конфигурации для домена {domain.name}: {str(e)}'
         db.session.commit()
         
+        logger.exception(f"Исключение при деплое конфигурации для домена {domain.name}")
         flash(f'Ошибка: {str(e)}', 'danger')
     
-    return redirect(url_for('domains.view', domain_id=domain_id))
+    return redirect(url_for('domains.edit', domain_id=domain_id))
 
 @bp.route('/ffpanel/import', methods=['GET', 'POST'])
 @login_required
