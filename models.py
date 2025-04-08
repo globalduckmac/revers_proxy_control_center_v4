@@ -355,6 +355,79 @@ class ServerMetric(db.Model):
     
     server = db.relationship('Server', backref=db.backref('metrics', lazy=True, cascade='all, delete-orphan'))
     
+    
+class ExternalServer(db.Model):
+    """Модель внешнего сервера только для мониторинга через Glances."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    ip_address = db.Column(db.String(45), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    location = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Поля для интеграции с Glances
+    glances_port = db.Column(db.Integer, default=61208)
+    glances_api_user = db.Column(db.String(100), nullable=True)
+    glances_api_password = db.Column(db.String(100), nullable=True)
+    
+    # Последние известные метрики
+    last_check_time = db.Column(db.DateTime, nullable=True)
+    last_status = db.Column(db.String(20), default='unknown')  # ok, warning, error, unknown
+    cpu_percent = db.Column(db.Float, nullable=True)
+    memory_percent = db.Column(db.Float, nullable=True)
+    disk_percent = db.Column(db.Float, nullable=True)
+    load_avg_1 = db.Column(db.Float, nullable=True)
+    load_avg_5 = db.Column(db.Float, nullable=True)
+    load_avg_15 = db.Column(db.Float, nullable=True)
+    
+    def get_glances_url(self):
+        """
+        Получает URL для доступа к API Glances
+        
+        Returns:
+            str: URL для доступа к API Glances
+        """
+        return f"http://{self.ip_address}:{self.glances_port}"
+    
+    def get_glances_web_url(self):
+        """
+        Получает URL для доступа к веб-интерфейсу Glances
+        
+        Returns:
+            str: URL для доступа к веб-интерфейсу Glances
+        """
+        return f"http://{self.ip_address}:{self.glances_port}"
+    
+    def __repr__(self):
+        return f'<ExternalServer {self.name} ({self.ip_address})>'
+
+
+class ExternalServerMetric(db.Model):
+    """Модель для хранения метрик внешнего сервера."""
+    id = db.Column(db.Integer, primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey('external_server.id', ondelete='CASCADE'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    
+    cpu_percent = db.Column(db.Float, nullable=True)
+    memory_percent = db.Column(db.Float, nullable=True)
+    disk_percent = db.Column(db.Float, nullable=True)
+    load_avg_1 = db.Column(db.Float, nullable=True)
+    load_avg_5 = db.Column(db.Float, nullable=True)
+    load_avg_15 = db.Column(db.Float, nullable=True)
+    processes_total = db.Column(db.Integer, nullable=True)
+    processes_running = db.Column(db.Integer, nullable=True)
+    network_in_bytes = db.Column(db.BigInteger, nullable=True)
+    network_out_bytes = db.Column(db.BigInteger, nullable=True)
+    metrics_data = db.Column(db.JSON, nullable=True)  # Полные данные метрик в JSON формате
+    
+    # Отношения
+    server = db.relationship('ExternalServer', backref=db.backref('metrics', lazy=True, cascade='all, delete-orphan'))
+    
+    def __repr__(self):
+        return f'<ExternalServerMetric {self.server_id} {self.timestamp}>'
+    
 class ServerGroup(db.Model):
     """Группы серверов для организации и фильтрации."""
     id = db.Column(db.Integer, primary_key=True)
