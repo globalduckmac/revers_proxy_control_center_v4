@@ -395,6 +395,8 @@ class BackgroundTasks:
                             # Сохраняем метрики
                             new_metric = ExternalServerMetric(
                                 external_server_id=server.id,
+                                metric_type='system',
+                                metric_name='general',
                                 cpu_usage=metrics.get('cpu_usage'),
                                 memory_usage=metrics.get('memory_usage'),
                                 disk_usage=metrics.get('disk_usage'),
