@@ -234,10 +234,15 @@ def edit(domain_id):
         # Очищаем группы
         domain.groups = []
         
-        # Получаем группы из формы (используем только 'groups[]')
+        # Получаем группы из формы
         logger.info(f"Form keys: {list(request.form.keys())}")
         group_ids = request.form.getlist('groups[]')
-        logger.info(f"Group IDs from form 'groups[]': {group_ids}")
+        
+        # Если нет групп в groups[], попробуем domain_groups[] для совместимости со старыми формами
+        if not group_ids:
+            group_ids = request.form.getlist('domain_groups[]')
+            
+        logger.info(f"Group IDs from form: {group_ids}")
         
         # Применяем группы к домену
         if group_ids:
@@ -274,7 +279,7 @@ def edit(domain_id):
     from models import Server
     servers = Server.query.all()
     
-    return render_template('domains/edit_new.html', 
+    return render_template('domains/edit.html', 
                           domain=domain, 
                           domain_groups=domain_groups, 
                           servers=servers)

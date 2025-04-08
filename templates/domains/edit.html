@@ -1,139 +1,274 @@
 {% extends 'layout.html' %}
 
-{% block title %}Edit Domain - Reverse Proxy Manager{% endblock %}
+{% block title %}Edit Domain{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col">
-        <h1>Edit Domain</h1>
-        <p class="lead">Update domain settings for reverse proxying.</p>
+<div class="container">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>Edit Domain: {{ domain.name }}</h1>
+                <a href="{{ url_for('domains.index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Domains
+                </a>
+            </div>
+        </div>
     </div>
-    <div class="col-auto">
-        <a href="{{ url_for('domains.view', domain_id=domain.id) }}" class="btn btn-outline-primary">
-            <i class="fas fa-arrow-left"></i> Back to Domain
-        </a>
+
+    <div class="row">
+        <div class="col-md-8">
+            <form method="post" action="{{ url_for('domains.edit', domain_id=domain.id) }}">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        Domain Information
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Domain Name</label>
+                            <input type="text" class="form-control" id="name" name="name" value="{{ domain.name }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="target_ip" class="form-label">Target IP Address</label>
+                            <input type="text" class="form-control" id="target_ip" name="target_ip" value="{{ domain.target_ip }}">
+                            <div class="form-text">The IP address that this domain should point to.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3">{{ domain.description }}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header">
+                        Configuration
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active" {% if domain.is_active %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_active">Active</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="ssl_enabled" name="ssl_enabled" {% if domain.ssl_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="ssl_enabled">SSL Enabled</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="redirect_to_www" name="redirect_to_www" {% if domain.redirect_to_www %}checked{% endif %}>
+                                    <label class="form-check-label" for="redirect_to_www">Redirect to www</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="redirect_www_to_root" name="redirect_www_to_root" {% if domain.redirect_www_to_root %}checked{% endif %}>
+                                    <label class="form-check-label" for="redirect_www_to_root">Redirect www to root</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="expected_nameservers" class="form-label">Expected Nameservers</label>
+                            <input type="text" class="form-control" id="expected_nameservers" name="expected_nameservers" value="{{ domain.expected_nameservers }}">
+                            <div class="form-text">Comma-separated list of nameservers you expect for this domain (e.g., ns1.example.com,ns2.example.com)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header">
+                        FFPanel Integration
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="ffpanel_enabled" name="ffpanel_enabled" {% if domain.ffpanel_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="ffpanel_enabled">FFPanel Integration Enabled</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="ffpanel_target_ip" class="form-label">FFPanel Target IP (optional)</label>
+                            <input type="text" class="form-control" id="ffpanel_target_ip" name="ffpanel_target_ip" value="{{ domain.ffpanel_target_ip }}">
+                            <div class="form-text">If different from the main target IP, specify a separate IP for FFPanel integration</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header">
+                        Domain Groups
+                    </div>
+                    <div class="card-body">
+                        {% if domain_groups %}
+                            <div class="row">
+                                {% for group in domain_groups %}
+                                    <div class="col-md-6 mb-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" 
+                                                  name="groups[]" 
+                                                  id="group_{{ group.id }}" 
+                                                  value="{{ group.id }}" 
+                                                  {% if group in domain.groups %}checked{% endif %}>
+                                            <label class="form-check-label" for="group_{{ group.id }}">
+                                                {{ group.name }} {% if group.server %}(Server: {{ group.server.name }}){% endif %}
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="mt-3">
+                                <a href="{{ url_for('domain_groups.create') }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-plus"></i> Create a new group
+                                </a>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">
+                                <strong>Note:</strong> You haven't created any domain groups yet. 
+                                <a href="{{ url_for('domain_groups.create') }}">Create a domain group</a> to organize your domains.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header">
+                        Actions
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Domain
+                            </button>
+                            <a href="{{ url_for('domains.index') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                            
+                            {% if domain.ssl_enabled %}
+                                <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-success">
+                                    <i class="fas fa-shield-alt"></i> Setup SSL Certificate
+                                </a>
+                            {% endif %}
+                            
+                            <a href="{{ url_for('domains.nameservers', domain_id=domain.id) }}" class="btn btn-info text-white">
+                                <i class="fas fa-network-wired"></i> Manage Nameservers
+                            </a>
+                            
+                            <a href="{{ url_for('proxy.deploy_domain_config', domain_id=domain.id) }}" 
+                               class="btn btn-warning text-white"
+                               onclick="return confirm('Are you sure you want to deploy configuration for this domain?')">
+                                <i class="fas fa-upload"></i> Deploy Configuration
+                            </a>
+                            
+                            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                                <i class="fas fa-trash"></i> Delete Domain
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    Domain Status
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">SSL Status</label>
+                        <div>
+                            {% if domain.ssl_status == 'active' %}
+                                <span class="badge bg-success">Active</span>
+                            {% elif domain.ssl_status == 'pending' %}
+                                <span class="badge bg-warning text-dark">Pending</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Not Configured</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nameserver Status</label>
+                        <div>
+                            {% if domain.ns_status == 'ok' %}
+                                <span class="badge bg-success">OK</span>
+                            {% elif domain.ns_status == 'mismatch' %}
+                                <span class="badge bg-warning text-dark">Mismatch</span>
+                            {% elif domain.ns_status == 'error' %}
+                                <span class="badge bg-danger">Error</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Unknown</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Created At</label>
+                        <div>{{ domain.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Last Updated</label>
+                        <div>{{ domain.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mb-3">
+                <div class="card-header">
+                    Associated Groups
+                </div>
+                <div class="card-body">
+                    {% if domain.groups %}
+                        <ul class="list-group">
+                            {% for group in domain.groups %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    {{ group.name }}
+                                    {% if group.server %}
+                                        <span class="badge bg-primary rounded-pill">
+                                            {{ group.server.name }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary rounded-pill">
+                                            No Server
+                                        </span>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="alert alert-info">
+                            This domain is not associated with any groups.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-body">
-        <form method="POST">
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label for="name" class="form-label">Domain Name</label>
-                    <input type="text" class="form-control" id="name" name="name" value="{{ domain.name }}" required>
-                    <div class="form-text">The FQDN (e.g., example.com)</div>
-                </div>
-                <div class="col-md-6">
-                    <label for="target_ip" class="form-label">Target IP</label>
-                    <input type="text" class="form-control" id="target_ip" name="target_ip" value="{{ domain.target_ip }}" required>
-                    <div class="form-text">The IP address to route traffic to</div>
-                </div>
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label for="target_port" class="form-label">Target Port</label>
-                    <input type="number" class="form-control" id="target_port" name="target_port" value="{{ domain.target_port }}" required>
-                    <div class="form-text">The port to route traffic to</div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-check mt-4">
-                        <input class="form-check-input" type="checkbox" id="ssl_enabled" name="ssl_enabled" {% if domain.ssl_enabled %}checked{% endif %}>
-                        <label class="form-check-label" for="ssl_enabled">
-                            Enable SSL/HTTPS
-                        </label>
-                    </div>
-                    {% if domain.ssl_enabled %}
-                        <div class="mt-2">
-                            <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-sm btn-success">
-                                <i class="fas fa-lock"></i> Настроить SSL сертификат
-                            </a>
-                            <form method="POST" action="{{ url_for('domains.deploy_domain_config', domain_id=domain.id) }}" class="d-inline mt-2 ms-2">
-                                <button type="submit" class="btn btn-sm btn-warning">
-                                    <i class="fas fa-sync-alt"></i> Деплой только этого домена
-                                </button>
-                            </form>
-                        </div>
-                    {% elif domain.ssl_status == 'error' %}
-                        <div class="mt-2">
-                            <span class="badge bg-danger ms-2">Ошибка SSL</span>
-                        </div>
-                    {% endif %}
-                </div>
+            <div class="modal-body">
+                Are you sure you want to delete the domain <strong>{{ domain.name }}</strong>? This action cannot be undone.
             </div>
-            
-            <div class="row mb-3">
-                <div class="col-md-12">
-                    <label for="comments" class="form-label">Comments</label>
-                    <textarea class="form-control" id="comments" name="comments" rows="2">{{ domain.comments or '' }}</textarea>
-                    <div class="form-text">Optional notes about this domain</div>
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('domains.delete', domain_id=domain.id) }}" method="post">
+                    <button type="submit" class="btn btn-danger">Delete Domain</button>
+                </form>
             </div>
-            
-            <div class="card mb-3">
-                <div class="card-header">
-                    FFPanel Integration
-                </div>
-                <div class="card-body">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="ffpanel_enabled" name="ffpanel_enabled" {% if domain.ffpanel_enabled %}checked{% endif %}>
-                        <label class="form-check-label" for="ffpanel_enabled">
-                            Enable FFPanel Integration
-                        </label>
-                    </div>
-                    
-                    {% if domain.ffpanel_enabled %}
-                    <div class="row mt-3">
-                        <div class="col-md-6">
-                            <label for="ffpanel_target_ip" class="form-label">FFPanel Target IP (Optional)</label>
-                            <input type="text" class="form-control" id="ffpanel_target_ip" name="ffpanel_target_ip" value="{{ domain.ffpanel_target_ip or '' }}">
-                            <div class="form-text">If different from the primary target IP</div>
-                        </div>
-                        <div class="col-md-6 d-flex align-items-center">
-                            <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-primary mt-3">
-                                <i class="fas fa-cog"></i> Advanced FFPanel Settings
-                            </a>
-                        </div>
-                    </div>
-                    {% else %}
-                    <div class="alert alert-info">
-                        Дополнительные настройки для FFPanel будут доступны после сохранения на странице "Интеграция с FFPanel".
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="card mb-3">
-                <div class="card-header">
-                    Domain Groups
-                </div>
-                <div class="card-body">
-                    {% if domain_groups %}
-                        <select class="form-select" multiple name="domain_groups[]" id="domain_groups">
-                            {% for group in domain_groups %}
-                                <option value="{{ group.id }}" {% if group in domain.groups %}selected{% endif %}>
-                                    {{ group.name }} {% if group.server %}(Server: {{ group.server.name }}){% endif %}
-                                </option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">Hold Ctrl or ⌘ to select multiple groups. 
-                            <a href="{{ url_for('domain_groups.create') }}">Create a new group</a>
-                        </div>
-                    {% else %}
-                        <div class="alert alert-info">
-                            <strong>Note:</strong> You haven't created any domain groups yet. 
-                            <a href="{{ url_for('domain_groups.create') }}">Create a domain group</a> to organize your domains.
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="d-flex justify-content-between">
-                <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">Cancel</a>
-                <button type="submit" class="btn btn-primary">Update Domain</button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>
 {% endblock %}
