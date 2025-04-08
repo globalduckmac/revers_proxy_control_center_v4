@@ -17,22 +17,22 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and request.endpoint.startswith('servers.') %}active{% endif %}" href="{{ url_for('servers.index') }}">
+                    <a class="nav-link {% if request.endpoint.startswith('servers.') or request.endpoint.startswith('server_groups.') %}active{% endif %}" href="{{ url_for('servers.index') }}">
                         <i class="fas fa-server me-1"></i> Servers
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and request.endpoint.startswith('domains.') %}active{% endif %}" href="{{ url_for('domains.index') }}">
+                    <a class="nav-link {% if request.endpoint.startswith('domains.') %}active{% endif %}" href="{{ url_for('domains.index') }}">
                         <i class="fas fa-globe me-1"></i> Domains
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and request.endpoint.startswith('domain_groups.') %}active{% endif %}" href="{{ url_for('domain_groups.index') }}">
+                    <a class="nav-link {% if request.endpoint.startswith('domain_groups.') %}active{% endif %}" href="{{ url_for('domain_groups.index') }}">
                         <i class="fas fa-layer-group me-1"></i> Domain Groups
                     </a>
                 </li>
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.endpoint and request.endpoint.startswith('monitoring.') %}active{% endif %}" 
+                    <a class="nav-link dropdown-toggle {% if request.endpoint.startswith('monitoring.') %}active{% endif %}" 
                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="fas fa-chart-line me-1"></i> Monitoring
                     </a>
@@ -50,17 +50,12 @@
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('external_servers.') %}active{% endif %}" 
-                               href="{{ url_for('external_servers.index') }}">
-                                <i class="fas fa-chart-bar me-1"></i> Внешние серверы
+                            <a class="dropdown-item {% if request.endpoint.startswith('glances.') %}active{% endif %}" 
+                               href="{{ url_for('glances.index') }}">
+                                <i class="fas fa-chart-bar me-1"></i> Glances Мониторинг
                             </a>
                         </li>
                     </ul>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and request.endpoint.startswith('external_servers.') %}active{% endif %}" href="{{ url_for('external_servers.index') }}">
-                        <i class="fas fa-server me-1"></i> Внешние серверы
-                    </a>
                 </li>
             </ul>
             <ul class="navbar-nav ms-auto">
@@ -70,17 +65,17 @@
                         <i class="fas fa-user me-1"></i> {{ current_user.username }}
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                        <li><a class="dropdown-item" href="{{ url_for('auth.dashboard') }}">
+                        <li><a class="dropdown-item" href="{{ url_for('users.change_password') }}">
                             <i class="fas fa-key me-1"></i> Изменить пароль
                         </a></li>
                         {% if current_user.is_admin %}
                         <li><a class="dropdown-item" href="{{ url_for('settings.index') }}">
                             <i class="fas fa-cogs me-1"></i> Системные настройки
                         </a></li>
-                        <li><a class="dropdown-item" href="{{ url_for('servers.index') }}">
+                        <li><a class="dropdown-item" href="{{ url_for('servers.check_passwords') }}">
                             <i class="fas fa-lock me-1"></i> Проверка паролей серверов
                         </a></li>
-                        <li><a class="dropdown-item" href="{{ url_for('auth.dashboard') }}">
+                        <li><a class="dropdown-item" href="{{ url_for('users.index') }}">
                             <i class="fas fa-users me-1"></i> Управление пользователями
                         </a></li>
                         {% endif %}
