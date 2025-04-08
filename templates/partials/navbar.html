@@ -50,9 +50,9 @@
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item {% if request.endpoint.startswith('glances.') %}active{% endif %}" 
-                               href="{{ url_for('glances.index') }}">
-                                <i class="fas fa-chart-bar me-1"></i> Glances Мониторинг
+                            <a class="dropdown-item {% if request.endpoint.startswith('external_servers.') %}active{% endif %}" 
+                               href="{{ url_for('external_servers.index') }}">
+                                <i class="fas fa-chart-bar me-1"></i> Внешние серверы
                             </a>
                         </li>
                     </ul>
