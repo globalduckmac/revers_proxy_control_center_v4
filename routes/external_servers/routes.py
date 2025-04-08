@@ -6,7 +6,7 @@ import requests
 from sqlalchemy import desc
 
 from app import db
-from models import ExternalServer, ExternalServerMetric, Server
+from models import ExternalServer, ExternalServerMetric
 
 bp = Blueprint('external_servers', __name__, url_prefix='/external-servers')
 
@@ -15,37 +15,7 @@ bp = Blueprint('external_servers', __name__, url_prefix='/external-servers')
 @login_required
 def index():
     """Отображает список всех внешних серверов."""
-    servers = []
-    
-    # Получаем записи из таблицы external_servers (новый формат)
-    new_servers = ExternalServer.query.order_by(ExternalServer.name).all()
-    servers.extend(new_servers)
-    
-    # Получаем записи из таблицы external_server (старый формат, если есть)
-    try:
-        # Создаем динамический класс для таблицы external_server
-        class OldExternalServer(db.Model):
-            __tablename__ = 'external_server'
-            __table_args__ = {'extend_existing': True}
-            
-            id = db.Column(db.Integer, primary_key=True)
-            name = db.Column(db.String(64))
-            ip_address = db.Column(db.String(45))
-            description = db.Column(db.Text)
-            is_active = db.Column(db.Boolean)
-            created_at = db.Column(db.DateTime)
-            updated_at = db.Column(db.DateTime)
-            last_check = db.Column(db.DateTime)
-            last_status = db.Column(db.String(32))
-            glances_port = db.Column(db.Integer)
-        
-        old_servers = OldExternalServer.query.order_by(OldExternalServer.name).all()
-        if old_servers:
-            print(f"Found {len(old_servers)} servers in old table format")
-            servers.extend(old_servers)
-    except Exception as e:
-        print(f"Error getting old servers: {e}")
-    
+    servers = ExternalServer.query.order_by(ExternalServer.name).all()
     return render_template('external_servers/index.html', servers=servers)
 
 
