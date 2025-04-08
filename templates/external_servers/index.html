@@ -118,6 +118,8 @@
                                     <td>
                                         {% if server.last_check_time %}
                                             <small class="text-muted">{{ server.last_check_time|humanize_timestamp }}</small>
+                                        {% elif server.last_check %}
+                                            <small class="text-muted">{{ server.last_check|humanize_timestamp }}</small>
                                         {% else %}
                                             <span class="text-muted">Никогда</span>
                                         {% endif %}
