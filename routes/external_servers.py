@@ -99,11 +99,22 @@ def view(server_id):
         'disk': []
     }
     
+    # Отладочная информация о количестве метрик
+    logger.info(f"Найдено {len(history)} метрик для сервера {server.name} за последние 24 часа")
+    
     for metric in history:
         chart_data['labels'].append(metric.timestamp.strftime('%H:%M'))
         chart_data['cpu'].append(metric.cpu_usage if metric.cpu_usage is not None else 0)
         chart_data['memory'].append(metric.memory_usage if metric.memory_usage is not None else 0)
         chart_data['disk'].append(metric.disk_usage if metric.disk_usage is not None else 0)
+    
+    # Если данных нет, добавляем фиктивную точку с текущим временем для отображения графика
+    if not history and metrics:
+        current_time = datetime.utcnow()
+        chart_data['labels'].append(current_time.strftime('%H:%M'))
+        chart_data['cpu'].append(metrics.cpu_usage if metrics.cpu_usage is not None else 0)
+        chart_data['memory'].append(metrics.memory_usage if metrics.memory_usage is not None else 0)
+        chart_data['disk'].append(metrics.disk_usage if metrics.disk_usage is not None else 0)
     
     return render_template(
         'external_servers/view.html',
