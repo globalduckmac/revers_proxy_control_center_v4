@@ -6,28 +6,30 @@
 <div class="row mb-4">
     <div class="col">
         <h1>Edit Domain</h1>
-        <p class="lead">Update configuration for {{ domain.name }}</p>
+        <p class="lead">Update domain settings for reverse proxying.</p>
     </div>
     <div class="col-auto">
-        <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">
-            <i class="fas fa-arrow-left"></i> Back to Domains
+        <a href="{{ url_for('domains.view', domain_id=domain.id) }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Back to Domain
         </a>
     </div>
 </div>
 
 <div class="card">
     <div class="card-body">
-        <form method="POST" action="{{ url_for('domains.edit', domain_id=domain.id) }}">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
             <div class="row mb-3">
                 <div class="col-md-6">
                     <label for="name" class="form-label">Domain Name</label>
                     <input type="text" class="form-control" id="name" name="name" value="{{ domain.name }}" required>
-                    <div class="form-text">The domain name, e.g., example.com</div>
+                    <div class="form-text">The FQDN (e.g., example.com)</div>
                 </div>
                 <div class="col-md-6">
-                    <label for="target_ip" class="form-label">Target IP Address</label>
+                    <label for="target_ip" class="form-label">Target IP</label>
                     <input type="text" class="form-control" id="target_ip" name="target_ip" value="{{ domain.target_ip }}" required>
-                    <div class="form-text">IP-адрес для маршрутизации трафика через реверс-прокси</div>
+                    <div class="form-text">The IP address to route traffic to</div>
                 </div>
             </div>
             
@@ -49,62 +51,52 @@
                             <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-sm btn-success">
                                 <i class="fas fa-lock"></i> Настроить SSL сертификат
                             </a>
-                            <form method="POST" action="/domains/deploy/{{ domain.id }}" class="d-inline mt-2 ms-2">
+                            <form method="POST" action="{{ url_for('domains.deploy_domain_config', domain_id=domain.id) }}" class="d-inline mt-2 ms-2">
                                 <button type="submit" class="btn btn-sm btn-warning">
                                     <i class="fas fa-sync-alt"></i> Деплой только этого домена
                                 </button>
                             </form>
-                            {% elif domain.ssl_status == 'error' %}
-                                <span class="badge bg-danger ms-2">Ошибка SSL</span>
-                            {% endif %}
                         </div>
-                    {% endif %}
-                    
-                    {% if domain.server_id %}
-                        <div class="mt-3">
-                            <form method="POST" action="{{ url_for('domains.deploy_domain_config', domain_id=domain.id) }}" class="d-inline">
-                                <button type="submit" class="btn btn-sm btn-primary">
-                                    <i class="fas fa-sync-alt"></i> Обновить конфигурацию для этого домена
-                                </button>
-                            </form>>
+                    {% elif domain.ssl_status == 'error' %}
+                        <div class="mt-2">
+                            <span class="badge bg-danger ms-2">Ошибка SSL</span>
                         </div>
                     {% endif %}
                 </div>
             </div>
             
+            <div class="row mb-3">
+                <div class="col-md-12">
+                    <label for="comments" class="form-label">Comments</label>
+                    <textarea class="form-control" id="comments" name="comments" rows="2">{{ domain.comments or '' }}</textarea>
+                    <div class="form-text">Optional notes about this domain</div>
+                </div>
+            </div>
+            
             <div class="card mb-3">
                 <div class="card-header">
+                    FFPanel Integration
+                </div>
+                <div class="card-body">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="ffpanel_enabled" name="ffpanel_enabled" {% if domain.ffpanel_enabled %}checked{% endif %}>
                         <label class="form-check-label" for="ffpanel_enabled">
-                            <strong>Интеграция с FFPanel</strong>
+                            Enable FFPanel Integration
                         </label>
                     </div>
-                </div>
-                <div class="card-body ffpanel-settings" style="display: {% if domain.ffpanel_enabled %}block{% else %}none{% endif %};">
-                    <div class="row mb-3">
+                    
+                    {% if domain.ffpanel_enabled %}
+                    <div class="row mt-3">
                         <div class="col-md-6">
-                            <label for="server_id" class="form-label">Выберите сервер для FFPanel</label>
-                            <select class="form-select" id="server_id" name="server_id">
-                                <option value="">-- Выберите сервер или введите IP вручную --</option>
-                                {% for server in servers %}
-                                <option value="{{ server.id }}" {% if domain.ffpanel_target_ip and server.ip_address == domain.ffpanel_target_ip %}selected{% endif %}>{{ server.name }} ({{ server.ip_address }})</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Выберите сервер из списка или укажите FFPanel IP вручную</div>
+                            <label for="ffpanel_target_ip" class="form-label">FFPanel Target IP (Optional)</label>
+                            <input type="text" class="form-control" id="ffpanel_target_ip" name="ffpanel_target_ip" value="{{ domain.ffpanel_target_ip or '' }}">
+                            <div class="form-text">If different from the primary target IP</div>
                         </div>
-                        <div class="col-md-6">
-                            <label for="ffpanel_target_ip" class="form-label">FFPanel Target IP Address</label>
-                            <input type="text" class="form-control" id="ffpanel_target_ip" name="ffpanel_target_ip" value="{{ domain.ffpanel_target_ip or domain.target_ip }}">
-                            <div class="form-text">IP-адрес для маршрутизации трафика в FFPanel (может отличаться от основного target IP)</div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-primary mt-3">
+                                <i class="fas fa-cog"></i> Advanced FFPanel Settings
+                            </a>
                         </div>
-                    </div>
-                    {% if domain.ffpanel_id %}
-                    <div class="alert alert-info">
-                        <p>Домен уже синхронизирован с FFPanel (ID: {{ domain.ffpanel_id }})</p>
-                        <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-primary">
-                            Управление интеграцией с FFPanel
-                        </a>
                     </div>
                     {% else %}
                     <div class="alert alert-info">
@@ -114,36 +106,24 @@
                 </div>
             </div>
             
-            <div class="mb-3">
-                <label for="expected_nameservers" class="form-label">Ожидаемые NS-записи</label>
-                <textarea class="form-control" id="expected_nameservers" name="expected_nameservers" rows="2">{{ domain.expected_nameservers or '' }}</textarea>
-                <div class="form-text">Введите ожидаемые NS-серверы, разделенные запятыми (например: ns1.example.com, ns2.example.com)</div>
-            </div>
-            
-            {% if domain_groups %}
-            <div class="mb-3">
-                <label class="form-label">Assign to Domain Groups</label>
-                <div class="row">
-                    {% for group in domain_groups %}
-                    <div class="col-md-4">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="groups[]" id="group{{ group.id }}" value="{{ group.id }}"
-                                  {% if group in domain.groups %}checked{% endif %}>
-                            <label class="form-check-label" for="group{{ group.id }}">
-                                {{ group.name }}
-                                {% if group.server %}
-                                <small class="text-muted">({{ group.server.name }})</small>
-                                {% endif %}
-                            </label>
+            <div class="card mb-3">
+                <div class="card-header">
+                    Domain Groups
+                </div>
+                <div class="card-body">
+                    {% if domain_groups %}
+                        <select class="form-select" multiple name="domain_groups[]" id="domain_groups">
+                            {% for group in domain_groups %}
+                                <option value="{{ group.id }}" {% if group in domain.groups %}selected{% endif %}>
+                                    {{ group.name }} {% if group.server %}(Server: {{ group.server.name }}){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Hold Ctrl or ⌘ to select multiple groups. 
+                        <a href="{{ url_for('domain_groups.create') }}">Create a new group</a>
                         </div>
                     </div>
-                    {% endfor %}
                 </div>
-                <div class="form-text mt-2">
-                    Optional: Assign this domain to one or more domain groups.
-                    <a href="{{ url_for('domain_groups.create') }}">Create a new group</a>
-                </div>
-            </div>
             {% else %}
             <div class="alert alert-info">
                 <strong>Note:</strong> You haven't created any domain groups yet. 
@@ -155,53 +135,7 @@
                 <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">Cancel</a>
                 <button type="submit" class="btn btn-primary">Update Domain</button>
             </div>
-        </form>>
+        </form>
     </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const targetIpInput = document.getElementById('target_ip');
-    const ffpanelEnabled = document.getElementById('ffpanel_enabled');
-    const ffpanelSettings = document.querySelector('.ffpanel-settings');
-    const ffpanelTargetIp = document.getElementById('ffpanel_target_ip');
-    const serverSelect = document.getElementById('server_id');
-    
-    // Функция для обновления видимости настроек FFPanel
-    function updateFFPanelSettings() {
-        if (ffpanelEnabled.checked) {
-            ffpanelSettings.style.display = 'block';
-            
-            // Предлагаем основной Target IP в качестве начального значения для FFPanel IP
-            if (targetIpInput.value && !ffpanelTargetIp.value) {
-                ffpanelTargetIp.value = targetIpInput.value;
-            }
-        } else {
-            ffpanelSettings.style.display = 'none';
-        }
-    }
-    
-    // Функция для обновления IP на основе выбранного сервера
-    function updateFFPanelIpFromServer() {
-        if (serverSelect.value) {
-            // Если выбран сервер, заполняем IP из сервера
-            const serverOption = serverSelect.options[serverSelect.selectedIndex];
-            const serverIP = serverOption.text.match(/\((.*?)\)/)[1];
-            ffpanelTargetIp.value = serverIP;
-        }
-    }
-    
-    // События изменения
-    targetIpInput.addEventListener('input', function() {
-        if (ffpanelEnabled.checked && !serverSelect.value) {
-            // При вводе основного IP, предлагаем его же для FFPanel, если не выбран сервер
-            ffpanelTargetIp.value = targetIpInput.value;
-        }
-    });
-    
-    serverSelect.addEventListener('change', updateFFPanelIpFromServer);
-    
-    ffpanelEnabled.addEventListener('change', updateFFPanelSettings);
-});
-</script>
 {% endblock %}
