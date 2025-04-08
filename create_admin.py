@@ -1,28 +1,30 @@
-from app import app, db
+from app import db, create_app
 from models import User
-from datetime import datetime
 
-def create_admin_user():
-    with app.app_context():
-        # Check if admin already exists
-        admin = User.query.filter_by(username='admin').first()
-        if admin:
-            print("Admin user already exists.")
-            return
-        
-        # Create new admin user
+# Создаем контекст приложения
+app = create_app()
+
+# Выполняем операции в контексте приложения
+with app.app_context():
+    # Проверяем, существует ли пользователь admin
+    admin = User.query.filter_by(username='admin').first()
+    
+    if admin:
+        print(f"Пользователь {admin.username} уже существует, обновляем пароль")
+        admin.set_password('admin')
+    else:
+        # Создаем учетную запись администратора
         admin = User(
             username='admin',
             email='admin@example.com',
-            created_at=datetime.utcnow(),
             is_admin=True
         )
-        admin.set_password('admin123')
-        
-        # Add to database
+        admin.set_password('admin')
         db.session.add(admin)
-        db.session.commit()
-        print("Admin user created successfully.")
-
-if __name__ == '__main__':
-    create_admin_user()
+        print("Создан новый пользователь 'admin'")
+    
+    # Сохраняем изменения
+    db.session.commit()
+    print(f"Пароль пользователя 'admin': 'admin'")
+    print(f"Email пользователя 'admin': '{admin.email}'")
+    print("Используйте эти данные для входа в систему")
