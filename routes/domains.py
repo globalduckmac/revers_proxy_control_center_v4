@@ -220,7 +220,7 @@ def edit(domain_id):
         
         # Update domain groups
         domain.groups = []
-        group_ids = request.form.getlist('groups[]')
+        group_ids = request.form.getlist('domain_groups[]')
         if group_ids:
             for group_id in group_ids:
                 group = DomainGroup.query.get(group_id)
