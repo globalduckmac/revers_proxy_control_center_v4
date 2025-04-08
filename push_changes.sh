@@ -10,9 +10,11 @@ git config --global user.email "user@example.com"
 
 # Добавляем все измененные файлы
 git add modules/proxy_manager.py
+git add routes/domains.py
+git add templates/domains/edit.html
 
 # Создаем коммит
-git commit -m "Fix: Исправлена проблема с пустыми файлами конфигурации при фоновом создании"
+git commit -m "Feature: Добавлена поддержка развертывания конфигурации Nginx для конкретного домена"
 
 # Обновляем локальный репозиторий
 git pull --no-edit origin main || {

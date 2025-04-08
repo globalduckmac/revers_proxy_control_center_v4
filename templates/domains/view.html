@@ -1,0 +1,275 @@
+{% extends 'layout.html' %}
+
+{% block title %}Домен {{ domain.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>{{ domain.name }}</h1>
+        <p class="lead">Информация о домене</p>
+    </div>
+    <div class="col-auto">
+        <a href="{{ url_for('domains.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Назад к списку
+        </a>
+        <a href="{{ url_for('domains.edit', domain_id=domain.id) }}" class="btn btn-primary">
+            <i class="fas fa-edit"></i> Редактировать
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Основная информация о домене -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Основная информация</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-4">Имя домена:</dt>
+                            <dd class="col-sm-8">{{ domain.name }}</dd>
+                            
+                            <dt class="col-sm-4">Target IP:</dt>
+                            <dd class="col-sm-8">{{ domain.target_ip }}</dd>
+                            
+                            <dt class="col-sm-4">Target Port:</dt>
+                            <dd class="col-sm-8">{{ domain.target_port }}</dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-4">SSL:</dt>
+                            <dd class="col-sm-8">
+                                {% if domain.ssl_enabled %}
+                                    <span class="badge bg-success">Включен</span>
+                                    {% if domain.ssl_status == 'active' %}
+                                        <span class="badge bg-success">SSL активен</span>
+                                    {% elif domain.ssl_status == 'error' %}
+                                        <span class="badge bg-danger">Ошибка SSL</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">Выключен</span>
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Сервер:</dt>
+                            <dd class="col-sm-8">
+                                {% if server %}
+                                    <a href="{{ url_for('servers.view', server_id=server.id) }}">{{ server.name }}</a>
+                                {% else %}
+                                    <span class="text-muted">Не назначен</span>
+                                {% endif %}
+                            </dd>
+                            
+                            <dt class="col-sm-4">Обновлен:</dt>
+                            <dd class="col-sm-8">{{ domain.updated_at|humanize_timestamp }}</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                <!-- Кнопки действий -->
+                <div class="mt-3">
+                    {% if domain.server_id %}
+                        <form method="POST" action="{{ url_for('domains.deploy_domain_config', domain_id=domain.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-sync-alt"></i> Обновить конфигурацию для этого домена
+                            </button>
+                        </form>
+                    {% endif %}
+                    
+                    {% if domain.ssl_enabled %}
+                        <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-success">
+                            <i class="fas fa-lock"></i> Настроить SSL сертификат
+                        </a>
+                    {% endif %}
+                    
+                    <a href="{{ url_for('domains.nameservers', domain_id=domain.id) }}" class="btn btn-info">
+                        <i class="fas fa-server"></i> Управление NS-записями
+                    </a>
+                    
+                    {% if domain.ffpanel_enabled %}
+                        <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-warning">
+                            <i class="fas fa-cogs"></i> Интеграция с FFPanel
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Группы доменов -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Группы доменов</h5>
+            </div>
+            <div class="card-body">
+                {% if domain.groups %}
+                    <ul class="list-group">
+                        {% for group in domain.groups %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <a href="{{ url_for('domain_groups.view', group_id=group.id) }}">{{ group.name }}</a>
+                                    {% if group.server %}
+                                        <small class="text-muted">({{ group.server.name }})</small>
+                                    {% endif %}
+                                </div>
+                                <span class="badge bg-primary rounded-pill">{{ group.domains.count() }} domains</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted">Этот домен не принадлежит ни к одной группе.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- Статус NS-записей -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Состояние NS-записей</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-5">Статус NS:</dt>
+                    <dd class="col-sm-7">
+                        {% if domain.ns_status == 'ok' %}
+                            <span class="badge bg-success">OK</span>
+                        {% elif domain.ns_status == 'mismatch' %}
+                            <span class="badge bg-warning">Несоответствие</span>
+                        {% elif domain.ns_status == 'error' %}
+                            <span class="badge bg-danger">Ошибка</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Не проверено</span>
+                        {% endif %}
+                    </dd>
+                    
+                    <dt class="col-sm-5">Ожидаемые NS:</dt>
+                    <dd class="col-sm-7">
+                        {% if domain.expected_nameservers %}
+                            <small>{{ domain.expected_nameservers }}</small>
+                        {% else %}
+                            <small class="text-muted">Не указаны</small>
+                        {% endif %}
+                    </dd>
+                    
+                    <dt class="col-sm-5">Текущие NS:</dt>
+                    <dd class="col-sm-7">
+                        {% if domain.actual_nameservers %}
+                            <small>{{ domain.actual_nameservers }}</small>
+                        {% else %}
+                            <small class="text-muted">Не известны</small>
+                        {% endif %}
+                    </dd>
+                    
+                    <dt class="col-sm-5">Проверено:</dt>
+                    <dd class="col-sm-7">
+                        {% if domain.ns_checked_at %}
+                            <small>{{ domain.ns_checked_at|humanize_timestamp }}</small>
+                        {% else %}
+                            <small class="text-muted">Не проверялось</small>
+                        {% endif %}
+                    </dd>
+                </dl>
+                
+                <form method="POST" action="{{ url_for('domains.check_ns', domain_id=domain.id) }}" class="mt-3">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-sync-alt"></i> Проверить NS-записи
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        {% if domain.ffpanel_enabled %}
+        <!-- Интеграция с FFPanel -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Интеграция с FFPanel</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-5">Target IP:</dt>
+                    <dd class="col-sm-7">{{ domain.ffpanel_target_ip or domain.target_ip }}</dd>
+                    
+                    <dt class="col-sm-5">ID в FFPanel:</dt>
+                    <dd class="col-sm-7">
+                        {% if domain.ffpanel_id %}
+                            {{ domain.ffpanel_id }}
+                        {% else %}
+                            <span class="text-muted">Не синхронизирован</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+                
+                <a href="{{ url_for('domains.ffpanel', domain_id=domain.id) }}" class="btn btn-sm btn-outline-warning mt-2">
+                    <i class="fas fa-cogs"></i> Управление FFPanel
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Последние задачи -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Последние действия</h5>
+            </div>
+            <div class="card-body">
+                {% if domain_tasks %}
+                    <ul class="list-group">
+                        {% for task in domain_tasks %}
+                            <li class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ task.action }}</h6>
+                                    <small>{{ task.created_at|humanize_timestamp }}</small>
+                                </div>
+                                <small class="{% if task.status == 'success' %}text-success{% elif task.status == 'error' %}text-danger{% else %}text-muted{% endif %}">
+                                    {{ task.status }}
+                                </small>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted">Нет недавних задач для этого домена.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для подтверждения удаления -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteConfirmModalLabel">Подтверждение удаления</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Вы уверены, что хотите удалить домен <strong>{{ domain.name }}</strong>?</p>
+                <p class="text-danger">Это действие нельзя отменить. Вся настроенная конфигурация и связи с группами будут удалены.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <form method="POST" action="{{ url_for('domains.delete', domain_id=domain.id) }}">
+                    <button type="submit" class="btn btn-danger">Удалить домен</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteBtn = document.getElementById('deleteBtn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function() {
+            const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+            deleteModal.show();
+        });
+    }
+});
+</script>
+{% endblock %}

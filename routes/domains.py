@@ -135,6 +135,32 @@ def create():
                           domain_groups=domain_groups, 
                           servers=servers)
 
+@bp.route('/<int:domain_id>', methods=['GET'])
+@login_required
+def view(domain_id):
+    """Просмотр информации о домене."""
+    domain = Domain.query.get_or_404(domain_id)
+    
+    # Получаем информацию о сервере домена
+    server = None
+    if domain.server_id:
+        from models import Server
+        server = Server.query.get(domain.server_id)
+    
+    # Получаем группы доменов для отображения
+    domain_groups = DomainGroup.query.all()
+    
+    # Получаем задачи для домена (если есть)
+    domain_tasks = []  # Здесь можно добавить загрузку задач, связанных с доменом
+    
+    return render_template(
+        'domains/view.html',
+        domain=domain,
+        server=server,
+        domain_groups=domain_groups,
+        domain_tasks=domain_tasks
+    )
+
 @bp.route('/<int:domain_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit(domain_id):
@@ -390,9 +416,9 @@ def setup_ssl_for_domain(domain_id):
             proxy_config = ProxyConfig.query.filter_by(server_id=server.id).order_by(ProxyConfig.id.desc()).first()
             
             if proxy_config:
-                # Запускаем деплой конфигурации
+                # Запускаем деплой конфигурации только для этого домена
                 proxy_manager = ProxyManager(current_app.config.get('NGINX_TEMPLATES_PATH', 'templates/nginx'))
-                proxy_manager.deploy_proxy_config(server.id)
+                proxy_manager.deploy_proxy_config(server.id, domain.id)
                 
                 flash(f'SSL сертификат успешно установлен для домена {domain.name} и конфигурация Nginx обновлена', 'success')
             else:
@@ -402,7 +428,7 @@ def setup_ssl_for_domain(domain_id):
                 db.session.commit()
                 
                 proxy_manager = ProxyManager(current_app.config.get('NGINX_TEMPLATES_PATH', 'templates/nginx'))
-                proxy_manager.deploy_proxy_config(server.id)
+                proxy_manager.deploy_proxy_config(server.id, domain.id)
                 
                 flash(f'SSL сертификат успешно установлен для домена {domain.name} и создана новая конфигурация Nginx', 'success')
         else:
@@ -619,6 +645,71 @@ def ffpanel(domain_id):
         return redirect(url_for('domains.ffpanel', domain_id=domain_id))
     
     return render_template('domains/ffpanel.html', domain=domain)
+
+@bp.route('/deploy/<int:domain_id>', methods=['POST'])
+@login_required
+def deploy_domain_config(domain_id):
+    """Развертывание конфигурации только для одного домена."""
+    from models import Server, ServerLog
+    from flask import current_app
+    
+    domain = Domain.query.get_or_404(domain_id)
+    
+    if not domain.server_id:
+        flash('Домен не привязан к серверу', 'danger')
+        return redirect(url_for('domains.view', domain_id=domain_id))
+        
+    server = Server.query.get(domain.server_id)
+    if not server:
+        flash('Сервер не найден', 'danger')
+        return redirect(url_for('domains.view', domain_id=domain_id))
+    
+    # Проверяем соединение с сервером
+    from modules.server_manager import ServerManager
+    if not ServerManager.check_connectivity(server):
+        flash(f'Не удалось подключиться к серверу {server.name}', 'danger')
+        return redirect(url_for('domains.view', domain_id=domain_id))
+    
+    # Создаем лог операции
+    log = ServerLog(
+        server_id=server.id,
+        action='domain_proxy_deployment',
+        status='pending',
+        message=f'Запуск деплоя конфигурации прокси для домена {domain.name}'
+    )
+    db.session.add(log)
+    db.session.commit()
+    
+    try:
+        # Разворачиваем конфигурацию для домена
+        from modules.proxy_manager import ProxyManager
+        proxy_manager = ProxyManager(current_app.config.get('NGINX_TEMPLATES_PATH', 'templates/nginx'))
+        success = proxy_manager.deploy_proxy_config(server.id, domain.id)
+        
+        if success:
+            # Обновляем статус лога
+            log.status = 'success'
+            log.message = f'Конфигурация прокси для домена {domain.name} успешно развернута'
+            db.session.commit()
+            
+            flash(f'Конфигурация для домена {domain.name} успешно развернута', 'success')
+        else:
+            # Обновляем статус лога в случае ошибки
+            log.status = 'error'
+            log.message = f'Ошибка при развертывании конфигурации для домена {domain.name}'
+            db.session.commit()
+            
+            flash(f'Ошибка при развертывании конфигурации для домена {domain.name}', 'danger')
+            
+    except Exception as e:
+        # Обновляем статус лога в случае исключения
+        log.status = 'error'
+        log.message = f'Исключение при развертывании конфигурации для домена {domain.name}: {str(e)}'
+        db.session.commit()
+        
+        flash(f'Ошибка: {str(e)}', 'danger')
+    
+    return redirect(url_for('domains.view', domain_id=domain_id))
 
 @bp.route('/ffpanel/import', methods=['GET', 'POST'])
 @login_required

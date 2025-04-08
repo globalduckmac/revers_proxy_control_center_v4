@@ -79,12 +79,13 @@ class ProxyManager:
             logger.error(f"Ошибка при проверке SSL сертификатов для {domain_name}: {str(e)}")
             return False
     
-    def generate_nginx_config(self, server):
+    def generate_nginx_config(self, server, domain_id=None):
         """
         Generate Nginx configuration for a server based on its domain groups.
         
         Args:
             server: Server model instance
+            domain_id: Optional domain ID to generate config only for a specific domain
             
         Returns:
             tuple: (main_config, site_configs) where:
@@ -97,21 +98,34 @@ class ProxyManager:
             site_template = self.jinja_env.get_template('site.conf.j2')
             
             # Get domains for the server using DomainManager
-            domains = DomainManager.get_domains_by_server(server.id)
+            if domain_id:
+                # Если указан конкретный домен, загружаем только его
+                from models import Domain
+                domain = Domain.query.filter_by(id=domain_id, server_id=server.id).first()
+                if domain:
+                    domains = [domain]
+                    logger.info(f"Генерируем конфигурацию только для домена {domain.name} (ID: {domain.id})")
+                else:
+                    logger.error(f"Домен с ID {domain_id} не найден на сервере {server.id}")
+                    return None, {}
+            else:
+                # Если домен не указан, загружаем все домены сервера
+                domains = DomainManager.get_domains_by_server(server.id)
             
             # Проверяем, есть ли домены, и логируем для отладки
             if not domains:
                 logger.warning(f"No domains found for server {server.id} ({server.name})")
                 
-                # Для дополнительной диагностики: проверим, есть ли группы доменов
-                domain_groups = DomainGroup.query.filter_by(server_id=server.id).all()
-                if not domain_groups:
-                    logger.warning(f"No domain groups found for server {server.id}")
-                else:
-                    logger.info(f"Found {len(domain_groups)} domain groups for server {server.id}")
-                    for group in domain_groups:
-                        domain_count = group.domains.count()
-                        logger.info(f"Group {group.id} ({group.name}) has {domain_count} domains")
+                if not domain_id:
+                    # Для дополнительной диагностики: проверим, есть ли группы доменов
+                    domain_groups = DomainGroup.query.filter_by(server_id=server.id).all()
+                    if not domain_groups:
+                        logger.warning(f"No domain groups found for server {server.id}")
+                    else:
+                        logger.info(f"Found {len(domain_groups)} domain groups for server {server.id}")
+                        for group in domain_groups:
+                            domain_count = group.domains.count()
+                            logger.info(f"Group {group.id} ({group.name}) has {domain_count} domains")
             else:
                 logger.info(f"Found {len(domains)} domains for server {server.id}")
             
@@ -171,12 +185,13 @@ class ProxyManager:
             logger.error(f"Error generating Nginx config for server {server.name}: {str(e)}")
             raise
     
-    def deploy_proxy_config(self, server_id):
+    def deploy_proxy_config(self, server_id, domain_id=None):
         """
         Deploy proxy configuration to a server in a background thread.
 
         Args:
             server_id: ID of the server to deploy to
+            domain_id: Optional ID of a specific domain to deploy config for (if None, deploy all domains)
 
         Returns:
             bool: True if deployment process was successfully started, False otherwise
@@ -203,7 +218,18 @@ class ProxyManager:
                 return False
 
             # Generate Nginx configurations
-            main_config, site_configs = self.generate_nginx_config(server)
+            if domain_id:
+                logger.info(f"Generating configuration for server {server.name} and domain ID {domain_id}")
+                from models import Domain
+                domain = Domain.query.filter_by(id=domain_id, server_id=server.id).first()
+                if not domain:
+                    logger.error(f"Domain ID {domain_id} not found on server {server.name}")
+                    return False
+                logger.info(f"Generating proxy configuration for specific domain: {domain.name}")
+                main_config, site_configs = self.generate_nginx_config(server, domain_id)
+            else:
+                logger.info(f"Generating configuration for all domains on server {server.name}")
+                main_config, site_configs = self.generate_nginx_config(server)
 
             # Проверяем, не пустые ли конфигурации
             if not site_configs:
@@ -237,7 +263,7 @@ class ProxyManager:
             app = current_app._get_current_object()
             
             # Функция для выполнения в фоновом потоке
-            def background_deploy(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name):
+            def background_deploy(app, server_id, proxy_config_id, templates_path, main_config, site_configs, server_name, domain_id=None):
                 logger.info(f"Starting background deployment for server {server_name}")
                 
                 # Импортируем необходимые модули в начале функции
@@ -620,7 +646,7 @@ class ProxyManager:
             site_configs_copy = site_configs.copy()
             
             # Запускаем фоновый поток с копией конфигураций
-            background_thread = Thread(target=background_deploy, args=(app, server_id, proxy_config_id, templates_path, main_config, site_configs_copy, server_name))
+            background_thread = Thread(target=background_deploy, args=(app, server_id, proxy_config_id, templates_path, main_config, site_configs_copy, server_name, domain_id))
             background_thread.daemon = True
             background_thread.start()
             

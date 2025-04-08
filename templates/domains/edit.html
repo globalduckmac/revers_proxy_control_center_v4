@@ -56,6 +56,16 @@
                             {% endif %}
                         </div>
                     {% endif %}
+                    
+                    {% if domain.server_id %}
+                        <div class="mt-3">
+                            <form method="POST" action="{{ url_for('domains.deploy_domain_config', domain_id=domain.id) }}" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-sync-alt"></i> Обновить конфигурацию для этого домена
+                                </button>
+                            </form>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
             
