@@ -1,0 +1,230 @@
+приведено подробное описание каждого эндпоинта FFPanel OPEN API согласно вашей спецификации. Для каждого URL указаны HTTP-метод, параметры (или тело запроса) и пример ожидаемого ответа.
+1. Получение JWT-токена (Аутентификация)
+
+URL:
+https://ffv2.ru/public/api
+
+HTTP-метод:
+GET
+
+Параметры запроса (Query Parameters):
+
+    method
+        Тип: строка
+        Пример значения: "auth"
+        Назначение: указывает, что производится вызов метода аутентификации.
+
+    token
+        Тип: строка
+        Пример значения: "unique_account_token"
+        Назначение: уникальный токен аккаунта для аутентификации.
+
+Пример запроса:
+
+GET https://ffv2.ru/public/api?method=auth&token=4c5d4befc009be579ecea95476810091
+
+Ожидаемый ответ (код 200):
+
+{
+  "token": {
+    "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+    "created": 1696806978,
+    "expire": 1696806978
+  },
+  "code": 200
+}
+
+2. Получение списка сайтов
+
+URL:
+https://ffv2.ru/api/list.site
+
+HTTP-метод:
+GET
+
+Без дополнительных параметров (требуется Bearer-токен в заголовке Authorization).
+
+Пример запроса:
+
+GET https://ffv2.ru/api/list.site
+Authorization: Bearer <ваш_jwt_токен>
+
+Ожидаемый ответ (код 200):
+
+{
+  "domains": [
+    {
+      "id": 1,
+      "domain": "example.com",
+      "ip": "192.168.0.1",
+      "public_ip": 1234567890,
+      "wildcard": 0,
+      "port": "80",
+      "port_out": "8080",
+      "port_ssl": "443",
+      "port_out_ssl": "8443",
+      "dns": "ns1.example.com",
+      "spam": 0,
+      "date": "2022-01-01T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "domain": "example.net",
+      "ip": "192.168.0.2",
+      "public_ip": 1234567890,
+      "wildcard": 0,
+      "port": "80",
+      "port_out": "8080",
+      "port_ssl": "443",
+      "port_out_ssl": "8443",
+      "dns": "ns1.example.net",
+      "spam": 0,
+      "date": "2022-01-02T12:00:00Z"
+    }
+  ],
+  "message": "OK",
+  "code": 200
+}
+
+При отсутствии данных (код 404) возвращается:
+
+{
+  "message": "Not found",
+  "code": 404
+}
+
+
+3. Добавление нового сайта
+
+URL:
+https://ffv2.ru/api/add.site
+
+HTTP-метод:
+POST
+
+Формат запроса:
+Передаётся как multipart/form-data.
+
+Обязательные поля в теле запроса:
+
+    domain (string) — доменное имя сайта.
+    ip_path (string) — путь к IP или IP адрес.
+    port (string) — порт для подключения.
+    port_out (string) — внешний порт.
+    dns (string) — DNS-адрес.
+
+Пример запроса (multipart/form-data):
+
+domain=example.com
+ip_path=192.168.0.1
+port=80
+port_out=8080
+dns=ns1.example.com
+
+Ожидаемый ответ (код 200):
+
+{
+  "id": 12345,
+  "message": "OK",
+  "code": 200
+}
+
+При ошибке (код 404):
+
+{
+  "message": "Not found",
+  "code": 404
+}
+
+
+4. Обновление сайта и NS-записей
+
+URL:
+https://ffv2.ru/api/update.site
+
+HTTP-метод:
+POST
+
+Формат запроса:
+Передаётся как multipart/form-data.
+
+Обязательные поля в теле запроса:
+
+    id (integer) — идентификатор сайта.
+    ip_path (string)
+    port (string)
+    port_out (string)
+    port_ssl (string)
+    port_out_ssl (string)
+    real_ip (string)
+    wildcard (string)
+    dns (array) — массив объектов, где каждый объект может содержать:
+        id (integer, опционально, если обновление записи)
+        domain (string) — доменное имя (например, "@/WWW etc.")
+        type (string) — тип записи (A, CNAME, TXT, MX и т.д.)
+        record (string) — значение записи (например, "1.1.1.1" или "FOOBAR")
+        port (string)
+        port_out (string)
+        port_ssl (string)
+        port_out_ssl (string)
+
+Пример запроса (multipart/form-data):
+
+id=12345
+ip_path=192.168.0.1
+port=80
+port_out=8080
+port_ssl=443
+port_out_ssl=8443
+real_ip=192.168.0.1
+wildcard=0
+dns=[{"domain": "sub.example.com", "type": "A", "record": "192.168.0.2", "port": "80", "port_out": "8080", "port_ssl": "443", "port_out_ssl": "8443"}]
+
+Ожидаемый ответ (код 200):
+
+{
+  "message": "OK",
+  "code": 200
+}
+
+При ошибке (код 404):
+
+{
+  "message": "Not found",
+  "code": 404
+}
+
+
+5. Удаление сайта (с NS-записями)
+
+URL:
+https://ffv2.ru/api/delete.site
+
+HTTP-метод:
+POST
+
+Формат запроса:
+Передаётся как multipart/form-data.
+
+Обязательное поле в теле запроса:
+
+    id (integer) — идентификатор сайта, который нужно удалить.
+
+Пример запроса (multipart/form-data):
+
+id=12345
+
+Ожидаемый ответ (код 200):
+
+{
+  "message": "OK",
+  "code": 200
+}
+
+При ошибке (код 404):
+
+{
+  "message": "Not found",
+  "code": 404
+}
+

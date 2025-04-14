@@ -23,9 +23,10 @@ from app import app, db
 from models import SystemSetting, Domain
 
 
-# Базовый URL для API FFPanel
-FFPANEL_API_BASE_URL = "https://api.ffpanel.org/api"
-FFPANEL_SITES_ENDPOINT = "/sites"
+# Базовый URL для API FFPanel (должен совпадать с URL в modules/ffpanel_api.py)
+FFPANEL_API_BASE_URL = "https://ffv2.ru/api"
+FFPANEL_AUTH_URL = "https://ffv2.ru/public/api"
+FFPANEL_SITES_ENDPOINT = ""  # Endpoint уже включен в URL вызовов в коде
 
 
 def get_token_from_environment():
@@ -62,38 +63,84 @@ def test_ffpanel_api_connection(token, verbose=False):
     
     print("\n=== Тестирование подключения к FFPanel API ===")
     
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json"
-    }
-    
     try:
-        # Тестируем получение информации об аккаунте
-        url = f"{FFPANEL_API_BASE_URL}/account"
-        print(f"[*] Запрос к {url}")
+        # Аутентификация через auth метод (как в FFPanelAPI._authenticate)
+        url = f"{FFPANEL_AUTH_URL}"
+        params = {
+            'method': 'auth',
+            'token': token
+        }
+        print(f"[*] Запрос аутентификации к {url}")
         
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, params=params)
         
         if response.status_code == 200:
             data = response.json()
-            print(f"[✓] Подключение успешно! Статус: {response.status_code}")
             
-            if verbose:
-                print("\nПолный ответ:")
-                print(json.dumps(data, indent=2, ensure_ascii=False))
+            if 'token' in data:
+                jwt_token = data['token']['jwt']
+                jwt_expire = data['token']['expire']
+                print(f"[✓] Аутентификация успешна! JWT токен получен (истекает: {datetime.fromtimestamp(jwt_expire)})")
+                
+                # Теперь используем JWT для проверки запроса к API
+                headers = {
+                    "Authorization": f"Bearer {jwt_token}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Проверяем API запросом list.site (как в FFPanelAPI.get_sites)
+                list_url = f"{FFPANEL_API_BASE_URL}/list.site"
+                print(f"[*] Запрос списка сайтов к {list_url}")
+                
+                list_response = requests.get(list_url, headers=headers)
+                
+                if list_response.status_code == 200:
+                    sites_data = list_response.json()
+                    domains_count = len(sites_data.get('domains', []))
+                    print(f"[✓] Подключение к API успешно! Получено {domains_count} доменов")
+                    
+                    if verbose:
+                        print("\nПервые 5 доменов:")
+                        for i, domain in enumerate(sites_data.get('domains', [])[:5]):
+                            print(f"{i+1}. ID: {domain.get('id')}, Домен: {domain.get('domain')}")
+                    
+                    return True
+                else:
+                    print(f"[!] Аутентификация успешна, но запрос к API не удался. Статус: {list_response.status_code}")
+                    print(f"[!] Ответ: {list_response.text}")
+                    return False
             else:
-                print(f"[i] Аккаунт: {data.get('data', {}).get('company_name', 'Н/Д')}")
-                print(f"[i] Email: {data.get('data', {}).get('email', 'Н/Д')}")
-            
-            return True
+                print(f"[!] Ошибка аутентификации. Токен не найден в ответе.")
+                print(f"[!] Ответ: {response.text}")
+                return False
         else:
-            print(f"[!] Ошибка подключения. Статус: {response.status_code}")
+            print(f"[!] Ошибка аутентификации. Статус: {response.status_code}")
             print(f"[!] Ответ: {response.text}")
             return False
     
     except Exception as e:
         print(f"[!] Ошибка при подключении к FFPanel API: {str(e)}")
         return False
+
+
+def get_jwt_token(token):
+    """Получает JWT токен через аутентификацию."""
+    try:
+        url = f"{FFPANEL_AUTH_URL}"
+        params = {
+            'method': 'auth',
+            'token': token
+        }
+        
+        response = requests.get(url, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'token' in data:
+                return data['token']['jwt']
+        return None
+    except Exception:
+        return None
 
 
 def test_get_sites(token, verbose=False):
@@ -104,33 +151,39 @@ def test_get_sites(token, verbose=False):
     
     print("\n=== Получение списка сайтов из FFPanel API ===")
     
+    # Сначала получаем JWT токен
+    jwt_token = get_jwt_token(token)
+    if not jwt_token:
+        print("[!] Ошибка: Не удалось получить JWT токен для запроса сайтов")
+        return False
+    
     headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json"
+        "Authorization": f"Bearer {jwt_token}",
+        "Content-Type": "application/json"
     }
     
     try:
-        url = f"{FFPANEL_API_BASE_URL}{FFPANEL_SITES_ENDPOINT}"
+        url = f"{FFPANEL_API_BASE_URL}/list.site"
         print(f"[*] Запрос к {url}")
         
         response = requests.get(url, headers=headers)
         
         if response.status_code == 200:
             data = response.json()
-            sites = data.get('data', [])
+            domains = data.get('domains', [])
             
-            print(f"[✓] Получено {len(sites)} сайтов")
+            print(f"[✓] Получено {len(domains)} сайтов")
             
-            if verbose and sites:
+            if verbose and domains:
                 print("\nПервые 5 сайтов:")
-                for i, site in enumerate(sites[:5]):
+                for i, domain in enumerate(domains[:5]):
                     print(f"\n--- Сайт {i+1} ---")
-                    print(f"ID: {site.get('id')}")
-                    print(f"Домен: {site.get('domain')}")
-                    print(f"Статус: {site.get('status')}")
+                    print(f"ID: {domain.get('id')}")
+                    print(f"Домен: {domain.get('domain')}")
+                    print(f"IP: {domain.get('ip_path')}")
             else:
                 print("\nПроверка сопоставления с базой данных:")
-                check_domain_matching(sites)
+                check_domain_matching(domains)
             
             return True
         else:
