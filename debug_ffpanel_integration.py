@@ -20,7 +20,7 @@ import requests
 from datetime import datetime
 
 from app import app, db
-from models import SystemSettings, Domain
+from models import SystemSetting, Domain
 
 
 # Базовый URL для API FFPanel
@@ -42,7 +42,7 @@ def get_token_from_database():
     """Получает токен FFPanel из базы данных."""
     try:
         with app.app_context():
-            setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+            setting = SystemSetting.query.filter_by(key='ffpanel_token').first()
             if setting and setting.value:
                 print(f"[✓] Найден токен FFPanel в базе данных (длина: {len(setting.value)})")
                 return setting.value
@@ -182,13 +182,13 @@ def update_token_in_database(token):
     """Обновляет токен FFPanel в базе данных."""
     try:
         with app.app_context():
-            setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+            setting = SystemSetting.query.filter_by(key='ffpanel_token').first()
             
             if setting:
                 setting.value = token
                 print("[✓] Токен FFPanel обновлен в базе данных")
             else:
-                setting = SystemSettings(key='ffpanel_token', value=token, description='Токен авторизации FFPanel API')
+                setting = SystemSetting(key='ffpanel_token', value=token, description='Токен авторизации FFPanel API')
                 db.session.add(setting)
                 print("[✓] Токен FFPanel добавлен в базу данных")
             

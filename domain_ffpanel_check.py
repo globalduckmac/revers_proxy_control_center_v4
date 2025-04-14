@@ -21,7 +21,7 @@ import requests
 from datetime import datetime
 
 from app import app, db
-from models import Domain, SystemSettings
+from models import Domain, SystemSetting
 from modules.ffpanel_api import FFPanelAPI
 from modules.domain_manager import DomainManager
 
@@ -52,7 +52,7 @@ def check_domain_ffpanel_status(domain_id):
             if domain.ffpanel_id:
                 try:
                     # Инициализация FFPanelAPI
-                    setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+                    setting = SystemSetting.query.filter_by(key='ffpanel_token').first()
                     if not setting or not setting.value:
                         print("[!] Ошибка: Токен FFPanel не найден в базе данных")
                         return None
@@ -140,7 +140,7 @@ def sync_domain_with_ffpanel(domain_id, verbose=False):
             # Инициализация менеджера доменов для синхронизации
             try:
                 # Инициализация FFPanelAPI
-                setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+                setting = SystemSetting.query.filter_by(key='ffpanel_token').first()
                 if not setting or not setting.value:
                     print("[!] Ошибка: Токен FFPanel не найден в базе данных")
                     return False

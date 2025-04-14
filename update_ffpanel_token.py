@@ -14,7 +14,7 @@ import os
 import sys
 import argparse
 from app import app, db
-from models import SystemSettings
+from models import SystemSetting
 
 
 def update_ffpanel_token_in_db(token):
@@ -30,7 +30,7 @@ def update_ffpanel_token_in_db(token):
     try:
         with app.app_context():
             # Поиск настройки ffpanel_token
-            setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+            setting = SystemSetting.query.filter_by(key='ffpanel_token').first()
             
             if setting:
                 # Обновление существующей настройки
@@ -38,7 +38,7 @@ def update_ffpanel_token_in_db(token):
                 print(f"Токен FFPanel обновлен (длина: {len(token)})")
             else:
                 # Создание новой настройки
-                setting = SystemSettings(key='ffpanel_token', value=token, description='Токен авторизации FFPanel API')
+                setting = SystemSetting(key='ffpanel_token', value=token, description='Токен авторизации FFPanel API')
                 db.session.add(setting)
                 print(f"Токен FFPanel создан (длина: {len(token)})")
                 
