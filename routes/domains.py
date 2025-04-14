@@ -645,6 +645,10 @@ def api_check_nameservers(domain_name):
 def ffpanel_sync(domain_id):
     """Синхронизация домена с FFPanel."""
     from modules.ffpanel_api import FFPanelAPI
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Начало синхронизации домена {domain_id} с FFPanel")
     
     domain = Domain.query.get_or_404(domain_id)
     
@@ -656,12 +660,19 @@ def ffpanel_sync(domain_id):
     # Определяем IP-адрес и порт для FFPanel
     target_ip = domain.ffpanel_target_ip or domain.target_ip
     target_port = domain.target_port or 80
+    logger.info(f"Использую IP: {target_ip}, порт: {target_port} для домена {domain.name}")
     
     # Создаем экземпляр FFPanel API
     ffpanel = FFPanelAPI()
     
     # Получаем список сайтов из FFPanel
     sites = ffpanel.get_sites()
+    if not sites:
+        logger.error("Не удалось получить список сайтов из FFPanel")
+        flash('Ошибка получения списка сайтов из FFPanel', 'danger')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    logger.info(f"Получено {len(sites)} сайтов из FFPanel")
     
     # Ищем домен в списке сайтов
     site_exists = False
@@ -671,37 +682,50 @@ def ffpanel_sync(domain_id):
         if site.get('domain') == domain.name:
             site_exists = True
             site_id = site.get('id')
+            logger.info(f"Найден существующий сайт в FFPanel с ID: {site_id}")
             break
     
-    # В зависимости от того, существует ли сайт, добавляем или обновляем его
-    if site_exists and site_id:
-        # Обновляем существующий сайт
-        result = ffpanel.update_site(
-            site_id=site_id,
-            ip_path=target_ip,
-            port=str(target_port),
-            port_out=str(target_port),
-            port_ssl="443",
-            port_out_ssl="443"
-        )
-        
-        if result['success']:
-            flash(f'Домен {domain.name} успешно обновлен в FFPanel', 'success')
+    try:
+        # В зависимости от того, существует ли сайт, добавляем или обновляем его
+        if site_exists and site_id:
+            # Обновляем существующий сайт
+            logger.info(f"Обновляю существующий сайт {domain.name} (ID: {site_id}) в FFPanel")
+            result = ffpanel.update_site(
+                site_id=site_id,
+                ip_path=target_ip,
+                port=str(target_port),
+                port_out=str(target_port),
+                port_ssl="443",
+                port_out_ssl="443"
+            )
+            
+            if result.get('success'):
+                logger.info(f"Домен {domain.name} успешно обновлен в FFPanel")
+                flash(f'Домен {domain.name} успешно обновлен в FFPanel', 'success')
+            else:
+                error_msg = result.get('message', 'Неизвестная ошибка')
+                logger.error(f"Ошибка обновления домена в FFPanel: {error_msg}")
+                flash(f'Ошибка обновления домена в FFPanel: {error_msg}', 'danger')
         else:
-            flash(f'Ошибка обновления домена в FFPanel: {result["message"]}', 'danger')
-    else:
-        # Добавляем новый сайт
-        result = ffpanel.add_site(
-            domain=domain.name,
-            ip_path=target_ip,
-            port=str(target_port),
-            port_out=str(target_port)
-        )
-        
-        if result['success']:
-            flash(f'Домен {domain.name} успешно добавлен в FFPanel', 'success')
-        else:
-            flash(f'Ошибка добавления домена в FFPanel: {result["message"]}', 'danger')
+            # Добавляем новый сайт
+            logger.info(f"Добавляю новый сайт {domain.name} в FFPanel")
+            result = ffpanel.add_site(
+                domain=domain.name,
+                ip_path=target_ip,
+                port=str(target_port),
+                port_out=str(target_port)
+            )
+            
+            if result.get('success'):
+                logger.info(f"Домен {domain.name} успешно добавлен в FFPanel с ID: {result.get('id')}")
+                flash(f'Домен {domain.name} успешно добавлен в FFPanel', 'success')
+            else:
+                error_msg = result.get('message', 'Неизвестная ошибка')
+                logger.error(f"Ошибка добавления домена в FFPanel: {error_msg}")
+                flash(f'Ошибка добавления домена в FFPanel: {error_msg}', 'danger')
+    except Exception as e:
+        logger.exception(f"Исключение при синхронизации домена с FFPanel: {str(e)}")
+        flash(f'Ошибка при синхронизации с FFPanel: {str(e)}', 'danger')
     
     return redirect(url_for('domains.edit', domain_id=domain_id))
 

@@ -108,19 +108,29 @@ class FFPanelAPI:
         """
         try:
             headers = self._get_headers()
+            current_app.logger.debug(f"Отправка запроса на получение списка сайтов")
             response = requests.get(f"{self.API_URL}/list.site", headers=headers)
+            current_app.logger.debug(f"Получен ответ от FFPanel: {response.status_code}")
+            
+            try:
+                data = response.json()
+            except ValueError:
+                current_app.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                return []
             
             if response.status_code == 200:
-                data = response.json()
-                return data.get('domains', [])
+                domains = data.get('domains', [])
+                current_app.logger.info(f"Получено {len(domains)} доменов из FFPanel")
+                return domains
             elif response.status_code == 404:
-                # Нет данных
+                current_app.logger.info("Список сайтов в FFPanel пуст (код 404)")
                 return []
             else:
-                current_app.logger.error(f"Ошибка получения списка сайтов: {response.text}")
+                error_message = data.get('message', 'Неизвестная ошибка')
+                current_app.logger.error(f"Ошибка получения списка сайтов (код {response.status_code}): {error_message}")
                 return []
         except Exception as e:
-            current_app.logger.error(f"Ошибка при запросе списка сайтов: {str(e)}")
+            current_app.logger.exception(f"Исключение при запросе списка сайтов: {str(e)}")
             return []
     
     def add_site(self, domain, ip_path, port="80", port_out="80", dns=""):
@@ -149,10 +159,22 @@ class FFPanelAPI:
                 'dns': dns
             }
             
+            current_app.logger.debug(f"Отправка запроса на добавление сайта: {domain}, IP: {ip_path}, порт: {port}")
             response = requests.post(f"{self.API_URL}/add.site", headers=headers, data=data)
-            result = response.json()
+            current_app.logger.debug(f"Получен ответ от FFPanel: {response.status_code}, текст: {response.text}")
+            
+            try:
+                result = response.json()
+            except ValueError:
+                current_app.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                return {
+                    'success': False,
+                    'id': None,
+                    'message': f"Ошибка при разборе ответа: {response.text}"
+                }
             
             if response.status_code == 200 and result.get('code') == 200:
+                current_app.logger.info(f"Сайт {domain} успешно добавлен в FFPanel, ID: {result.get('id')}")
                 return {
                     'success': True,
                     'id': result.get('id'),
@@ -160,14 +182,14 @@ class FFPanelAPI:
                 }
             else:
                 error_message = result.get('message', 'Неизвестная ошибка')
-                current_app.logger.error(f"Ошибка добавления сайта: {error_message}")
+                current_app.logger.error(f"Ошибка добавления сайта: {error_message}, код: {result.get('code')}")
                 return {
                     'success': False,
                     'id': None,
                     'message': f"Ошибка: {error_message}"
                 }
         except Exception as e:
-            current_app.logger.error(f"Исключение при добавлении сайта: {str(e)}")
+            current_app.logger.exception(f"Исключение при добавлении сайта: {str(e)}")
             return {
                 'success': False,
                 'id': None,
@@ -211,23 +233,34 @@ class FFPanelAPI:
             if dns:
                 data['dns'] = json.dumps(dns)
             
+            current_app.logger.debug(f"Отправка запроса на обновление сайта с ID: {site_id}, IP: {ip_path}, порт: {port}")
             response = requests.post(f"{self.API_URL}/update.site", headers=headers, data=data)
-            result = response.json()
+            current_app.logger.debug(f"Получен ответ от FFPanel: {response.status_code}, текст: {response.text}")
+            
+            try:
+                result = response.json()
+            except ValueError:
+                current_app.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                return {
+                    'success': False,
+                    'message': f"Ошибка при разборе ответа: {response.text}"
+                }
             
             if response.status_code == 200 and result.get('code') == 200:
+                current_app.logger.info(f"Сайт с ID {site_id} успешно обновлен в FFPanel")
                 return {
                     'success': True,
                     'message': 'Сайт успешно обновлен'
                 }
             else:
                 error_message = result.get('message', 'Неизвестная ошибка')
-                current_app.logger.error(f"Ошибка обновления сайта: {error_message}")
+                current_app.logger.error(f"Ошибка обновления сайта: {error_message}, код: {result.get('code')}")
                 return {
                     'success': False,
                     'message': f"Ошибка: {error_message}"
                 }
         except Exception as e:
-            current_app.logger.error(f"Исключение при обновлении сайта: {str(e)}")
+            current_app.logger.exception(f"Исключение при обновлении сайта: {str(e)}")
             return {
                 'success': False,
                 'message': f"Исключение: {str(e)}"
@@ -251,23 +284,34 @@ class FFPanelAPI:
                 'id': site_id
             }
             
+            current_app.logger.debug(f"Отправка запроса на удаление сайта с ID: {site_id}")
             response = requests.post(f"{self.API_URL}/delete.site", headers=headers, data=data)
-            result = response.json()
+            current_app.logger.debug(f"Получен ответ от FFPanel: {response.status_code}, текст: {response.text}")
+            
+            try:
+                result = response.json()
+            except ValueError:
+                current_app.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                return {
+                    'success': False,
+                    'message': f"Ошибка при разборе ответа: {response.text}"
+                }
             
             if response.status_code == 200 and result.get('code') == 200:
+                current_app.logger.info(f"Сайт с ID {site_id} успешно удален из FFPanel")
                 return {
                     'success': True,
                     'message': 'Сайт успешно удален'
                 }
             else:
                 error_message = result.get('message', 'Неизвестная ошибка')
-                current_app.logger.error(f"Ошибка удаления сайта: {error_message}")
+                current_app.logger.error(f"Ошибка удаления сайта: {error_message}, код: {result.get('code')}")
                 return {
                     'success': False,
                     'message': f"Ошибка: {error_message}"
                 }
         except Exception as e:
-            current_app.logger.error(f"Исключение при удалении сайта: {str(e)}")
+            current_app.logger.exception(f"Исключение при удалении сайта: {str(e)}")
             return {
                 'success': False,
                 'message': f"Исключение: {str(e)}"
