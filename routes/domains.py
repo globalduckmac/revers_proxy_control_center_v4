@@ -730,11 +730,27 @@ def ffpanel_sync(domain_id):
         return redirect(url_for('domains.edit', domain_id=domain_id))
     
     # Определяем IP-адрес и порт для FFPanel
-    # Сначала смотрим специальный ffpanel_target_ip, затем основной target_ip
-    if domain.ffpanel_target_ip:
+    # Используем тот же источник IP-адреса, что и в форме редактирования домена
+    if domain.ffpanel_target_ip == domain.target_ip:
+        # Если IP совпадает с доменом, используем его
+        target_ip = domain.target_ip
+        logger.info(f"Использую тот же IP, что и у домена: {target_ip} для домена {domain.name}")
+    elif domain.ffpanel_target_ip:
+        # Проверяем, соответствует ли IP какому-то серверу или внешнему серверу
+        from models import Server, ExternalServer
+        server = Server.query.filter_by(ip_address=domain.ffpanel_target_ip).first()
+        ext_server = ExternalServer.query.filter_by(ip_address=domain.ffpanel_target_ip).first()
+        
+        if server:
+            logger.info(f"Использую IP сервера {server.name}: {domain.ffpanel_target_ip} для домена {domain.name}")
+        elif ext_server:
+            logger.info(f"Использую IP внешнего сервера {ext_server.name}: {domain.ffpanel_target_ip} для домена {domain.name}")
+        else:
+            logger.info(f"Использую указанный вручную IP: {domain.ffpanel_target_ip} для домена {domain.name}")
+            
         target_ip = domain.ffpanel_target_ip
-        logger.info(f"Использую специальный FFPanel Target IP: {target_ip} для домена {domain.name}")
     else:
+        # Если ffpanel_target_ip не указан, используем стандартный target_ip
         target_ip = domain.target_ip
         logger.info(f"Использую стандартный Target IP: {target_ip} для домена {domain.name}")
     
