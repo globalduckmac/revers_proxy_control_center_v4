@@ -134,15 +134,17 @@ class FFPanelAPI:
             return True
             
         try:
-            # Формируем тело запроса согласно документации
-            payload = {'token': self.token}
-            headers = {'Content-Type': 'application/json'}
+            # Формируем параметры GET-запроса согласно документации FFPanel API
+            params = {
+                'method': 'auth',
+                'token': self.token
+            }
             
-            # Отправляем запрос на аутентификацию
-            self.logger.debug(f"Отправка запроса аутентификации к {self.AUTH_URL}")
-            self.logger.debug(f"Заголовки: {headers}")
+            # Отправляем GET-запрос на аутентификацию
+            self.logger.debug(f"Отправка GET-запроса аутентификации к {self.AUTH_URL}")
+            self.logger.debug(f"Параметры: {params}")
             
-            response = requests.post(self.AUTH_URL, json=payload, headers=headers)
+            response = requests.get(self.AUTH_URL, params=params)
             
             self.logger.debug(f"Получен ответ: {response.status_code}")
             self.logger.debug(f"Заголовки ответа: {response.headers}")
@@ -161,17 +163,22 @@ class FFPanelAPI:
                 return False
             
             # Получаем JWT токен
-            token = data.get('token')
-            if not token:
-                self.logger.error("JWT токен не найден в ответе")
+            token_data = data.get('token')
+            if not token_data or not isinstance(token_data, dict):
+                self.logger.error(f"JWT токен не найден в ответе или имеет неверный формат: {token_data}")
                 return False
                 
             # Сохраняем токен
-            self.jwt_token = token
+            jwt_token = token_data.get('jwt')
+            if not jwt_token:
+                self.logger.error("Поле 'jwt' не найдено в ответе")
+                return False
+                
+            self.jwt_token = jwt_token
             
             # Устанавливаем время истечения токена из поля expire
-            if 'expire' in data:
-                self.jwt_expire = int(data['expire'])
+            if 'expire' in token_data:
+                self.jwt_expire = int(token_data['expire'])
                 self.logger.info(f"JWT токен получен, истекает: {datetime.fromtimestamp(self.jwt_expire)}")
             else:
                 # Если время истечения не указано, устанавливаем +24 часа от текущего времени
