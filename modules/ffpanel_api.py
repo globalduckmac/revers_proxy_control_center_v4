@@ -260,6 +260,43 @@ class FFPanelAPI:
         except Exception as e:
             self.logger.exception(f"Исключение при запросе списка сайтов: {str(e)}")
             return []
+            
+    def get_site(self, site_id):
+        """
+        Получение информации о конкретном сайте по его ID.
+        Так как API FFPanel не предоставляет метод для получения одного сайта,
+        мы получаем список всех сайтов и ищем нужный по ID.
+        
+        Args:
+            site_id: ID сайта в FFPanel
+            
+        Returns:
+            dict: Словарь с данными сайта или None, если сайт не найден
+        """
+        self.logger.debug(f"Запрос информации о сайте с ID: {site_id}")
+        
+        try:
+            # Получаем список всех сайтов
+            sites = self.get_sites()
+            
+            if not sites:
+                self.logger.warning(f"Не удалось получить список сайтов для поиска сайта с ID: {site_id}")
+                return None
+            
+            # Ищем сайт по ID
+            for site in sites:
+                if site.get('id') == site_id:
+                    self.logger.info(f"Найден сайт с ID {site_id}: {site.get('domain')}")
+                    return {
+                        'success': True,
+                        'data': site
+                    }
+            
+            self.logger.warning(f"Сайт с ID {site_id} не найден в списке сайтов FFPanel")
+            return None
+        except Exception as e:
+            self.logger.exception(f"Исключение при получении информации о сайте {site_id}: {str(e)}")
+            return None
     
     def add_site(self, domain, ip_path, port="80", port_out="80", dns=""):
         """

@@ -59,14 +59,21 @@ def check_domain_ffpanel_status(domain_id):
                     
                     ffpanel_api = FFPanelAPI(setting.value)
                     
-                    # Получение информации о домене
-                    site_info = ffpanel_api.get_site(domain.ffpanel_id)
-                    if site_info and 'data' in site_info:
-                        site_data = site_info['data']
+                    # Получение информации о домене через получение всех сайтов
+                    sites = ffpanel_api.get_sites()
+                    site_data = None
+                    
+                    # Ищем домен по ID в списке сайтов
+                    for site in sites:
+                        if site.get('id') == domain.ffpanel_id:
+                            site_data = site
+                            break
+                            
+                    if site_data:
                         print("\nДанные из FFPanel:")
                         print(f"Домен: {site_data.get('domain')}")
-                        print(f"Статус: {site_data.get('status')}")
-                        print(f"Последнее обновление: {site_data.get('updated_at')}")
+                        print(f"Статус: {site_data.get('status', 'не указан')}")
+                        print(f"Последнее обновление: {site_data.get('updated_at', 'не указано')}")
                         return site_data
                     else:
                         print("[!] Ошибка: Не удалось получить информацию о домене из FFPanel")
@@ -151,44 +158,33 @@ def sync_domain_with_ffpanel(domain_id, verbose=False):
                 # Синхронизация домена
                 print(f"\n[*] Синхронизация домена {domain.name} с FFPanel...")
                 
-                if domain.ffpanel_id:
-                    # Обновление существующего домена
-                    result = domain_manager.update_domain_in_ffpanel(domain)
-                    if result:
-                        print(f"[✓] Домен {domain.name} успешно обновлен в FFPanel (ID: {domain.ffpanel_id})")
+                # Используем метод из DomainManager для синхронизации
+                result = domain_manager.sync_domain_with_ffpanel(domain.id)
+                
+                if result and result.get('success'):
+                    print(f"[✓] {result.get('message')} (ID: {domain.ffpanel_id})")
+                    
+                    if verbose:
+                        # Получаем обновленную информацию
+                        time.sleep(1)  # Даем API время на обработку изменений
+                        sites = ffpanel_api.get_sites()
+                        site_data = None
                         
-                        if verbose:
-                            # Получаем обновленную информацию
-                            time.sleep(1)  # Даем API время на обработку изменений
-                            site_info = ffpanel_api.get_site(domain.ffpanel_id)
-                            if site_info and 'data' in site_info:
-                                print("\nОбновленные данные в FFPanel:")
-                                site_data = site_info['data']
-                                print(json.dumps(site_data, indent=2, ensure_ascii=False))
-                        
-                        return True
-                    else:
-                        print(f"[!] Ошибка при обновлении домена {domain.name} в FFPanel")
-                        return False
+                        # Ищем домен в списке всех сайтов
+                        for site in sites:
+                            if site.get('id') == domain.ffpanel_id or site.get('domain') == domain.name:
+                                site_data = site
+                                break
+                                
+                        if site_data:
+                            print("\nДанные домена в FFPanel:")
+                            print(json.dumps(site_data, indent=2, ensure_ascii=False))
+                    
+                    return True
                 else:
-                    # Создание нового домена в FFPanel
-                    result = domain_manager.create_domain_in_ffpanel(domain)
-                    if result:
-                        print(f"[✓] Домен {domain.name} успешно создан в FFPanel (ID: {domain.ffpanel_id})")
-                        
-                        if verbose:
-                            # Получаем информацию о созданном домене
-                            time.sleep(1)  # Даем API время на обработку изменений
-                            site_info = ffpanel_api.get_site(domain.ffpanel_id)
-                            if site_info and 'data' in site_info:
-                                print("\nДанные созданного домена в FFPanel:")
-                                site_data = site_info['data']
-                                print(json.dumps(site_data, indent=2, ensure_ascii=False))
-                        
-                        return True
-                    else:
-                        print(f"[!] Ошибка при создании домена {domain.name} в FFPanel")
-                        return False
+                    error_message = result.get('message') if result else "Неизвестная ошибка"
+                    print(f"[!] Ошибка при синхронизации домена {domain.name} с FFPanel: {error_message}")
+                    return False
             except Exception as e:
                 print(f"[!] Ошибка при синхронизации домена с FFPanel: {str(e)}")
                 return False
