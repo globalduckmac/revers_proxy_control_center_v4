@@ -1,0 +1,43 @@
+Apr 08 14:59:29 karaman-1.example.com gunicorn[60507]: DEBUG:paramiko.transport:[chan 0] Sesch channel 0 request ok
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60505]: [2025-04-08 14:59:38 +0300] [60505] [CRITICAL] WORKER TIMEOUT (pid:60507)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]: [2025-04-08 14:59:38 +0300] [60507] [ERROR] Error handling request /domains/85/setup-ssl
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]: Traceback (most recent call last):
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 134, in handle
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     self.handle_request(listener, req, client, addr)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/gunicorn/workers/sync.py", line 177, in handle_request
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     respiter = self.wsgi(environ, resp.start_response)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 1536, in __call__
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     return self.wsgi_app(environ, start_response)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 1511, in wsgi_app
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     response = self.full_dispatch_request()
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 917, in full_dispatch_request
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     rv = self.dispatch_request()
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask/app.py", line 902, in dispatch_request
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/flask_login/utils.py", line 290, in decorated_view
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     return current_app.ensure_sync(func)(*args, **kwargs)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/routes/domains.py", line 447, in setup_ssl_for_domain
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     success = DeploymentManager.setup_ssl_certbot(server, domain)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/modules/deployment.py", line 220, in setup_ssl_certbot
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     stdout, stderr = ServerManager.execute_command(server, cert_command, long_running=True)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/modules/server_manager.py", line 207, in execute_command
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     stdout_str = stdout.read().decode('utf-8')
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/paramiko/file.py", line 184, in read
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     new_data = self._read(self._DEFAULT_BUFSIZE)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/paramiko/channel.py", line 1359, in _read
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     return self.channel.recv(size)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/paramiko/channel.py", line 697, in recv
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     out = self.in_buffer.read(nbytes, self.timeout)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/paramiko/buffered_pipe.py", line 150, in read
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     self._cv.wait(timeout)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/usr/lib/python3.10/threading.py", line 324, in wait
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     gotit = waiter.acquire(True, timeout)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:   File "/opt/reverse-proxy-control-center/venv/lib/python3.10/site-packages/gunicorn/workers/base.py", line 204, in handle_abort
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]:     sys.exit(1)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]: SystemExit: 1
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]: [2025-04-08 14:59:38 +0300] [60507] [INFO] Worker exiting (pid: 60507)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]: INFO:tasks:Background tasks stopped
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]: DEBUG:paramiko.transport:[chan 0] EOF sent (0)
+Apr 08 14:59:38 karaman-1.example.com gunicorn[60507]: DEBUG:paramiko.transport:Dropping user packet because connection is dead.
+Apr 08 14:59:38 karaman-1.example.com gunicorn[62714]: [2025-04-08 14:59:38 +0300] [62714] [INFO] Booting worker with pid: 62714
+Apr 08 14:59:39 karaman-1.example.com gunicorn[62714]: Ошибка дешифрования:

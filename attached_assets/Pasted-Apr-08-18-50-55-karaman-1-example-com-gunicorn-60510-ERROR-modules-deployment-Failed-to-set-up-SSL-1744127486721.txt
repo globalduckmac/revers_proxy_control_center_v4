@@ -1,0 +1,37 @@
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]: ERROR:modules.deployment:Failed to set up SSL certificates on server TaskerPro: Traceback (most recent call last):
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/requests_toolbelt/_compat.py", line 48, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from requests.packages.urllib3.contrib import appengine as gaecontrib
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]: ImportError: cannot import name 'appengine' from 'requests.packages.urllib3.contrib' (/usr/local/lib/python3.10/dist-packages/urllib3/contrib/__init__.py)
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]: During handling of the above exception, another exception occurred:
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]: Traceback (most recent call last):
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/bin/certbot", line 33, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     sys.exit(load_entry_point('certbot==1.21.0', 'console_scripts', 'certbot')())
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/bin/certbot", line 25, in importlib_load_entry_point
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     return next(matches).load()
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3.10/importlib/metadata/__init__.py", line 171, in load
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     module = import_module(match.group('module'))
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3.10/importlib/__init__.py", line 126, in import_module
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     return _bootstrap._gcd_import(name[level:], package, level)
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "<frozen importlib._bootstrap>", line 1050, in _gcd_import
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "<frozen importlib._bootstrap>", line 1027, in _find_and_load
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "<frozen importlib._bootstrap>", line 1006, in _find_and_load_unlocked
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "<frozen importlib._bootstrap>", line 688, in _load_unlocked
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "<frozen importlib._bootstrap_external>", line 883, in exec_module
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/certbot/main.py", line 2, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from certbot._internal import main as internal_main
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/certbot/_internal/main.py", line 28, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from certbot._internal import account
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/certbot/_internal/account.py", line 19, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from acme.client import ClientBase  # pylint: disable=unused-import
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/acme/client.py", line 34, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from requests_toolbelt.adapters.source import SourceAddressAdapter
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/requests_toolbelt/__init__.py", line 12, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from .adapters import SSLAdapter, SourceAddressAdapter
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/requests_toolbelt/adapters/__init__.py", line 12, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from .ssl import SSLAdapter
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/requests_toolbelt/adapters/ssl.py", line 16, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from .._compat import poolmanager
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:   File "/usr/lib/python3/dist-packages/requests_toolbelt/_compat.py", line 50, in <module>
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]:     from urllib3.contrib import appengine as gaecontrib
+Apr 08 18:50:55 karaman-1.example.com gunicorn[60510]: ImportError: cannot import name 'appengine' from 'urllib3.contrib' (/usr/local/lib/python3.10/dist-packages/urllib3/contrib/__init__.py)
