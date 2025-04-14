@@ -173,26 +173,46 @@ class FFPanelAPI:
     
     def get_sites(self):
         """
-        Получение списка сайтов из FFPanel.
+        Получение списка сайтов из FFPanel согласно документации API.
+        URL: https://ffv2.ru/api/list.site
+        Метод: GET
         
         Returns:
             list: Список доменов или пустой список в случае ошибки
         """
         try:
+            # Получаем заголовки с авторизацией
             headers = self._get_headers()
-            self.logger.debug(f"Отправка запроса на получение списка сайтов")
-            response = requests.get(f"{self.API_URL}/list.site", headers=headers)
-            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}")
+            url = f"{self.API_URL}/list.site"
             
+            self.logger.debug(f"Отправка запроса на получение списка сайтов: {url}")
+            self.logger.debug(f"Заголовки запроса: {headers}")
+            
+            # Выполняем GET запрос согласно документации
+            response = requests.get(url, headers=headers)
+            
+            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}")
+            self.logger.debug(f"Заголовки ответа: {response.headers}")
+            
+            # Пытаемся разобрать JSON ответ
             try:
                 data = response.json()
+                self.logger.debug(f"Получены данные: {data.keys() if data else 'Пустой ответ'}")
             except ValueError:
-                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text[:200]}...")
                 return []
             
+            # Обрабатываем ответ согласно его коду
             if response.status_code == 200:
                 domains = data.get('domains', [])
                 self.logger.info(f"Получено {len(domains)} доменов из FFPanel")
+                
+                # Выводим информацию о первых 3 доменах для отладки
+                if domains and len(domains) > 0:
+                    sample_domains = domains[:3]
+                    for i, domain in enumerate(sample_domains):
+                        self.logger.debug(f"Домен {i+1}: ID={domain.get('id')}, Имя={domain.get('domain')}")
+                
                 return domains
             elif response.status_code == 404:
                 self.logger.info("Список сайтов в FFPanel пуст (код 404)")
@@ -200,6 +220,7 @@ class FFPanelAPI:
             else:
                 error_message = data.get('message', 'Неизвестная ошибка')
                 self.logger.error(f"Ошибка получения списка сайтов (код {response.status_code}): {error_message}")
+                self.logger.error(f"Полный ответ: {response.text[:300]}...")
                 return []
         except Exception as e:
             self.logger.exception(f"Исключение при запросе списка сайтов: {str(e)}")
@@ -220,9 +241,15 @@ class FFPanelAPI:
             dict: Словарь с результатом операции: {'success': bool, 'id': int или None, 'message': str}
         """
         try:
+            # Получаем заголовки с авторизацией
             headers = self._get_headers()
-            headers.pop('Content-Type', None)  # Убираем Content-Type для multipart/form-data
             
+            # Для POST запросов с формой нужно установить Content-Type: application/x-www-form-urlencoded
+            # и удалить Accept если он добавлен методом _get_headers
+            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            headers.pop('Accept', None)
+            
+            # Подготавливаем данные для запроса
             data = {
                 'domain': domain,
                 'ip_path': ip_path,
@@ -231,30 +258,44 @@ class FFPanelAPI:
                 'dns': dns
             }
             
-            self.logger.debug(f"Отправка запроса на добавление сайта: {domain}, IP: {ip_path}, порт: {port}")
-            response = requests.post(f"{self.API_URL}/add.site", headers=headers, data=data)
-            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}, текст: {response.text}")
+            url = f"{self.API_URL}/add.site"
+            self.logger.debug(f"Отправка запроса на добавление сайта: {url}")
+            self.logger.debug(f"Параметры запроса: {data}")
+            self.logger.debug(f"Заголовки запроса: {headers}")
             
+            # Выполняем POST запрос согласно документации API
+            response = requests.post(url, headers=headers, data=data)
+            
+            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}")
+            self.logger.debug(f"Заголовки ответа: {response.headers}")
+            self.logger.debug(f"Текст ответа: {response.text}")
+            
+            # Пытаемся разобрать JSON ответ
             try:
                 result = response.json()
+                self.logger.debug(f"Получены данные: {result}")
             except ValueError:
-                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text[:200]}...")
                 return {
                     'success': False,
                     'id': None,
-                    'message': f"Ошибка при разборе ответа: {response.text}"
+                    'message': f"Ошибка при разборе ответа: {response.text[:100]}..."
                 }
             
-            if response.status_code == 200 and result.get('code') == 200:
-                self.logger.info(f"Сайт {domain} успешно добавлен в FFPanel, ID: {result.get('id')}")
+            # Проверяем код ответа и код в теле ответа (может отличаться)
+            response_code = result.get('code', 0)
+            
+            if response.status_code == 200 and (response_code == 200 or response_code == 0):
+                site_id = result.get('id')
+                self.logger.info(f"Сайт {domain} успешно добавлен в FFPanel, ID: {site_id}")
                 return {
                     'success': True,
-                    'id': result.get('id'),
+                    'id': site_id,
                     'message': 'Сайт успешно добавлен'
                 }
             else:
                 error_message = result.get('message', 'Неизвестная ошибка')
-                self.logger.error(f"Ошибка добавления сайта: {error_message}, код: {result.get('code')}")
+                self.logger.error(f"Ошибка добавления сайта: {error_message}, HTTP код: {response.status_code}, API код: {response_code}")
                 return {
                     'success': False,
                     'id': None,
@@ -288,9 +329,15 @@ class FFPanelAPI:
             dict: Словарь с результатом операции: {'success': bool, 'message': str}
         """
         try:
+            # Получаем заголовки с авторизацией
             headers = self._get_headers()
-            headers.pop('Content-Type', None)  # Убираем Content-Type для multipart/form-data
             
+            # Для POST запросов с формой нужно установить Content-Type: application/x-www-form-urlencoded
+            # и удалить Accept если он добавлен методом _get_headers
+            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            headers.pop('Accept', None)
+            
+            # Подготавливаем данные для запроса
             data = {
                 'id': site_id,
                 'ip_path': ip_path,
@@ -302,23 +349,37 @@ class FFPanelAPI:
                 'wildcard': wildcard,
             }
             
+            # Добавляем JSON с записями DNS, если они предоставлены
             if dns:
                 data['dns'] = json.dumps(dns)
             
-            self.logger.debug(f"Отправка запроса на обновление сайта с ID: {site_id}, IP: {ip_path}, порт: {port}")
-            response = requests.post(f"{self.API_URL}/update.site", headers=headers, data=data)
-            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}, текст: {response.text}")
+            url = f"{self.API_URL}/update.site"
+            self.logger.debug(f"Отправка запроса на обновление сайта: {url}")
+            self.logger.debug(f"Параметры запроса: {data}")
+            self.logger.debug(f"Заголовки запроса: {headers}")
             
+            # Выполняем POST запрос согласно документации API
+            response = requests.post(url, headers=headers, data=data)
+            
+            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}")
+            self.logger.debug(f"Заголовки ответа: {response.headers}")
+            self.logger.debug(f"Текст ответа: {response.text}")
+            
+            # Пытаемся разобрать JSON ответ
             try:
                 result = response.json()
+                self.logger.debug(f"Получены данные: {result}")
             except ValueError:
-                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text[:200]}...")
                 return {
                     'success': False,
-                    'message': f"Ошибка при разборе ответа: {response.text}"
+                    'message': f"Ошибка при разборе ответа: {response.text[:100]}..."
                 }
             
-            if response.status_code == 200 and result.get('code') == 200:
+            # Проверяем код ответа и код в теле ответа (может отличаться)
+            response_code = result.get('code', 0)
+            
+            if response.status_code == 200 and (response_code == 200 or response_code == 0):
                 self.logger.info(f"Сайт с ID {site_id} успешно обновлен в FFPanel")
                 return {
                     'success': True,
@@ -326,7 +387,7 @@ class FFPanelAPI:
                 }
             else:
                 error_message = result.get('message', 'Неизвестная ошибка')
-                self.logger.error(f"Ошибка обновления сайта: {error_message}, код: {result.get('code')}")
+                self.logger.error(f"Ошибка обновления сайта: {error_message}, HTTP код: {response.status_code}, API код: {response_code}")
                 return {
                     'success': False,
                     'message': f"Ошибка: {error_message}"
@@ -349,27 +410,46 @@ class FFPanelAPI:
             dict: Словарь с результатом операции: {'success': bool, 'message': str}
         """
         try:
+            # Получаем заголовки с авторизацией
             headers = self._get_headers()
-            headers.pop('Content-Type', None)  # Убираем Content-Type для multipart/form-data
             
+            # Для POST запросов с формой нужно установить Content-Type: application/x-www-form-urlencoded
+            # и удалить Accept если он добавлен методом _get_headers
+            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            headers.pop('Accept', None)
+            
+            # Подготавливаем данные для запроса
             data = {
                 'id': site_id
             }
             
-            self.logger.debug(f"Отправка запроса на удаление сайта с ID: {site_id}")
-            response = requests.post(f"{self.API_URL}/delete.site", headers=headers, data=data)
-            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}, текст: {response.text}")
+            url = f"{self.API_URL}/delete.site"
+            self.logger.debug(f"Отправка запроса на удаление сайта: {url}")
+            self.logger.debug(f"Параметры запроса: {data}")
+            self.logger.debug(f"Заголовки запроса: {headers}")
             
+            # Выполняем POST запрос согласно документации API
+            response = requests.post(url, headers=headers, data=data)
+            
+            self.logger.debug(f"Получен ответ от FFPanel: {response.status_code}")
+            self.logger.debug(f"Заголовки ответа: {response.headers}")
+            self.logger.debug(f"Текст ответа: {response.text}")
+            
+            # Пытаемся разобрать JSON ответ
             try:
                 result = response.json()
+                self.logger.debug(f"Получены данные: {result}")
             except ValueError:
-                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text}")
+                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text[:200]}...")
                 return {
                     'success': False,
-                    'message': f"Ошибка при разборе ответа: {response.text}"
+                    'message': f"Ошибка при разборе ответа: {response.text[:100]}..."
                 }
             
-            if response.status_code == 200 and result.get('code') == 200:
+            # Проверяем код ответа и код в теле ответа (может отличаться)
+            response_code = result.get('code', 0)
+            
+            if response.status_code == 200 and (response_code == 200 or response_code == 0):
                 self.logger.info(f"Сайт с ID {site_id} успешно удален из FFPanel")
                 return {
                     'success': True,
@@ -377,7 +457,7 @@ class FFPanelAPI:
                 }
             else:
                 error_message = result.get('message', 'Неизвестная ошибка')
-                self.logger.error(f"Ошибка удаления сайта: {error_message}, код: {result.get('code')}")
+                self.logger.error(f"Ошибка удаления сайта: {error_message}, HTTP код: {response.status_code}, API код: {response_code}")
                 return {
                     'success': False,
                     'message': f"Ошибка: {error_message}"

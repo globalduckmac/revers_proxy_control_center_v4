@@ -762,19 +762,43 @@ def ffpanel_sync(domain_id):
         flash('Не указан целевой IP адрес для FFPanel. Пожалуйста, укажите FFPanel Target IP или Target IP.', 'danger')
         return redirect(url_for('domains.edit', domain_id=domain_id))
     
-    # Создаем экземпляр FFPanel API с указанным токеном
-    ffpanel = FFPanelAPI(token=ffpanel_token)
+    # Создаем экземпляр FFPanel API с указанным токеном и настроенным логированием
+    ffpanel = FFPanelAPI(token=ffpanel_token, logger=logger)
     
-    # Проверяем подключение к FFPanel
-    if not ffpanel._authenticate():
-        flash('Ошибка аутентификации в FFPanel API. Проверьте токен и соединение.', 'danger')
+    logger.info(f"Создан экземпляр FFPanel API с токеном длиной {len(ffpanel_token)} символов")
+    logger.info(f"Базовый URL API: {ffpanel.API_URL}")
+    
+    # Проверяем подключение к FFPanel и аутентифицируемся
+    try:
+        if not ffpanel._authenticate():
+            logger.error("Ошибка аутентификации в FFPanel API. Проверьте токен и соединение.")
+            flash('Ошибка аутентификации в FFPanel API. Проверьте токен и соединение.', 'danger')
+            return redirect(url_for('domains.edit', domain_id=domain_id))
+        
+        logger.info(f"Успешная аутентификация в FFPanel API. Получен JWT токен длиной {len(ffpanel.jwt_token)} символов")
+        logger.info(f"Срок действия JWT токена: {ffpanel.jwt_expires}")
+    except Exception as auth_error:
+        logger.exception(f"Исключение при аутентификации в FFPanel API: {str(auth_error)}")
+        flash(f'Ошибка аутентификации в FFPanel API: {str(auth_error)}', 'danger')
         return redirect(url_for('domains.edit', domain_id=domain_id))
     
-    # Получаем список сайтов из FFPanel
-    sites = ffpanel.get_sites()
-    if sites is None:  # Проверяем именно на None, так как может быть пустой список
-        logger.error("Не удалось получить список сайтов из FFPanel")
-        flash('Ошибка получения списка сайтов из FFPanel', 'danger')
+    # Получаем список сайтов из FFPanel с дополнительным логированием
+    try:
+        sites = ffpanel.get_sites()
+        if sites is None:  # Проверяем именно на None, так как может быть пустой список
+            logger.error("Не удалось получить список сайтов из FFPanel")
+            flash('Ошибка получения списка сайтов из FFPanel', 'danger')
+            return redirect(url_for('domains.edit', domain_id=domain_id))
+        
+        if isinstance(sites, list):
+            logger.info(f"Успешно получен список из {len(sites)} сайтов из FFPanel")
+        else:
+            logger.error(f"Получен неверный формат данных от FFPanel: {type(sites)}")
+            flash('Ошибка получения списка сайтов из FFPanel: неверный формат данных', 'danger')
+            return redirect(url_for('domains.edit', domain_id=domain_id))
+    except Exception as sites_error:
+        logger.exception(f"Исключение при получении списка сайтов из FFPanel: {str(sites_error)}")
+        flash(f'Ошибка получения списка сайтов из FFPanel: {str(sites_error)}', 'danger')
         return redirect(url_for('domains.edit', domain_id=domain_id))
     
     logger.info(f"Получено {len(sites)} сайтов из FFPanel")
