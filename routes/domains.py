@@ -167,6 +167,11 @@ def edit(domain_id):
     """Handle domain editing."""
     domain = Domain.query.get_or_404(domain_id)
     
+    # Получаем список серверов и внешних серверов для выбора FFPanel Target IP
+    from models import Server, ExternalServer
+    servers = Server.query.all()
+    external_servers = ExternalServer.query.all()
+    
     if request.method == 'POST':
         # Отладка: выводим все данные формы
         import logging
@@ -198,21 +203,39 @@ def edit(domain_id):
         ffpanel_target_ip = None
         
         if ffpanel_enabled:
-            # Проверяем, был ли выбран сервер для FFPanel
-            server_id = request.form.get('server_id')
-            if server_id:
-                # Если выбран сервер, используем его IP-адрес для FFPanel
-                from models import Server
-                server = Server.query.get(server_id)
-                if server:
-                    ffpanel_target_ip = server.ip_address
+            # Получаем источник IP для FFPanel
+            ffpanel_ip_source = request.form.get('ffpanel_ip_source', 'manual')
+            logger.info(f"FFPanel IP Source: {ffpanel_ip_source}")
+            
+            if ffpanel_ip_source == 'server':
+                # Если выбран стандартный сервер
+                server_id = request.form.get('ffpanel_server_id')
+                if server_id:
+                    server = Server.query.get(server_id)
+                    if server:
+                        ffpanel_target_ip = server.ip_address
+                        logger.info(f"Using server IP for FFPanel: {ffpanel_target_ip} (server_id: {server_id})")
+            elif ffpanel_ip_source == 'external_server':
+                # Если выбран внешний сервер
+                ext_server_id = request.form.get('ffpanel_external_server_id')
+                if ext_server_id:
+                    ext_server = ExternalServer.query.get(ext_server_id)
+                    if ext_server:
+                        ffpanel_target_ip = ext_server.ip_address
+                        logger.info(f"Using external server IP for FFPanel: {ffpanel_target_ip} (ext_server_id: {ext_server_id})")
+            elif ffpanel_ip_source == 'same':
+                # Если используется тот же IP что и у домена
+                ffpanel_target_ip = target_ip
+                logger.info(f"Using same IP for FFPanel as domain: {ffpanel_target_ip}")
             else:
                 # Иначе используем введенный вручную IP
                 ffpanel_target_ip = request.form.get('ffpanel_target_ip')
+                logger.info(f"Using manually entered IP for FFPanel: {ffpanel_target_ip}")
             
             # Если FFPanel включен, но не указан специальный IP, используем основной target_ip
             if not ffpanel_target_ip:
                 ffpanel_target_ip = target_ip
+                logger.info(f"Falling back to domain IP for FFPanel: {ffpanel_target_ip}")
         
         # Update domain
         domain.name = name
@@ -282,7 +305,8 @@ def edit(domain_id):
     return render_template('domains/edit.html', 
                           domain=domain, 
                           domain_groups=domain_groups, 
-                          servers=servers)
+                          servers=servers,
+                          external_servers=external_servers)
 
 @bp.route('/<int:domain_id>/delete', methods=['POST'])
 @login_required
@@ -646,6 +670,7 @@ def ffpanel_sync(domain_id):
     """Синхронизация домена с FFPanel."""
     from modules.ffpanel_api import FFPanelAPI
     import logging
+    import os
     
     logger = logging.getLogger(__name__)
     logger.info(f"Начало синхронизации домена {domain_id} с FFPanel")
@@ -657,17 +682,37 @@ def ffpanel_sync(domain_id):
         flash('FFPanel интеграция не включена для этого домена. Включите её в настройках.', 'warning')
         return redirect(url_for('domains.edit', domain_id=domain_id))
     
+    # Проверяем, настроен ли токен FFPanel
+    ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+    if not ffpanel_token:
+        from models import SystemSetting
+        ffpanel_token = SystemSetting.get_value('ffpanel_token')
+        
+    if not ffpanel_token:
+        flash('Не настроен токен FFPanel API. Пожалуйста, добавьте FFPANEL_TOKEN в переменные окружения или настройках системы.', 'danger')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
     # Определяем IP-адрес и порт для FFPanel
     target_ip = domain.ffpanel_target_ip or domain.target_ip
     target_port = domain.target_port or 80
     logger.info(f"Использую IP: {target_ip}, порт: {target_port} для домена {domain.name}")
     
-    # Создаем экземпляр FFPanel API
-    ffpanel = FFPanelAPI()
+    # Если IP или порт не заданы, выводим ошибку
+    if not target_ip:
+        flash('Не указан целевой IP адрес для FFPanel. Пожалуйста, укажите FFPanel Target IP или Target IP.', 'danger')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    # Создаем экземпляр FFPanel API с указанным токеном
+    ffpanel = FFPanelAPI(token=ffpanel_token)
+    
+    # Проверяем подключение к FFPanel
+    if not ffpanel._authenticate():
+        flash('Ошибка аутентификации в FFPanel API. Проверьте токен и соединение.', 'danger')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
     
     # Получаем список сайтов из FFPanel
     sites = ffpanel.get_sites()
-    if not sites:
+    if sites is None:  # Проверяем именно на None, так как может быть пустой список
         logger.error("Не удалось получить список сайтов из FFPanel")
         flash('Ошибка получения списка сайтов из FFPanel', 'danger')
         return redirect(url_for('domains.edit', domain_id=domain_id))
@@ -688,41 +733,49 @@ def ffpanel_sync(domain_id):
     try:
         # В зависимости от того, существует ли сайт, добавляем или обновляем его
         if site_exists and site_id:
+            # Собираем данные для обновления сайта
+            update_data = {
+                'site_id': site_id,
+                'ip_path': target_ip,
+                'port': str(target_port),
+                'port_out': str(target_port),
+                'port_ssl': "443",
+                'port_out_ssl': "443",
+                'real_ip': target_ip,
+                'wildcard': "0"
+            }
+            
             # Обновляем существующий сайт
-            logger.info(f"Обновляю существующий сайт {domain.name} (ID: {site_id}) в FFPanel")
-            result = ffpanel.update_site(
-                site_id=site_id,
-                ip_path=target_ip,
-                port=str(target_port),
-                port_out=str(target_port),
-                port_ssl="443",
-                port_out_ssl="443"
-            )
+            logger.info(f"Обновляю существующий сайт {domain.name} (ID: {site_id}) в FFPanel с данными: {update_data}")
+            result = ffpanel.update_site(**update_data)
             
             if result.get('success'):
                 logger.info(f"Домен {domain.name} успешно обновлен в FFPanel")
-                flash(f'Домен {domain.name} успешно обновлен в FFPanel', 'success')
+                flash(f'Домен {domain.name} успешно обновлен в FFPanel API', 'success')
             else:
                 error_msg = result.get('message', 'Неизвестная ошибка')
                 logger.error(f"Ошибка обновления домена в FFPanel: {error_msg}")
-                flash(f'Ошибка обновления домена в FFPanel: {error_msg}', 'danger')
+                flash(f'Ошибка обновления домена в FFPanel API: {error_msg}', 'danger')
         else:
             # Добавляем новый сайт
-            logger.info(f"Добавляю новый сайт {domain.name} в FFPanel")
-            result = ffpanel.add_site(
-                domain=domain.name,
-                ip_path=target_ip,
-                port=str(target_port),
-                port_out=str(target_port)
-            )
+            add_data = {
+                'domain': domain.name,
+                'ip_path': target_ip,
+                'port': str(target_port),
+                'port_out': str(target_port),
+                'dns': ""
+            }
+            
+            logger.info(f"Добавляю новый сайт {domain.name} в FFPanel с данными: {add_data}")
+            result = ffpanel.add_site(**add_data)
             
             if result.get('success'):
                 logger.info(f"Домен {domain.name} успешно добавлен в FFPanel с ID: {result.get('id')}")
-                flash(f'Домен {domain.name} успешно добавлен в FFPanel', 'success')
+                flash(f'Домен {domain.name} успешно добавлен в FFPanel API', 'success')
             else:
                 error_msg = result.get('message', 'Неизвестная ошибка')
                 logger.error(f"Ошибка добавления домена в FFPanel: {error_msg}")
-                flash(f'Ошибка добавления домена в FFPanel: {error_msg}', 'danger')
+                flash(f'Ошибка добавления домена в FFPanel API: {error_msg}', 'danger')
     except Exception as e:
         logger.exception(f"Исключение при синхронизации домена с FFPanel: {str(e)}")
         flash(f'Ошибка при синхронизации с FFPanel: {str(e)}', 'danger')
