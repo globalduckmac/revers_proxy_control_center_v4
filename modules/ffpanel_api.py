@@ -89,7 +89,7 @@ class FFPanelAPI:
         """
         self.token = token
         self.jwt_token = None
-        self.jwt_expire = 0
+        self.jwt_expire = 0  # время истечения токена
         
         # Инициализируем логгер через FFPanelLogger
         if logger is None:
@@ -98,6 +98,9 @@ class FFPanelAPI:
             self.logger = logger
         else:
             self.logger = FFPanelLogger(logger)
+            
+        # Добавляем подробное логирование для отладки
+        self.logger.debug(f"FFPanelAPI инициализирован с BASE_URL: {self.BASE_URL}")
         
         # Если токен не указан, пытаемся получить его из настроек или переменных окружения
         if not self.token:
@@ -150,18 +153,23 @@ class FFPanelAPI:
     
     def _get_headers(self):
         """
-        Получение заголовков для API запросов.
+        Получение заголовков для API запросов согласно документации FFPanel API.
         
         Returns:
             dict: Заголовки с авторизацией
         """
         if not self._authenticate():
+            self.logger.error("Не удалось получить JWT-токен для доступа к API")
             raise Exception("Не удалось получить JWT-токен для доступа к API")
             
-        return {
+        # Заголовки согласно документации API
+        headers = {
             'Authorization': f'Bearer {self.jwt_token}',
-            'Content-Type': 'application/json'
+            'Accept': 'application/json'  # Используем Accept вместо Content-Type для запросов GET
         }
+        
+        self.logger.debug(f"Сформированы заголовки для API запроса: {headers}")
+        return headers
     
     def get_sites(self):
         """

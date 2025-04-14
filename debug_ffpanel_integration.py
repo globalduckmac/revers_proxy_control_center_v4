@@ -165,8 +165,10 @@ def test_get_sites(token, verbose=False):
     try:
         url = f"{FFPANEL_API_BASE_URL}/list.site"
         print(f"[*] Запрос к {url}")
+        print(f"[*] Заголовки: {headers}")
         
         response = requests.get(url, headers=headers)
+        print(f"[*] Статус ответа: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
