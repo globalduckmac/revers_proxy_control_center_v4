@@ -183,6 +183,43 @@ def edit(domain_id):
         target_port = request.form.get('target_port', 80, type=int)
         ssl_enabled = 'ssl_enabled' in request.form
         
+        # Обработка FFPanel Target IP в зависимости от выбранного источника
+        ffpanel_ip_source = request.form.get('ffpanel_ip_source', 'same')
+        
+        if ffpanel_ip_source == 'same':
+            # Используем тот же IP, что и у домена
+            ffpanel_target_ip = target_ip
+        elif ffpanel_ip_source == 'server':
+            # Получаем IP из выбранного сервера
+            server_id = request.form.get('ffpanel_server_id')
+            if server_id:
+                from models import Server
+                server = Server.query.get(server_id)
+                if server:
+                    ffpanel_target_ip = server.ip_address
+                else:
+                    ffpanel_target_ip = domain.ffpanel_target_ip
+            else:
+                ffpanel_target_ip = domain.ffpanel_target_ip
+        elif ffpanel_ip_source == 'external_server':
+            # Получаем IP из выбранного внешнего сервера
+            external_server_id = request.form.get('ffpanel_external_server_id')
+            if external_server_id:
+                from models import ExternalServer
+                external_server = ExternalServer.query.get(external_server_id)
+                if external_server:
+                    ffpanel_target_ip = external_server.ip_address
+                else:
+                    ffpanel_target_ip = domain.ffpanel_target_ip
+            else:
+                ffpanel_target_ip = domain.ffpanel_target_ip
+        elif ffpanel_ip_source == 'manual':
+            # Используем вручную введенный IP
+            ffpanel_target_ip = request.form.get('ffpanel_target_ip_manual')
+        else:
+            # Значение по умолчанию
+            ffpanel_target_ip = domain.ffpanel_target_ip
+        
         # Validate required fields
         if not name or not target_ip:
             flash('Domain name and target IP are required', 'danger')
@@ -693,9 +730,16 @@ def ffpanel_sync(domain_id):
         return redirect(url_for('domains.edit', domain_id=domain_id))
     
     # Определяем IP-адрес и порт для FFPanel
-    target_ip = domain.ffpanel_target_ip or domain.target_ip
+    # Сначала смотрим специальный ffpanel_target_ip, затем основной target_ip
+    if domain.ffpanel_target_ip:
+        target_ip = domain.ffpanel_target_ip
+        logger.info(f"Использую специальный FFPanel Target IP: {target_ip} для домена {domain.name}")
+    else:
+        target_ip = domain.target_ip
+        logger.info(f"Использую стандартный Target IP: {target_ip} для домена {domain.name}")
+    
     target_port = domain.target_port or 80
-    logger.info(f"Использую IP: {target_ip}, порт: {target_port} для домена {domain.name}")
+    logger.info(f"Использую порт: {target_port} для домена {domain.name}")
     
     # Если IP или порт не заданы, выводим ошибку
     if not target_ip:
