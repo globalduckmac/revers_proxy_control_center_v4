@@ -7,8 +7,68 @@ import os
 import json
 import time
 import requests
+import logging
 from datetime import datetime
-from flask import current_app
+
+# Специальный класс логгера для FFPanelAPI
+class FFPanelLogger:
+    """
+    Специальный класс для логирования в FFPanelAPI,
+    который может работать как с Flask логгером, так и с обычным Python логгером.
+    """
+    def __init__(self, logger=None):
+        """
+        Инициализация логгера.
+        
+        Args:
+            logger: Объект логгера или None для использования стандартного логгера
+        """
+        if logger:
+            self.logger = logger
+        else:
+            try:
+                from flask import current_app
+                self.logger = current_app.logger
+            except (ImportError, RuntimeError):
+                # Если Flask не импортируется или нет активного контекста приложения,
+                # создаем стандартный логгер Python
+                self.logger = logging.getLogger('ffpanel_api')
+                if not self.logger.handlers:
+                    handler = logging.StreamHandler()
+                    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                    handler.setFormatter(formatter)
+                    self.logger.addHandler(handler)
+                    self.logger.setLevel(logging.INFO)
+    
+    def debug(self, message):
+        """Запись отладочного сообщения"""
+        if self.logger:
+            self.logger.debug(message)
+    
+    def info(self, message):
+        """Запись информационного сообщения"""
+        if self.logger:
+            self.logger.info(message)
+    
+    def warning(self, message):
+        """Запись предупреждения"""
+        if self.logger:
+            self.logger.warning(message)
+    
+    def error(self, message):
+        """Запись сообщения об ошибке"""
+        if self.logger:
+            self.logger.error(message)
+    
+    def exception(self, message):
+        """Запись исключения с трассировкой стека"""
+        if self.logger:
+            self.logger.exception(message)
+
+try:
+    from flask import current_app
+except ImportError:
+    current_app = None
 
 class FFPanelAPI:
     """
@@ -31,17 +91,13 @@ class FFPanelAPI:
         self.jwt_token = None
         self.jwt_expire = 0
         
-        # Настраиваем логгер
-        self.logger = logger
-        if self.logger is None:
-            import logging
-            self.logger = logging.getLogger('ffpanel_api')
-            if not self.logger.handlers:  # Если нет обработчиков, добавляем их
-                handler = logging.StreamHandler()
-                formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-                handler.setFormatter(formatter)
-                self.logger.addHandler(handler)
-                self.logger.setLevel(logging.INFO)
+        # Инициализируем логгер через FFPanelLogger
+        if logger is None:
+            self.logger = FFPanelLogger()
+        elif isinstance(logger, FFPanelLogger):
+            self.logger = logger
+        else:
+            self.logger = FFPanelLogger(logger)
         
         # Если токен не указан, пытаемся получить его из настроек или переменных окружения
         if not self.token:
