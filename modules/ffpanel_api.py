@@ -123,32 +123,67 @@ class FFPanelAPI:
         
     def _authenticate(self):
         """
-        Аутентификация в API и получение JWT-токена.
+        Аутентификация в API и получение JWT-токена согласно документации FFPanel API.
         
         Returns:
             bool: True если аутентификация успешна, иначе False
         """
-        if self.jwt_token and self.jwt_expire > time.time():
-            # Используем существующий токен, если он еще действителен
+        # Если у нас уже есть JWT токен и он не истек, возвращаем True
+        if self.jwt_token and hasattr(self, 'jwt_expire') and self.jwt_expire > time.time():
+            self.logger.debug(f"Используем существующий JWT токен (действителен до {datetime.fromtimestamp(self.jwt_expire)})")
             return True
             
         try:
-            params = {
-                'method': 'auth',
-                'token': self.token
-            }
-            response = requests.get(self.AUTH_URL, params=params)
-            data = response.json()
+            # Формируем тело запроса согласно документации
+            payload = {'token': self.token}
+            headers = {'Content-Type': 'application/json'}
             
-            if response.status_code == 200 and 'token' in data:
-                self.jwt_token = data['token']['jwt']
-                self.jwt_expire = data['token']['expire']
-                return True
-            else:
-                self.logger.error(f"FFPanel аутентификация неудачна: {data.get('message', 'Неизвестная ошибка')}")
+            # Отправляем запрос на аутентификацию
+            self.logger.debug(f"Отправка запроса аутентификации к {self.AUTH_URL}")
+            self.logger.debug(f"Заголовки: {headers}")
+            
+            response = requests.post(self.AUTH_URL, json=payload, headers=headers)
+            
+            self.logger.debug(f"Получен ответ: {response.status_code}")
+            self.logger.debug(f"Заголовки ответа: {response.headers}")
+            
+            # Проверяем успешность запроса
+            if response.status_code != 200:
+                self.logger.error(f"Ошибка аутентификации HTTP: {response.status_code}, {response.text[:200]}")
                 return False
+                
+            # Разбираем ответ
+            try:
+                data = response.json()
+                self.logger.debug(f"Данные ответа: {data}")
+            except ValueError:
+                self.logger.error(f"Ошибка при разборе JSON-ответа: {response.text[:200]}")
+                return False
+            
+            # Получаем JWT токен
+            token = data.get('token')
+            if not token:
+                self.logger.error("JWT токен не найден в ответе")
+                return False
+                
+            # Сохраняем токен
+            self.jwt_token = token
+            
+            # Устанавливаем время истечения токена из поля expire
+            if 'expire' in data:
+                self.jwt_expire = int(data['expire'])
+                self.logger.info(f"JWT токен получен, истекает: {datetime.fromtimestamp(self.jwt_expire)}")
+            else:
+                # Если время истечения не указано, устанавливаем +24 часа от текущего времени
+                self.jwt_expire = int(time.time()) + 24*60*60
+                self.logger.warning(f"Время истечения токена не найдено в ответе, установлено стандартное: {datetime.fromtimestamp(self.jwt_expire)}")
+            
+            # Для совместимости с остальным кодом
+            self.jwt_expires = datetime.fromtimestamp(self.jwt_expire)
+            
+            return True
         except Exception as e:
-            self.logger.error(f"Ошибка аутентификации FFPanel: {str(e)}")
+            self.logger.exception(f"Исключение при аутентификации FFPanel: {str(e)}")
             return False
     
     def _get_headers(self):
