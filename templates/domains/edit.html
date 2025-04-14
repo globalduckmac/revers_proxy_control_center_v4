@@ -99,10 +99,91 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label for="ffpanel_target_ip" class="form-label">FFPanel Target IP (optional)</label>
-                            <input type="text" class="form-control" id="ffpanel_target_ip" name="ffpanel_target_ip" value="{{ domain.ffpanel_target_ip }}">
-                            <div class="form-text">If different from the main target IP, specify a separate IP for FFPanel integration</div>
+                            <label class="form-label">FFPanel Target IP Source</label>
+                            <div class="form-group mb-3">
+                                <select class="form-select" id="ffpanel_ip_source" name="ffpanel_ip_source" onchange="toggleFFPanelIPFields()">
+                                    <option value="same" {% if domain.ffpanel_target_ip == domain.target_ip %}selected{% endif %}>Use same as Domain Target IP</option>
+                                    <option value="server" {% if servers|selectattr('ip_address', 'eq', domain.ffpanel_target_ip)|list|length > 0 %}selected{% endif %}>Choose from servers</option>
+                                    <option value="external_server" {% if external_servers|selectattr('ip_address', 'eq', domain.ffpanel_target_ip)|list|length > 0 %}selected{% endif %}>Choose from external servers</option>
+                                    <option value="manual" {% if domain.ffpanel_target_ip and domain.ffpanel_target_ip != domain.target_ip and servers|selectattr('ip_address', 'eq', domain.ffpanel_target_ip)|list|length == 0 and external_servers|selectattr('ip_address', 'eq', domain.ffpanel_target_ip)|list|length == 0 %}selected{% endif %}>Enter manually</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Выбор из обычных серверов -->
+                            <div id="ffpanel_server_select" class="mb-3" style="display: none;">
+                                <label for="ffpanel_server_id" class="form-label">Select Server</label>
+                                <select class="form-select" id="ffpanel_server_id" name="ffpanel_server_id">
+                                    <option value="">-- Select Server --</option>
+                                    {% for server in servers %}
+                                        <option value="{{ server.id }}" {% if server.ip_address == domain.ffpanel_target_ip %}selected{% endif %}>
+                                            {{ server.name }} ({{ server.ip_address }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Select a server to use its IP address for FFPanel integration</div>
+                            </div>
+                            
+                            <!-- Выбор из внешних серверов -->
+                            <div id="ffpanel_external_server_select" class="mb-3" style="display: none;">
+                                <label for="ffpanel_external_server_id" class="form-label">Select External Server</label>
+                                <select class="form-select" id="ffpanel_external_server_id" name="ffpanel_external_server_id">
+                                    <option value="">-- Select External Server --</option>
+                                    {% for server in external_servers %}
+                                        <option value="{{ server.id }}" {% if server.ip_address == domain.ffpanel_target_ip %}selected{% endif %}>
+                                            {{ server.name }} ({{ server.ip_address }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Select an external server to use its IP address for FFPanel integration</div>
+                            </div>
+                            
+                            <!-- Ручной ввод IP -->
+                            <div id="ffpanel_target_ip_manual_div" class="mb-3" style="display: none;">
+                                <label for="ffpanel_target_ip_manual" class="form-label">FFPanel Target IP</label>
+                                <input type="text" class="form-control" id="ffpanel_target_ip_manual" name="ffpanel_target_ip_manual" value="{{ domain.ffpanel_target_ip }}">
+                                <div class="form-text">Enter a custom IP address for FFPanel integration</div>
+                            </div>
                         </div>
+                        
+                        <script>
+                            function toggleFFPanelIPFields() {
+                                const source = document.getElementById('ffpanel_ip_source').value;
+                                
+                                // Скрываем все поля сначала
+                                document.getElementById('ffpanel_server_select').style.display = 'none';
+                                document.getElementById('ffpanel_external_server_select').style.display = 'none';
+                                document.getElementById('ffpanel_target_ip_manual_div').style.display = 'none';
+                                
+                                // Показываем нужное поле в зависимости от выбора
+                                if (source === 'server') {
+                                    document.getElementById('ffpanel_server_select').style.display = 'block';
+                                } else if (source === 'external_server') {
+                                    document.getElementById('ffpanel_external_server_select').style.display = 'block';
+                                } else if (source === 'manual') {
+                                    document.getElementById('ffpanel_target_ip_manual_div').style.display = 'block';
+                                }
+                            }
+                            
+                            // Инициализация при загрузке страницы
+                            document.addEventListener('DOMContentLoaded', function() {
+                                toggleFFPanelIPFields();
+                                
+                                // Также проверяем состояние чекбокса FFPanel Enabled
+                                const ffpanelEnabled = document.getElementById('ffpanel_enabled');
+                                ffpanelEnabled.addEventListener('change', function() {
+                                    const ffpanelFields = document.getElementById('ffpanel_fields');
+                                    if (ffpanelFields) {
+                                        ffpanelFields.style.display = this.checked ? 'block' : 'none';
+                                    }
+                                });
+                                
+                                // Вызываем событие change, чтобы установить начальное состояние
+                                if (ffpanelEnabled) {
+                                    const event = new Event('change');
+                                    ffpanelEnabled.dispatchEvent(event);
+                                }
+                            });
+                        </script>
                     </div>
                 </div>
 
