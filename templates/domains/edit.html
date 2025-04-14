@@ -33,6 +33,11 @@
                             <div class="form-text">The IP address that this domain should point to.</div>
                         </div>
                         <div class="mb-3">
+                            <label for="target_port" class="form-label">Target Port</label>
+                            <input type="number" class="form-control" id="target_port" name="target_port" value="{{ domain.target_port or 80 }}">
+                            <div class="form-text">The port that this domain should point to (default: 80).</div>
+                        </div>
+                        <div class="mb-3">
                             <label for="description" class="form-label">Description</label>
                             <textarea class="form-control" id="description" name="description" rows="3">{{ domain.description }}</textarea>
                         </div>
@@ -165,6 +170,15 @@
                                onclick="return confirm('Are you sure you want to deploy configuration for this domain?');">
                                 <i class="fas fa-upload"></i> Deploy Configuration
                             </a>
+                            
+                            {% if domain.ffpanel_enabled %}
+                            <form action="{{ url_for('domains.ffpanel_sync', domain_id=domain.id) }}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-primary" 
+                                        onclick="return confirm('Are you sure you want to synchronize this domain with FFPanel?');">
+                                    <i class="fas fa-sync-alt"></i> Sync with FFPanel
+                                </button>
+                            </form>
+                            {% endif %}
                             
                             <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
                                 <i class="fas fa-trash"></i> Delete Domain

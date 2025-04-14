@@ -640,6 +640,71 @@ def api_check_nameservers(domain_name):
             'error': 'Ошибка при проверке NS-записей. Пожалуйста, попробуйте позже.'
         }), 500
 
+@bp.route('/<int:domain_id>/ffpanel_sync', methods=['POST'])
+@login_required
+def ffpanel_sync(domain_id):
+    """Синхронизация домена с FFPanel."""
+    from modules.ffpanel_api import FFPanelAPI
+    
+    domain = Domain.query.get_or_404(domain_id)
+    
+    # Проверяем, что FFPanel включен для домена
+    if not domain.ffpanel_enabled:
+        flash('FFPanel интеграция не включена для этого домена. Включите её в настройках.', 'warning')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    # Определяем IP-адрес и порт для FFPanel
+    target_ip = domain.ffpanel_target_ip or domain.target_ip
+    target_port = domain.target_port or 80
+    
+    # Создаем экземпляр FFPanel API
+    ffpanel = FFPanelAPI()
+    
+    # Получаем список сайтов из FFPanel
+    sites = ffpanel.get_sites()
+    
+    # Ищем домен в списке сайтов
+    site_exists = False
+    site_id = None
+    
+    for site in sites:
+        if site.get('domain') == domain.name:
+            site_exists = True
+            site_id = site.get('id')
+            break
+    
+    # В зависимости от того, существует ли сайт, добавляем или обновляем его
+    if site_exists and site_id:
+        # Обновляем существующий сайт
+        result = ffpanel.update_site(
+            site_id=site_id,
+            ip_path=target_ip,
+            port=str(target_port),
+            port_out=str(target_port),
+            port_ssl="443",
+            port_out_ssl="443"
+        )
+        
+        if result['success']:
+            flash(f'Домен {domain.name} успешно обновлен в FFPanel', 'success')
+        else:
+            flash(f'Ошибка обновления домена в FFPanel: {result["message"]}', 'danger')
+    else:
+        # Добавляем новый сайт
+        result = ffpanel.add_site(
+            domain=domain.name,
+            ip_path=target_ip,
+            port=str(target_port),
+            port_out=str(target_port)
+        )
+        
+        if result['success']:
+            flash(f'Домен {domain.name} успешно добавлен в FFPanel', 'success')
+        else:
+            flash(f'Ошибка добавления домена в FFPanel: {result["message"]}', 'danger')
+    
+    return redirect(url_for('domains.edit', domain_id=domain_id))
+
 @bp.route('/<int:domain_id>/ffpanel', methods=['GET', 'POST'])
 @login_required
 def ffpanel(domain_id):
