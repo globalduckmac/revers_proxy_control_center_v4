@@ -5,151 +5,268 @@
 
 Запуск:
 python domain_ffpanel_check.py <domain_id>
+
+Дополнительные аргументы:
+--enable - Включить интеграцию с FFPanel для домена
+--sync - Синхронизировать домен с FFPanel
+--verbose - Вывести подробную информацию
+--list - Вывести список доменов и их идентификаторы
 """
 
 import sys
-import logging
+import json
+import time
+import argparse
+import requests
 from datetime import datetime
 
-# Настраиваем логирование
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from app import app, db
+from models import Domain, SystemSettings
+from modules.ffpanel_api import FFPanelAPI
+from modules.domain_manager import DomainManager
+
 
 def check_domain_ffpanel_status(domain_id):
-    """Проверяет текущий статус FFPanel интеграции для домена."""
-    try:
-        from app import app
-        from models import Domain
+    """
+    Проверяет текущий статус FFPanel интеграции для домена.
+    
+    Args:
+        domain_id (int): ID домена
         
+    Returns:
+        dict: Словарь с информацией о статусе домена в FFPanel
+    """
+    try:
         with app.app_context():
             domain = Domain.query.get(domain_id)
             if not domain:
-                logger.error(f"Домен с ID {domain_id} не найден")
-                return False
+                print(f"[!] Ошибка: Домен с ID {domain_id} не найден")
+                return None
             
-            logger.info(f"Домен: {domain.name} (ID: {domain_id})")
-            logger.info(f"FFPanel интеграция включена: {domain.ffpanel_enabled}")
-            logger.info(f"FFPanel ID: {domain.ffpanel_id or 'Не установлен'}")
-            logger.info(f"FFPanel статус: {domain.ffpanel_status or 'Не установлен'}")
-            logger.info(f"FFPanel целевой IP: {domain.ffpanel_target_ip or domain.target_ip or 'Не установлен'}")
+            print(f"=== Проверка домена {domain.name} (ID: {domain_id}) ===")
+            print(f"FFPanel включен: {'Да' if domain.ffpanel_enabled else 'Нет'}")
+            print(f"FFPanel ID: {domain.ffpanel_id or 'Не установлен'}")
+            print(f"Статус: {domain.ffpanel_status or 'Не синхронизирован'}")
             
-            if domain.ffpanel_last_sync:
-                logger.info(f"Последняя синхронизация: {domain.ffpanel_last_sync}")
-            else:
-                logger.info("Последняя синхронизация: Никогда")
+            # Получаем информацию о домене в FFPanel, если есть ID
+            if domain.ffpanel_id:
+                try:
+                    # Инициализация FFPanelAPI
+                    setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+                    if not setting or not setting.value:
+                        print("[!] Ошибка: Токен FFPanel не найден в базе данных")
+                        return None
+                    
+                    ffpanel_api = FFPanelAPI(setting.value)
+                    
+                    # Получение информации о домене
+                    site_info = ffpanel_api.get_site(domain.ffpanel_id)
+                    if site_info and 'data' in site_info:
+                        site_data = site_info['data']
+                        print("\nДанные из FFPanel:")
+                        print(f"Домен: {site_data.get('domain')}")
+                        print(f"Статус: {site_data.get('status')}")
+                        print(f"Последнее обновление: {site_data.get('updated_at')}")
+                        return site_data
+                    else:
+                        print("[!] Ошибка: Не удалось получить информацию о домене из FFPanel")
+                except Exception as e:
+                    print(f"[!] Ошибка при проверке домена в FFPanel: {str(e)}")
             
-            return domain
+            return None
     except Exception as e:
-        logger.error(f"Ошибка при проверке статуса FFPanel для домена: {str(e)}")
-        return False
+        print(f"[!] Ошибка при проверке статуса домена: {str(e)}")
+        return None
+
 
 def enable_ffpanel_for_domain(domain_id):
-    """Включает FFPanel интеграцию для домена."""
-    try:
-        from app import app, db
-        from models import Domain
+    """
+    Включает FFPanel интеграцию для домена.
+    
+    Args:
+        domain_id (int): ID домена
         
+    Returns:
+        bool: True, если операция выполнена успешно, иначе False
+    """
+    try:
         with app.app_context():
             domain = Domain.query.get(domain_id)
             if not domain:
-                logger.error(f"Домен с ID {domain_id} не найден")
+                print(f"[!] Ошибка: Домен с ID {domain_id} не найден")
                 return False
             
+            # Включаем FFPanel для домена
             domain.ffpanel_enabled = True
-            if not domain.ffpanel_target_ip:
-                domain.ffpanel_target_ip = domain.target_ip
-            
-            # Устанавливаем стандартные порты, если они не заданы
-            if not domain.ffpanel_port:
-                domain.ffpanel_port = '80'
-            if not domain.ffpanel_port_out:
-                domain.ffpanel_port_out = '80'
-            if not domain.ffpanel_port_ssl:
-                domain.ffpanel_port_ssl = '443'
-            if not domain.ffpanel_port_out_ssl:
-                domain.ffpanel_port_out_ssl = '443'
-            
             db.session.commit()
-            logger.info(f"FFPanel интеграция включена для домена {domain.name}")
+            
+            print(f"[✓] FFPanel успешно включен для домена {domain.name} (ID: {domain_id})")
             return True
     except Exception as e:
-        logger.error(f"Ошибка при включении FFPanel для домена: {str(e)}")
+        print(f"[!] Ошибка при включении FFPanel для домена: {str(e)}")
         return False
 
-def sync_domain_with_ffpanel(domain_id):
-    """Синхронизирует домен с FFPanel."""
-    try:
-        from app import app
-        from modules.domain_manager import DomainManager
+
+def sync_domain_with_ffpanel(domain_id, verbose=False):
+    """
+    Синхронизирует домен с FFPanel.
+    
+    Args:
+        domain_id (int): ID домена
+        verbose (bool): Вывести подробную информацию
         
+    Returns:
+        bool: True, если операция выполнена успешно, иначе False
+    """
+    try:
         with app.app_context():
-            logger.info(f"Запуск синхронизации домена {domain_id} с FFPanel...")
-            result = DomainManager.sync_domain_with_ffpanel(domain_id)
+            domain = Domain.query.get(domain_id)
+            if not domain:
+                print(f"[!] Ошибка: Домен с ID {domain_id} не найден")
+                return False
             
-            if result['success']:
-                logger.info(f"Синхронизация успешна: {result['message']}")
-            else:
-                logger.error(f"Ошибка синхронизации: {result['message']}")
+            # Проверяем, включен ли FFPanel для домена
+            if not domain.ffpanel_enabled:
+                print(f"[!] Предупреждение: FFPanel не включен для домена {domain.name}")
+                enable = input("Хотите включить FFPanel для этого домена? (y/n): ")
+                if enable.lower() == 'y':
+                    domain.ffpanel_enabled = True
+                    db.session.commit()
+                    print(f"[✓] FFPanel включен для домена {domain.name}")
+                else:
+                    print("[!] Синхронизация отменена")
+                    return False
             
-            return result
+            # Инициализация менеджера доменов для синхронизации
+            try:
+                # Инициализация FFPanelAPI
+                setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+                if not setting or not setting.value:
+                    print("[!] Ошибка: Токен FFPanel не найден в базе данных")
+                    return False
+                
+                ffpanel_api = FFPanelAPI(setting.value)
+                domain_manager = DomainManager()
+                
+                # Синхронизация домена
+                print(f"\n[*] Синхронизация домена {domain.name} с FFPanel...")
+                
+                if domain.ffpanel_id:
+                    # Обновление существующего домена
+                    result = domain_manager.update_domain_in_ffpanel(domain)
+                    if result:
+                        print(f"[✓] Домен {domain.name} успешно обновлен в FFPanel (ID: {domain.ffpanel_id})")
+                        
+                        if verbose:
+                            # Получаем обновленную информацию
+                            time.sleep(1)  # Даем API время на обработку изменений
+                            site_info = ffpanel_api.get_site(domain.ffpanel_id)
+                            if site_info and 'data' in site_info:
+                                print("\nОбновленные данные в FFPanel:")
+                                site_data = site_info['data']
+                                print(json.dumps(site_data, indent=2, ensure_ascii=False))
+                        
+                        return True
+                    else:
+                        print(f"[!] Ошибка при обновлении домена {domain.name} в FFPanel")
+                        return False
+                else:
+                    # Создание нового домена в FFPanel
+                    result = domain_manager.create_domain_in_ffpanel(domain)
+                    if result:
+                        print(f"[✓] Домен {domain.name} успешно создан в FFPanel (ID: {domain.ffpanel_id})")
+                        
+                        if verbose:
+                            # Получаем информацию о созданном домене
+                            time.sleep(1)  # Даем API время на обработку изменений
+                            site_info = ffpanel_api.get_site(domain.ffpanel_id)
+                            if site_info and 'data' in site_info:
+                                print("\nДанные созданного домена в FFPanel:")
+                                site_data = site_info['data']
+                                print(json.dumps(site_data, indent=2, ensure_ascii=False))
+                        
+                        return True
+                    else:
+                        print(f"[!] Ошибка при создании домена {domain.name} в FFPanel")
+                        return False
+            except Exception as e:
+                print(f"[!] Ошибка при синхронизации домена с FFPanel: {str(e)}")
+                return False
     except Exception as e:
-        logger.error(f"Исключение при синхронизации домена с FFPanel: {str(e)}")
-        return {'success': False, 'message': str(e)}
+        print(f"[!] Общая ошибка при синхронизации домена: {str(e)}")
+        return False
+
+
+def list_domains():
+    """
+    Выводит список доменов и их идентификаторы.
+    
+    Returns:
+        list: Список доменов
+    """
+    try:
+        with app.app_context():
+            domains = Domain.query.order_by(Domain.name).all()
+            
+            print(f"=== Список доменов ({len(domains)}) ===")
+            print("{:<5} {:<30} {:<10} {:<15} {:<20}".format("ID", "Домен", "FFPanel", "FFPanel ID", "Статус"))
+            print("-" * 80)
+            
+            for domain in domains:
+                ffpanel_status = domain.ffpanel_status or 'не синхронизирован'
+                print("{:<5} {:<30} {:<10} {:<15} {:<20}".format(
+                    domain.id, 
+                    domain.name, 
+                    "включен" if domain.ffpanel_enabled else "выключен",
+                    str(domain.ffpanel_id or ""), 
+                    ffpanel_status
+                ))
+            
+            return domains
+    except Exception as e:
+        print(f"[!] Ошибка при получении списка доменов: {str(e)}")
+        return []
+
 
 def main():
-    """Основная функция скрипта."""
-    if len(sys.argv) < 2:
-        print("Использование: python domain_ffpanel_check.py <domain_id>")
-        return 1
+    """
+    Основная функция скрипта.
+    """
+    parser = argparse.ArgumentParser(description='Проверка и активация интеграции с FFPanel для домена')
+    parser.add_argument('domain_id', type=int, nargs='?', help='ID домена для проверки')
+    parser.add_argument('--enable', action='store_true', help='Включить FFPanel для домена')
+    parser.add_argument('--sync', action='store_true', help='Синхронизировать домен с FFPanel')
+    parser.add_argument('--verbose', action='store_true', help='Вывести подробную информацию')
+    parser.add_argument('--list', action='store_true', help='Вывести список доменов')
+    args = parser.parse_args()
     
-    try:
-        domain_id = int(sys.argv[1])
-    except ValueError:
-        print(f"Ошибка: {sys.argv[1]} не является корректным ID домена (должно быть число)")
-        return 1
+    print("=== Утилита проверки интеграции с FFPanel ===")
+    print(f"Дата и время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    logger.info(f"=== Проверка FFPanel интеграции для домена ID {domain_id} ===")
+    # Выводим список доменов
+    if args.list:
+        list_domains()
+        return True
     
-    # Проверяем текущий статус домена
-    domain = check_domain_ffpanel_status(domain_id)
-    if not domain:
-        return 1
+    # Проверяем, указан ли ID домена
+    if not args.domain_id:
+        print("[!] Ошибка: ID домена не указан")
+        print("[i] Используйте --list для просмотра списка доменов")
+        return False
     
-    # Если FFPanel не включен, предлагаем включить
-    if not domain.ffpanel_enabled:
-        answer = input("FFPanel не включен для этого домена. Хотите включить? (y/n): ")
-        if answer.lower() == 'y':
-            if enable_ffpanel_for_domain(domain_id):
-                logger.info("FFPanel успешно включен")
-            else:
-                logger.error("Не удалось включить FFPanel")
-                return 1
-        else:
-            logger.info("FFPanel остался выключенным")
-            return 0
+    # Проверяем статус домена
+    status = check_domain_ffpanel_status(args.domain_id)
     
-    # Если FFPanel включен, но нет ID, предлагаем синхронизировать
-    if domain.ffpanel_enabled and not domain.ffpanel_id:
-        answer = input("Домен не синхронизирован с FFPanel. Хотите синхронизировать? (y/n): ")
-        if answer.lower() == 'y':
-            result = sync_domain_with_ffpanel(domain_id)
-            return 0 if result['success'] else 1
-        else:
-            logger.info("Синхронизация отменена")
-            return 0
+    # Включаем FFPanel для домена, если указан флаг --enable
+    if args.enable:
+        enable_ffpanel_for_domain(args.domain_id)
     
-    # Если домен уже синхронизирован, предлагаем обновить
-    if domain.ffpanel_id:
-        answer = input("Домен уже синхронизирован с FFPanel. Хотите обновить? (y/n): ")
-        if answer.lower() == 'y':
-            result = sync_domain_with_ffpanel(domain_id)
-            return 0 if result['success'] else 1
-        else:
-            logger.info("Обновление отменено")
-            return 0
+    # Синхронизируем домен с FFPanel, если указан флаг --sync
+    if args.sync:
+        sync_domain_with_ffpanel(args.domain_id, args.verbose)
     
-    return 0
+    return True
+
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(0 if main() else 1)

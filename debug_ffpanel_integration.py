@@ -3,232 +3,254 @@
 Скрипт для диагностики и отладки интеграции с FFPanel API.
 Проверяет подключение к FFPanel, настройки токена и возможность получения данных.
 
-python3 debug_ffpanel_integration.py
+Запуск:
+python debug_ffpanel_integration.py
+
+Возможные аргументы:
+--token TOKEN - Использовать указанный токен для тестирования вместо сохраненного
+--verbose     - Подробный вывод, включая полные ответы API
+--update      - Обновить токен в базе данных, если тестирование успешно
 """
 
 import os
 import sys
 import json
-import logging
+import argparse
+import requests
 from datetime import datetime
 
-# Настраиваем логирование
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from app import app, db
+from models import SystemSettings, Domain
+
+
+# Базовый URL для API FFPanel
+FFPANEL_API_BASE_URL = "https://api.ffpanel.org/api"
+FFPANEL_SITES_ENDPOINT = "/sites"
+
 
 def get_token_from_environment():
     """Получает токен FFPanel из переменной окружения."""
     token = os.environ.get('FFPANEL_TOKEN')
     if token:
-        logger.info(f"Токен FFPanel найден в переменной окружения (длина: {len(token)})")
-        # Маскируем токен для безопасности в логах
-        masked_token = token[:4] + '*' * (len(token) - 8) + token[-4:]
-        logger.info(f"Маскированный токен: {masked_token}")
-        return token
+        print(f"[✓] Найден токен FFPanel в переменной окружения (длина: {len(token)})")
     else:
-        logger.error("Токен FFPanel не найден в переменной окружения")
-        return None
+        print("[!] Токен FFPanel не найден в переменных окружения")
+    return token
+
 
 def get_token_from_database():
     """Получает токен FFPanel из базы данных."""
     try:
-        # Импортируем модели и устанавливаем контекст Flask
-        from app import app
-        from models import SystemSetting
-        
         with app.app_context():
-            token = SystemSetting.get_value('ffpanel_token')
-            if token:
-                logger.info(f"Токен FFPanel найден в базе данных (длина: {len(token)})")
-                # Маскируем токен для безопасности в логах
-                masked_token = token[:4] + '*' * (len(token) - 8) + token[-4:]
-                logger.info(f"Маскированный токен: {masked_token}")
-                return token
+            setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+            if setting and setting.value:
+                print(f"[✓] Найден токен FFPanel в базе данных (длина: {len(setting.value)})")
+                return setting.value
             else:
-                logger.error("Токен FFPanel не найден в базе данных")
+                print("[!] Токен FFPanel не найден в базе данных")
                 return None
     except Exception as e:
-        logger.error(f"Ошибка при получении токена из базы данных: {str(e)}")
+        print(f"[!] Ошибка при получении токена из базы данных: {str(e)}")
         return None
 
-def test_ffpanel_api_connection(token):
+
+def test_ffpanel_api_connection(token, verbose=False):
     """Тестирует подключение к FFPanel API с указанным токеном."""
     if not token:
-        logger.error("Невозможно протестировать подключение: токен не предоставлен")
+        print("[!] Ошибка: Токен не указан")
         return False
     
+    print("\n=== Тестирование подключения к FFPanel API ===")
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+    
     try:
-        import requests
+        # Тестируем получение информации об аккаунте
+        url = f"{FFPANEL_API_BASE_URL}/account"
+        print(f"[*] Запрос к {url}")
         
-        # URL для проверки аутентификации
-        auth_url = "https://ffv2.ru/public/api"
-        params = {
-            'method': 'auth',
-            'token': token
-        }
+        response = requests.get(url, headers=headers)
         
-        logger.info("Отправка запроса аутентификации к FFPanel API...")
-        response = requests.get(auth_url, params=params)
-        
-        # Выводим результат
         if response.status_code == 200:
             data = response.json()
-            if 'token' in data and 'jwt' in data['token']:
-                jwt_token = data['token']['jwt']
-                expire = data['token']['expire']
-                logger.info(f"Аутентификация успешна! Получен JWT токен (длина: {len(jwt_token)})")
-                logger.info(f"Срок действия токена: {datetime.fromtimestamp(expire)}")
-                return True
+            print(f"[✓] Подключение успешно! Статус: {response.status_code}")
+            
+            if verbose:
+                print("\nПолный ответ:")
+                print(json.dumps(data, indent=2, ensure_ascii=False))
             else:
-                logger.error(f"Ошибка в структуре ответа API: {json.dumps(data)}")
-                return False
+                print(f"[i] Аккаунт: {data.get('data', {}).get('company_name', 'Н/Д')}")
+                print(f"[i] Email: {data.get('data', {}).get('email', 'Н/Д')}")
+            
+            return True
         else:
-            logger.error(f"Ошибка API: {response.status_code} - {response.text}")
+            print(f"[!] Ошибка подключения. Статус: {response.status_code}")
+            print(f"[!] Ответ: {response.text}")
             return False
+    
     except Exception as e:
-        logger.error(f"Исключение при тестировании API: {str(e)}")
+        print(f"[!] Ошибка при подключении к FFPanel API: {str(e)}")
         return False
 
-def test_get_sites(token):
+
+def test_get_sites(token, verbose=False):
     """Тестирует получение списка сайтов из FFPanel API."""
     if not token:
-        logger.error("Невозможно получить список сайтов: токен не предоставлен")
+        print("[!] Ошибка: Токен не указан")
         return False
     
+    print("\n=== Получение списка сайтов из FFPanel API ===")
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+    
     try:
-        import requests
+        url = f"{FFPANEL_API_BASE_URL}{FFPANEL_SITES_ENDPOINT}"
+        print(f"[*] Запрос к {url}")
         
-        # Сначала получаем JWT токен
-        auth_url = "https://ffv2.ru/public/api"
-        params = {
-            'method': 'auth',
-            'token': token
-        }
+        response = requests.get(url, headers=headers)
         
-        logger.info("Получение JWT токена...")
-        auth_response = requests.get(auth_url, params=params)
-        
-        if auth_response.status_code != 200:
-            logger.error(f"Ошибка аутентификации: {auth_response.status_code} - {auth_response.text}")
-            return False
-        
-        auth_data = auth_response.json()
-        if 'token' not in auth_data or 'jwt' not in auth_data['token']:
-            logger.error(f"Ошибка в структуре ответа API: {json.dumps(auth_data)}")
-            return False
-        
-        jwt_token = auth_data['token']['jwt']
-        
-        # Теперь получаем список сайтов
-        api_url = "https://ffv2.ru/api/list.site"
-        headers = {
-            'Authorization': f'Bearer {jwt_token}',
-            'Content-Type': 'application/json'
-        }
-        
-        logger.info("Получение списка сайтов...")
-        sites_response = requests.get(api_url, headers=headers)
-        
-        if sites_response.status_code == 200:
-            sites_data = sites_response.json()
-            domains = sites_data.get('domains', [])
+        if response.status_code == 200:
+            data = response.json()
+            sites = data.get('data', [])
             
-            logger.info(f"Успешно получен список сайтов (количество: {len(domains)})")
-            if domains:
-                # Выводим первые три домена для примера
-                for i, domain in enumerate(domains[:3]):
-                    logger.info(f"Домен {i+1}: {domain.get('domain')} (ID: {domain.get('id')})")
-            return True
-        elif sites_response.status_code == 404:
-            logger.warning("Домены не найдены в FFPanel")
+            print(f"[✓] Получено {len(sites)} сайтов")
+            
+            if verbose and sites:
+                print("\nПервые 5 сайтов:")
+                for i, site in enumerate(sites[:5]):
+                    print(f"\n--- Сайт {i+1} ---")
+                    print(f"ID: {site.get('id')}")
+                    print(f"Домен: {site.get('domain')}")
+                    print(f"Статус: {site.get('status')}")
+            else:
+                print("\nПроверка сопоставления с базой данных:")
+                check_domain_matching(sites)
+            
             return True
         else:
-            logger.error(f"Ошибка получения списка сайтов: {sites_response.status_code} - {sites_response.text}")
+            print(f"[!] Ошибка получения списка сайтов. Статус: {response.status_code}")
+            print(f"[!] Ответ: {response.text}")
             return False
+    
     except Exception as e:
-        logger.error(f"Исключение при получении списка сайтов: {str(e)}")
+        print(f"[!] Ошибка при получении списка сайтов: {str(e)}")
         return False
+
+
+def check_domain_matching(ffpanel_sites):
+    """Проверяет, сколько доменов из FFPanel есть в базе данных."""
+    try:
+        with app.app_context():
+            ffpanel_domains = {site.get('domain'): site.get('id') for site in ffpanel_sites}
+            
+            # Получаем все домены из базы данных
+            domains = Domain.query.all()
+            
+            # Подсчитываем совпадения
+            matched = 0
+            mismatched_ids = 0
+            
+            for domain in domains:
+                if domain.name in ffpanel_domains:
+                    matched += 1
+                    # Проверяем совпадение ID
+                    if domain.ffpanel_id and domain.ffpanel_id != ffpanel_domains[domain.name]:
+                        mismatched_ids += 1
+            
+            print(f"[i] В базе данных найдено {len(domains)} доменов")
+            print(f"[i] В FFPanel API найдено {len(ffpanel_domains)} доменов")
+            print(f"[i] Совпадающих доменов: {matched} из {len(domains)}")
+            
+            if mismatched_ids > 0:
+                print(f"[!] Внимание: {mismatched_ids} доменов имеют несовпадающие ffpanel_id")
+            
+            # Выводим статистику по ffpanel_enabled
+            enabled = Domain.query.filter_by(ffpanel_enabled=True).count()
+            print(f"[i] Доменов с включенной опцией ffpanel_enabled: {enabled} из {len(domains)}")
+            
+    except Exception as e:
+        print(f"[!] Ошибка при проверке сопоставления доменов: {str(e)}")
+
 
 def update_token_in_database(token):
     """Обновляет токен FFPanel в базе данных."""
-    if not token:
-        logger.error("Невозможно обновить токен: не предоставлен токен")
-        return False
-    
     try:
-        from app import app
-        from models import SystemSetting, db
-        
         with app.app_context():
-            # Проверяем, существует ли запись
-            setting = SystemSetting.query.filter_by(key='ffpanel_token').first()
+            setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
             
             if setting:
-                logger.info("Запись 'ffpanel_token' найдена в базе данных, обновляем...")
-                SystemSetting.set_value('ffpanel_token', token, 'Токен API FFPanel', True)
-                logger.info("Токен FFPanel успешно обновлен в базе данных")
+                setting.value = token
+                print("[✓] Токен FFPanel обновлен в базе данных")
             else:
-                logger.info("Запись 'ffpanel_token' не найдена в базе данных, создаем новую...")
-                SystemSetting.set_value('ffpanel_token', token, 'Токен API FFPanel', True)
-                logger.info("Токен FFPanel успешно создан в базе данных")
+                setting = SystemSettings(key='ffpanel_token', value=token, description='Токен авторизации FFPanel API')
+                db.session.add(setting)
+                print("[✓] Токен FFPanel добавлен в базу данных")
             
+            db.session.commit()
             return True
     except Exception as e:
-        logger.error(f"Ошибка при обновлении токена в базе данных: {str(e)}")
+        print(f"[!] Ошибка при обновлении токена в базе данных: {str(e)}")
         return False
+
 
 def main():
     """Основная функция скрипта."""
-    logger.info("=== Начало диагностики интеграции с FFPanel ===")
+    parser = argparse.ArgumentParser(description='Диагностика интеграции с FFPanel API')
+    parser.add_argument('--token', help='Токен FFPanel API для тестирования')
+    parser.add_argument('--verbose', action='store_true', help='Подробный вывод')
+    parser.add_argument('--update', action='store_true', help='Обновить токен в базе данных')
+    args = parser.parse_args()
     
-    # Получаем токен из переменной окружения
-    env_token = get_token_from_environment()
+    print("=== Диагностика интеграции с FFPanel API ===")
+    print(f"Дата и время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Получаем токен из базы данных
-    db_token = get_token_from_database()
+    # Получение токена из разных источников
+    token_env = get_token_from_environment()
+    token_db = get_token_from_database()
+    token_arg = args.token
+
+    # Определение токена для использования
+    token = token_arg or token_env or token_db
     
-    # Проверяем, совпадают ли токены
-    if env_token and db_token:
-        if env_token == db_token:
-            logger.info("Токены в переменной окружения и базе данных совпадают")
-        else:
-            logger.warning("Токены в переменной окружения и базе данных различаются!")
-            logger.info("Обновление токена в базе данных из переменной окружения...")
-            update_token_in_database(env_token)
-    elif env_token and not db_token:
-        logger.warning("Токен найден только в переменной окружения, отсутствует в базе данных")
-        logger.info("Сохраняем токен из переменной окружения в базу данных...")
-        update_token_in_database(env_token)
-    elif not env_token and db_token:
-        logger.warning("Токен найден только в базе данных, отсутствует в переменной окружения")
-    else:
-        logger.error("Токен FFPanel не найден ни в переменной окружения, ни в базе данных!")
-        logger.error("Невозможно протестировать интеграцию. Пожалуйста, установите токен.")
-        return 1
+    if not token:
+        print("\n[!] Ошибка: Токен FFPanel не найден ни в одном из источников")
+        print("[i] Укажите токен через аргумент --token или установите переменную окружения FFPANEL_TOKEN")
+        return False
     
-    # Выбираем токен для тестирования API
-    token_for_api = env_token or db_token
+    source = "аргумента командной строки" if token_arg else ("переменной окружения" if token == token_env else "базы данных")
+    print(f"\n[i] Используется токен из {source}")
     
-    # Проверяем соединение с API
-    api_connection_ok = test_ffpanel_api_connection(token_for_api)
+    # Проверка соединения
+    connection_ok = test_ffpanel_api_connection(token, args.verbose)
     
-    if api_connection_ok:
-        logger.info("Соединение с FFPanel API установлено успешно!")
+    if connection_ok:
+        # Проверка получения сайтов
+        sites_ok = test_get_sites(token, args.verbose)
         
-        # Пробуем получить список сайтов
-        sites_ok = test_get_sites(token_for_api)
+        # Обновление токена в базе данных, если запрошено
+        if args.update and token_arg and sites_ok:
+            update_token_in_database(token_arg)
         
-        if sites_ok:
-            logger.info("Получение списка сайтов из FFPanel выполнено успешно!")
-        else:
-            logger.error("Не удалось получить список сайтов из FFPanel")
+        print("\n=== Итог диагностики ===")
+        print("[✓] Подключение к FFPanel API: Успешно")
+        print(f"[{'✓' if sites_ok else '✗'}] Получение списка сайтов: {'Успешно' if sites_ok else 'Ошибка'}")
+        
+        if token_env and token_db and token_env != token_db:
+            print("\n[!] Внимание: Токены в переменной окружения и базе данных не совпадают!")
+            print("[i] Рекомендуется обновить токен в базе данных с помощью скрипта update_ffpanel_token.py")
+        
+        return True
     else:
-        logger.error("Не удалось установить соединение с FFPanel API")
-    
-    logger.info("=== Завершение диагностики интеграции с FFPanel ===")
-    
-    return 0 if api_connection_ok else 1
+        print("\n=== Итог диагностики ===")
+        print("[✗] Диагностика не удалась: проблемы с подключением к FFPanel API")
+        return False
+
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(0 if main() else 1)

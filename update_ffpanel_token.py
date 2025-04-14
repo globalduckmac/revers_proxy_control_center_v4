@@ -1,42 +1,110 @@
 #!/usr/bin/env python3
 """
-Скрипт для синхронизации токена FFPanel из переменной окружения с системными настройками приложения.
-Запускать в той же директории, где находится приложение.
+Скрипт для обновления токена FFPanel в настройках системы.
+Источником токена может быть переменная окружения FFPANEL_TOKEN или аргумент командной строки.
 
-python3 update_ffpanel_token.py
+Запуск:
+python update_ffpanel_token.py [токен]
+
+Если токен не указан в аргументе, скрипт попытается получить его из переменной окружения FFPANEL_TOKEN.
+Если токен не найден ни в аргументе, ни в переменной окружения, скрипт запросит его у пользователя.
 """
 
 import os
 import sys
-from models import SystemSetting, db
-from app import app
+import argparse
+from app import app, db
+from models import SystemSettings
 
-def update_ffpanel_token():
-    # Получаем токен из переменной окружения
-    ffpanel_token = os.environ.get('FFPANEL_TOKEN')
+
+def update_ffpanel_token_in_db(token):
+    """
+    Обновляет токен FFPanel в таблице системных настроек
     
-    if not ffpanel_token:
-        print("Ошибка: Переменная окружения FFPANEL_TOKEN не найдена")
+    Args:
+        token (str): Токен FFPanel API
+        
+    Returns:
+        bool: True если токен успешно обновлен, False в случае ошибки
+    """
+    try:
+        with app.app_context():
+            # Поиск настройки ffpanel_token
+            setting = SystemSettings.query.filter_by(key='ffpanel_token').first()
+            
+            if setting:
+                # Обновление существующей настройки
+                setting.value = token
+                print(f"Токен FFPanel обновлен (длина: {len(token)})")
+            else:
+                # Создание новой настройки
+                setting = SystemSettings(key='ffpanel_token', value=token, description='Токен авторизации FFPanel API')
+                db.session.add(setting)
+                print(f"Токен FFPanel создан (длина: {len(token)})")
+                
+            db.session.commit()
+            return True
+    except Exception as e:
+        print(f"Ошибка при обновлении токена FFPanel: {str(e)}")
+        return False
+
+
+def get_token_from_environment():
+    """
+    Получает токен FFPanel из переменной окружения
+    
+    Returns:
+        str: Токен FFPanel или None, если переменная не установлена
+    """
+    token = os.environ.get('FFPANEL_TOKEN')
+    if token:
+        print(f"Найден токен FFPanel в переменной окружения (длина: {len(token)})")
+    else:
+        print("Токен FFPanel не найден в переменных окружения")
+    return token
+
+
+def get_token_from_user():
+    """
+    Запрашивает токен FFPanel у пользователя
+    
+    Returns:
+        str: Токен FFPanel, введенный пользователем
+    """
+    print("\nВведите токен FFPanel API:")
+    token = input("> ").strip()
+    return token if token else None
+
+
+def main():
+    """
+    Основная функция скрипта
+    """
+    parser = argparse.ArgumentParser(description='Обновление токена FFPanel API')
+    parser.add_argument('token', nargs='?', help='Токен FFPanel API (необязательно)')
+    args = parser.parse_args()
+    
+    # Получение токена из аргумента, переменной окружения или от пользователя
+    token = args.token or get_token_from_environment() or get_token_from_user()
+    
+    if not token:
+        print("Ошибка: Токен FFPanel не указан")
         return False
     
-    # Создаем контекст приложения, чтобы работать с базой данных
-    with app.app_context():
-        # Обновляем токен в базе данных
-        SystemSetting.set_value(
-            'ffpanel_token', 
-            ffpanel_token, 
-            'Токен API FFPanel', 
-            True  # шифровать значение
-        )
+    # Обновление токена в базе данных
+    if update_ffpanel_token_in_db(token):
+        print("\nТокен FFPanel успешно обновлен в базе данных")
         
-        # Проверяем, что токен установлен
-        updated_token = SystemSetting.get_value('ffpanel_token')
-        if updated_token == ffpanel_token:
-            print(f"Успешно: Токен FFPanel обновлен, длина: {len(ffpanel_token)}")
-            return True
-        else:
-            print("Ошибка: Не удалось обновить токен FFPanel")
-            return False
+        # Проверка, установлена ли переменная окружения
+        if not os.environ.get('FFPANEL_TOKEN'):
+            print("\nРекомендация: Для постоянного использования, добавьте переменную окружения:")
+            print("export FFPANEL_TOKEN=\"" + token + "\"")
+            print("или добавьте эту строку в файл ~/.bashrc или ~/.profile")
+        return True
+    else:
+        print("\nОшибка: Не удалось обновить токен FFPanel в базе данных")
+        return False
+
 
 if __name__ == "__main__":
-    update_ffpanel_token()
+    sys.exit(0 if main() else 1)
