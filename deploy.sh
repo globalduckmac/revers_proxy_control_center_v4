@@ -1,5 +1,4 @@
 
-
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -359,6 +358,7 @@ EOF
         print_warning "Service still failed to start. Trying direct Flask run..."
         
         cat > "$APP_DIR/run_flask.sh" << EOF
+#!/bin/bash
 cd $APP_DIR
 source venv/bin/activate
 export FLASK_APP=app.py
