@@ -19,7 +19,7 @@ python-socketio==5.9.0
 
 # Async SSH support
 asyncssh==2.13.2
-uvloop==0.17.0
+# Removed uvloop due to Python 3.12 compatibility issues
 
 # HTML parsing for SPA
 beautifulsoup4==4.12.2

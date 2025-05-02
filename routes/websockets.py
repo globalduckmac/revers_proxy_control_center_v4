@@ -1,8 +1,8 @@
-from flask import Blueprint, jsonify, request, current_app
-from flask_login import login_required, current_user
-from models import Server, Domain, db
+from flask import Blueprint, jsonify
+from flask_login import login_required
 
 bp = Blueprint('websockets', __name__)
+
 
 @bp.route('/status')
 @login_required
