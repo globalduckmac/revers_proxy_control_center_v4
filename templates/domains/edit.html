@@ -237,8 +237,11 @@
                             </a>
                             
                             {% if domain.ssl_enabled %}
-                                <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-success">
-                                    <i class="fas fa-shield-alt"></i> Setup SSL Certificate
+                                <a href="{{ url_for('domains.ssl_interactive', domain_id=domain.id) }}" class="btn btn-success">
+                                    <i class="fas fa-shield-alt"></i> Interactive SSL Setup
+                                </a>
+                                <a href="{{ url_for('domains.setup_ssl_for_domain', domain_id=domain.id) }}" class="btn btn-outline-success">
+                                    <i class="fas fa-shield-alt"></i> Standard SSL Setup
                                 </a>
                             {% endif %}
                             

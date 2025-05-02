@@ -1,8 +1,8 @@
 import logging
 import os
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
+from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify, current_app
 from flask_login import login_required
-from models import Domain, DomainGroup, db
+from models import Domain, DomainGroup, Server, db
 from modules.domain_manager import DomainManager
 
 bp = Blueprint('domains', __name__, url_prefix='/domains')
@@ -159,6 +159,29 @@ def view(domain_id):
         server=server,
         domain_groups=domain_groups,
         domain_tasks=domain_tasks
+    )
+
+@bp.route('/<int:domain_id>/ssl-interactive', methods=['GET'])
+@login_required
+def ssl_interactive(domain_id):
+    """Interactive SSL setup for a domain."""
+    domain = Domain.query.get_or_404(domain_id)
+    
+    server = None
+    if domain.server_id:
+        server = Server.query.get(domain.server_id)
+    
+    if not server:
+        flash('No server associated with this domain. Please assign a server first.', 'warning')
+        return redirect(url_for('domains.edit', domain_id=domain_id))
+    
+    admin_email = current_app.config.get('ADMIN_EMAIL', 'admin@example.com')
+    
+    return render_template(
+        'domains/ssl_interactive.html',
+        domain=domain,
+        server=server,
+        admin_email=admin_email
     )
 
 @bp.route('/<int:domain_id>/edit', methods=['GET', 'POST'])

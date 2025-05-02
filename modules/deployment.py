@@ -2,10 +2,12 @@ import logging
 import tempfile
 import os
 import time
+import asyncio
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 from models import Server, Domain, DomainGroup, ProxyConfig, ServerLog, db
 from modules.server_manager import ServerManager
+from modules.async_server_manager import AsyncServerManager
 
 logger = logging.getLogger(__name__)
 
@@ -288,4 +290,261 @@ echo $? >> {result_file}
                 logger.error(f"Failed to create SSL error log: {str(log_error)}")
                 
             logger.error(f"Error setting up SSL on server {server.name}: {str(e)}")
+            return False
+            
+    @staticmethod
+    async def async_setup_ssl_certbot(server, domains, websocket=None):
+        """
+        Set up SSL certificates using Certbot for the specified domains with real-time output.
+        
+        Args:
+            server: Server model instance
+            domains: List of Domain model instances or a single Domain instance
+            websocket: Optional WebSocket instance for real-time updates
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not isinstance(domains, list):
+            domains = [domains]
+        
+        try:
+            # Check connectivity first
+            if not ServerManager.check_connectivity(server):
+                error_msg = f"Cannot set up SSL for server {server.name}: Server is not reachable"
+                logger.error(error_msg)
+                if websocket:
+                    await websocket.send_json({
+                        "status": "error",
+                        "step": "connectivity_check",
+                        "message": error_msg
+                    })
+                return False
+            
+            # Create log entry
+            log = ServerLog(
+                server_id=server.id,
+                action='ssl_setup',
+                status='pending',
+                message=f"Setting up SSL for {len(domains)} domains"
+            )
+            db.session.add(log)
+            db.session.commit()
+            
+            if websocket:
+                await websocket.send_json({
+                    "status": "info",
+                    "step": "initialization",
+                    "message": f"Starting SSL setup for {len(domains)} domains on server {server.name}"
+                })
+            
+            # Install Certbot and dependencies
+            if websocket:
+                await websocket.send_json({
+                    "status": "info",
+                    "step": "install_certbot",
+                    "message": f"Installing Certbot on server {server.name}..."
+                })
+            
+            try:
+                if websocket:
+                    await websocket.send_json({
+                        "status": "info",
+                        "step": "update_system",
+                        "message": "Updating package lists..."
+                    })
+                
+                update_result = await AsyncServerManager.execute_command_streaming(
+                    server,
+                    "sudo apt-get update -q",
+                    callback=websocket.send_json if websocket else None
+                )
+                
+                if websocket:
+                    await websocket.send_json({
+                        "status": "info",
+                        "step": "update_system",
+                        "message": "Package lists updated",
+                        "complete": True
+                    })
+                
+                # Install Certbot
+                if websocket:
+                    await websocket.send_json({
+                        "status": "info",
+                        "step": "install_certbot",
+                        "message": "Installing Certbot and Nginx plugin..."
+                    })
+                
+                certbot_result = await AsyncServerManager.execute_command_streaming(
+                    server,
+                    "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx",
+                    callback=websocket.send_json if websocket else None
+                )
+                
+                if websocket:
+                    await websocket.send_json({
+                        "status": "info",
+                        "step": "install_certbot",
+                        "message": "Certbot installed successfully",
+                        "complete": True
+                    })
+                
+                if websocket:
+                    await websocket.send_json({
+                        "status": "info",
+                        "step": "fix_dependencies",
+                        "message": "Fixing Certbot dependencies..."
+                    })
+                
+                fix_script_content = '''#!/bin/bash
+pip3 uninstall -y requests requests-toolbelt urllib3
+
+# Install compatible versions
+pip3 install requests==2.25.1
+pip3 install urllib3==1.26.6
+pip3 install requests-toolbelt==0.9.1
+'''
+                temp_file = "/tmp/fix_certbot_deps.sh"
+                
+                await AsyncServerManager.upload_string_to_file(server, fix_script_content, temp_file)
+                await AsyncServerManager.execute_command(server, f"chmod +x {temp_file}")
+                
+                fix_result = await AsyncServerManager.execute_command_streaming(
+                    server,
+                    f"sudo bash {temp_file}",
+                    callback=websocket.send_json if websocket else None
+                )
+                
+                await AsyncServerManager.execute_command(server, f"rm {temp_file}")
+                
+                if websocket:
+                    await websocket.send_json({
+                        "status": "info",
+                        "step": "fix_dependencies",
+                        "message": "Dependencies fixed successfully",
+                        "complete": True
+                    })
+                
+            except Exception as e:
+                error_msg = f"Certbot installation warning on {server.name}: {str(e)}"
+                logger.warning(error_msg)
+                if websocket:
+                    await websocket.send_json({
+                        "status": "warning",
+                        "step": "install_certbot",
+                        "message": error_msg
+                    })
+            
+            # Get list of domains that need SSL
+            ssl_domains = [d for d in domains if d.ssl_enabled]
+            
+            if not ssl_domains:
+                complete_msg = "No domains with SSL enabled found"
+                log.status = 'success'
+                log.message = complete_msg
+                db.session.commit()
+                
+                if websocket:
+                    await websocket.send_json({
+                        "status": "success",
+                        "step": "complete",
+                        "message": complete_msg
+                    })
+                
+                return True
+            
+            # Get admin email from config or use a default
+            from flask import current_app
+            admin_email = current_app.config.get('ADMIN_EMAIL', 'admin@example.com')
+            
+            if websocket:
+                await websocket.send_json({
+                    "status": "info",
+                    "step": "domain_verification",
+                    "message": "Verifying DNS for domains..."
+                })
+            
+            for domain in ssl_domains:
+                verify_command = f"dig +short {domain.name} | grep -q '{server.ip_address}' && echo 'OK' || echo 'FAIL'"
+                verify_result = await AsyncServerManager.execute_command(server, verify_command, capture_output=True)
+                
+                if websocket:
+                    status = "success" if "OK" in verify_result else "warning"
+                    await websocket.send_json({
+                        "status": status,
+                        "step": "domain_verification",
+                        "message": f"Domain {domain.name}: {'DNS verified' if 'OK' in verify_result else 'DNS verification failed - certificate might fail'}"
+                    })
+            
+            # Generate certification command
+            domain_args = " ".join([f"-d {d.name}" for d in ssl_domains])
+            cert_command = f"sudo certbot --nginx --expand --non-interactive --agree-tos --email {admin_email} {domain_args}"
+            
+            if websocket:
+                await websocket.send_json({
+                    "status": "info",
+                    "step": "certificate_request",
+                    "message": f"Requesting certificates for {len(ssl_domains)} domains..."
+                })
+            
+            cert_result = await AsyncServerManager.execute_command_streaming(
+                server,
+                cert_command,
+                callback=websocket.send_json if websocket else None
+            )
+            
+            if cert_result.get('exit_code', 1) == 0:
+                success_msg = f"SSL certificates successfully issued for {len(ssl_domains)} domains"
+                log.status = 'success'
+                log.message = success_msg
+                db.session.commit()
+                
+                if websocket:
+                    await websocket.send_json({
+                        "status": "success",
+                        "step": "complete",
+                        "message": success_msg
+                    })
+                
+                return True
+            else:
+                error_msg = f"SSL certificate issuance failed: {cert_result.get('error', 'Unknown error')}"
+                log.status = 'error'
+                log.message = error_msg
+                db.session.commit()
+                
+                if websocket:
+                    await websocket.send_json({
+                        "status": "error",
+                        "step": "complete",
+                        "message": error_msg
+                    })
+                
+                return False
+                
+        except Exception as e:
+            # Create error log entry for SSL setup
+            try:
+                error_log = ServerLog(
+                    server_id=server.id,
+                    action='ssl_setup',
+                    status='error',
+                    message=f"SSL setup error: {str(e)}"
+                )
+                db.session.add(error_log)
+                db.session.commit()
+            except Exception as log_error:
+                logger.error(f"Failed to create SSL error log: {str(log_error)}")
+                
+            error_msg = f"Error setting up SSL on server {server.name}: {str(e)}"
+            logger.error(error_msg)
+            
+            if websocket:
+                await websocket.send_json({
+                    "status": "error",
+                    "step": "complete",
+                    "message": error_msg
+                })
+                
             return False

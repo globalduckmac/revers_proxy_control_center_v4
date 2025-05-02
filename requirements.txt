@@ -1,0 +1,32 @@
+# Core dependencies
+Flask==2.3.3
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.2
+SQLAlchemy==2.0.21
+Werkzeug==2.3.7
+Jinja2==3.1.2
+gunicorn==21.2.0
+psycopg2-binary==2.9.7
+python-dotenv==1.0.0
+cryptography==41.0.4
+pycryptodome==3.19.0
+
+# WebSocket support
+Flask-SocketIO==5.3.4
+eventlet==0.33.3
+python-engineio==4.7.1
+python-socketio==5.9.0
+
+# Async SSH support
+asyncssh==2.13.2
+uvloop==0.17.0
+
+# HTML parsing for SPA
+beautifulsoup4==4.12.2
+
+# Utilities
+requests==2.31.0
+paramiko==3.3.1
+scp==0.14.5
+dnspython==2.4.2
+python-dateutil==2.8.2
