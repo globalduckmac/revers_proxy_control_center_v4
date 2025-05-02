@@ -1,0 +1,308 @@
+{% extends 'layout.html' %}
+
+{% block title %}Interactive SSL Setup - {{ domain.name }} - Reverse Proxy Manager{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .terminal {
+        background-color: #000;
+        color: #fff;
+        font-family: monospace;
+        padding: 10px;
+        border-radius: 5px;
+        height: 400px;
+        overflow-y: auto;
+        margin-bottom: 20px;
+    }
+    
+    .terminal-line {
+        margin: 0;
+        padding: 2px 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    
+    .terminal-info {
+        color: #3498db;
+    }
+    
+    .terminal-success {
+        color: #2ecc71;
+    }
+    
+    .terminal-warning {
+        color: #f39c12;
+    }
+    
+    .terminal-error {
+        color: #e74c3c;
+    }
+    
+    .step-indicator {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    
+    .step {
+        flex: 1;
+        text-align: center;
+        padding: 10px;
+        border-bottom: 3px solid #ddd;
+        position: relative;
+    }
+    
+    .step.active {
+        border-color: #3498db;
+        font-weight: bold;
+    }
+    
+    .step.completed {
+        border-color: #2ecc71;
+    }
+    
+    .step.error {
+        border-color: #e74c3c;
+    }
+    
+    .step-icon {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        line-height: 24px;
+        text-align: center;
+        border-radius: 50%;
+        background-color: #ddd;
+        color: #fff;
+        margin-right: 5px;
+    }
+    
+    .step.active .step-icon {
+        background-color: #3498db;
+    }
+    
+    .step.completed .step-icon {
+        background-color: #2ecc71;
+    }
+    
+    .step.error .step-icon {
+        background-color: #e74c3c;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="spa-content">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Interactive SSL Setup</h1>
+            <p class="lead">Domain: {{ domain.name }}</p>
+            <p>Server: <a href="{{ url_for('servers.edit', server_id=server.id) }}">{{ server.name }}</a> ({{ server.ip_address }})</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('domains.edit', domain_id=domain.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Domain Settings
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">SSL Certificate Setup</h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info">
+                <h5>Important Information</h5>
+                <p>
+                    For successful SSL certificate setup, the following requirements must be met:
+                </p>
+                <ul>
+                    <li>Domain name must have DNS records pointing to the server IP address ({{ server.ip_address }}).</li>
+                    <li>Nginx must be installed on the server.</li>
+                    <li>Ports 80 and 443 must be open on the server for certificate validation.</li>
+                </ul>
+            </div>
+
+            <div class="step-indicator">
+                <div class="step" id="step-init">
+                    <span class="step-icon"><i class="fas fa-cog"></i></span>
+                    Initialization
+                </div>
+                <div class="step" id="step-certbot">
+                    <span class="step-icon"><i class="fas fa-download"></i></span>
+                    Install Certbot
+                </div>
+                <div class="step" id="step-verify">
+                    <span class="step-icon"><i class="fas fa-check-circle"></i></span>
+                    Verify Domain
+                </div>
+                <div class="step" id="step-certificate">
+                    <span class="step-icon"><i class="fas fa-certificate"></i></span>
+                    Issue Certificate
+                </div>
+                <div class="step" id="step-complete">
+                    <span class="step-icon"><i class="fas fa-flag-checkered"></i></span>
+                    Complete
+                </div>
+            </div>
+
+            <div class="terminal" id="ssl-terminal">
+                <p class="terminal-line terminal-info">Ready to set up SSL certificate for {{ domain.name }}...</p>
+            </div>
+
+            <form id="ssl-setup-form">
+                <div class="form-group mb-3">
+                    <label for="admin_email">Email address for certificate notifications</label>
+                    <input type="email" class="form-control" id="admin_email" name="admin_email" value="{{ admin_email }}" required>
+                    <small class="form-text text-muted">This email will be used for important notifications about your certificates.</small>
+                </div>
+                
+                <button type="submit" class="btn btn-success btn-lg" id="start-ssl-btn">
+                    <i class="fas fa-lock"></i> Start SSL Certificate Setup
+                </button>
+                
+                <button type="button" class="btn btn-primary btn-lg d-none" id="view-details-btn" onclick="window.location.href='{{ url_for('domains.edit', domain_id=domain.id) }}'">
+                    <i class="fas fa-eye"></i> View Domain Details
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const socket = io();
+        const terminal = document.getElementById('ssl-terminal');
+        const sslForm = document.getElementById('ssl-setup-form');
+        const startSslBtn = document.getElementById('start-ssl-btn');
+        const viewDetailsBtn = document.getElementById('view-details-btn');
+        
+        // Step indicators
+        const stepInit = document.getElementById('step-init');
+        const stepCertbot = document.getElementById('step-certbot');
+        const stepVerify = document.getElementById('step-verify');
+        const stepCertificate = document.getElementById('step-certificate');
+        const stepComplete = document.getElementById('step-complete');
+        
+        // Function to add a line to the terminal
+        function addTerminalLine(message, type = 'info') {
+            const line = document.createElement('p');
+            line.className = `terminal-line terminal-${type}`;
+            line.textContent = message;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
+        // Function to update step indicators
+        function updateStepIndicator(step, status) {
+            // Reset all steps
+            [stepInit, stepCertbot, stepVerify, stepCertificate, stepComplete].forEach(s => {
+                s.className = 'step';
+            });
+            
+            // Set active step
+            let activeStep;
+            switch(step) {
+                case 'initialization':
+                    activeStep = stepInit;
+                    break;
+                case 'install_certbot':
+                case 'update_system':
+                case 'fix_dependencies':
+                    activeStep = stepCertbot;
+                    break;
+                case 'domain_verification':
+                    activeStep = stepVerify;
+                    break;
+                case 'certificate_request':
+                    activeStep = stepCertificate;
+                    break;
+                case 'complete':
+                    activeStep = stepComplete;
+                    break;
+                default:
+                    activeStep = null;
+            }
+            
+            // Mark previous steps as completed
+            let foundActive = false;
+            [stepInit, stepCertbot, stepVerify, stepCertificate, stepComplete].forEach(s => {
+                if (s === activeStep) {
+                    s.className = `step active`;
+                    foundActive = true;
+                } else if (!foundActive) {
+                    s.className = 'step completed';
+                } else {
+                    s.className = 'step';
+                }
+            });
+            
+            // Handle error status
+            if (status === 'error') {
+                activeStep.className = 'step error';
+            }
+        }
+        
+        // Handle form submission
+        sslForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Clear terminal
+            terminal.innerHTML = '';
+            addTerminalLine('Starting SSL certificate setup...', 'info');
+            
+            // Disable form
+            startSslBtn.disabled = true;
+            startSslBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Setting up SSL...';
+            
+            // Reset step indicators
+            [stepInit, stepCertbot, stepVerify, stepCertificate, stepComplete].forEach(s => {
+                s.className = 'step';
+            });
+            stepInit.className = 'step active';
+            
+            // Emit socket event
+            socket.emit('ssl_setup', {
+                server_id: {{ server.id }},
+                domain_id: {{ domain.id }},
+                admin_email: document.getElementById('admin_email').value
+            });
+        });
+        
+        // Socket event handlers
+        socket.on('connect', function() {
+            addTerminalLine('Connected to server.', 'info');
+        });
+        
+        socket.on('disconnect', function() {
+            addTerminalLine('Disconnected from server.', 'warning');
+        });
+        
+        socket.on('ssl_setup_update', function(data) {
+            // Add message to terminal
+            addTerminalLine(data.message, data.status);
+            
+            // Update step indicator
+            if (data.step) {
+                updateStepIndicator(data.step, data.status);
+            }
+        });
+        
+        socket.on('ssl_setup_complete', function(data) {
+            // Add final message
+            addTerminalLine(data.message, data.status);
+            
+            // Update step indicator
+            updateStepIndicator('complete', data.status);
+            
+            // Enable view details button
+            startSslBtn.classList.add('d-none');
+            viewDetailsBtn.classList.remove('d-none');
+        });
+    });
+</script>
+{% endblock %}
