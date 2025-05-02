@@ -69,7 +69,12 @@ def inject_spa_mode():
 def after_request(response):
     """Handle AJAX requests for SPA."""
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        if response.content_type == 'text/html; charset=utf-8':
+        if response.status_code in (301, 302, 303, 307, 308):
+            app.logger.info(f"Converting redirect response to JSON for AJAX request: {response.location}")
+            return jsonify({
+                'redirect': response.location
+            })
+        elif response.content_type == 'text/html; charset=utf-8':
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(response.data, 'html.parser')
             content = soup.find(id='spa-content')
