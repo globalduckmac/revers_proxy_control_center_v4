@@ -107,19 +107,41 @@ if [ -f "$APP_DIR/.env" ]; then
 fi
 
 cat > "$APP_DIR/.env" << EOF
-
 FLASK_ENV=production
-
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 SESSION_SECRET=$SESSION_SECRET
-
 DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc
-
 ADMIN_EMAIL=admin@example.com
-
 SSH_TIMEOUT=60
 SSH_COMMAND_TIMEOUT=600
 EOF
+
+print_info "Verifying database connection..."
+export DATABASE_URL="postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
+cd "$APP_DIR"
+if [ -f "$APP_DIR/venv/bin/python" ]; then
+    "$APP_DIR/venv/bin/python" -c "
+import sys
+import psycopg2
+try:
+    conn = psycopg2.connect('$DATABASE_URL')
+    print('Database connection successful')
+    conn.close()
+except Exception as e:
+    print('Database connection failed:', e)
+    sys.exit(1)
+"
+    if [ $? -ne 0 ]; then
+        print_error "Database connection failed. Please check your PostgreSQL configuration."
+        print_info "Attempting to fix database connection..."
+        sudo -u postgres psql -c "ALTER USER rpcc WITH PASSWORD '$DB_PASSWORD';"
+        sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE rpcc TO rpcc;"
+    else
+        print_info "Database connection verified successfully."
+    fi
+else
+    print_warning "Python virtual environment not found. Skipping database verification."
+fi
 
 print_header "Running setup script"
 cd "$APP_DIR"
@@ -127,7 +149,17 @@ chmod +x setup.sh
 
 print_info "Setting up Reverse Proxy Control Center v4..."
 source "$APP_DIR/venv/bin/activate"
+export DATABASE_URL="postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
 ./setup.sh
+
+print_info "Initializing database..."
+python -c "
+from app import app, db
+with app.app_context():
+    db.create_all()
+    print('Database tables created successfully')
+" || print_warning "Database initialization failed. Tables may already exist."
+
 deactivate
 
 print_header "Setting permissions"
@@ -177,8 +209,10 @@ User=www-data
 Group=www-data
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
+Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
+Environment="PYTHONPATH=$APP_DIR"
 ExecStartPre=/bin/sleep 2
-ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log main:app
+ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log app:app
 Restart=always
 RestartSec=10
 
@@ -190,10 +224,62 @@ print_header "Starting services"
 systemctl daemon-reload
 systemctl enable reverse_proxy_control_center.service
 systemctl restart nginx
+
+print_info "Starting application service..."
 systemctl restart reverse_proxy_control_center.service
 
 print_info "Waiting for services to start (10 seconds)..."
 sleep 10
+
+if ! systemctl is-active --quiet reverse_proxy_control_center; then
+    print_warning "Service failed to start. Checking logs..."
+    journalctl -u reverse_proxy_control_center -n 50 --no-pager
+    
+    print_info "Attempting to fix service configuration..."
+    cat > /etc/systemd/system/reverse_proxy_control_center.service << EOF
+[Unit]
+Description=Reverse Proxy Control Center v4
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
+Environment="PYTHONPATH=$APP_DIR"
+ExecStartPre=/bin/sleep 2
+ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log main:app
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    systemctl daemon-reload
+    systemctl restart reverse_proxy_control_center.service
+    sleep 5
+    
+    if ! systemctl is-active --quiet reverse_proxy_control_center; then
+        print_warning "Service still failed to start. Checking for main.py file..."
+        if [ -f "$APP_DIR/main.py" ]; then
+            print_info "Found main.py, using it as entry point..."
+        else
+            print_info "Creating main.py wrapper..."
+            cat > "$APP_DIR/main.py" << EOF
+from app import app
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+EOF
+        fi
+        
+        systemctl restart reverse_proxy_control_center.service
+        sleep 5
+    fi
+fi
 
 print_header "Service status"
 systemctl status postgresql --no-pager
