@@ -257,7 +257,7 @@ Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
 Environment="PYTHONPATH=$APP_DIR"
 Environment="FLASK_APP=$APP_DIR/app.py"
 ExecStartPre=/bin/sleep 2
-ExecStart=$APP_DIR/venv/bin/gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug wsgi:app
+ExecStart=$APP_DIR/venv/bin/gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug wsgi:app
 Restart=always
 RestartSec=10
 
@@ -271,7 +271,7 @@ systemctl enable reverse_proxy_control_center.service
 systemctl restart nginx
 
 print_info "Installing additional dependencies for WebSockets..."
-"$APP_DIR/venv/bin/pip" install flask-socketio eventlet gunicorn==20.1.0
+"$APP_DIR/venv/bin/pip" install flask-socketio gevent gevent-websocket gunicorn==21.2.0
 
 print_info "Installing additional dependencies for Telegram notifications..."
 "$APP_DIR/venv/bin/pip" install urllib3==1.26.15
@@ -348,7 +348,7 @@ Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
 Environment="PYTHONPATH=$APP_DIR"
 Environment="FLASK_APP=$APP_DIR/app.py"
 ExecStartPre=/bin/sleep 2
-ExecStart=$APP_DIR/venv/bin/gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug wsgi:app
+ExecStart=$APP_DIR/venv/bin/gunicorn --worker-class gevent --workers 1 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug wsgi:app
 Restart=always
 RestartSec=10
 

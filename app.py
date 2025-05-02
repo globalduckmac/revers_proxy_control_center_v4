@@ -44,7 +44,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'auth.login'
 
-socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False, async_mode="eventlet", engineio_logger=True)
+socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False, async_mode="gevent", engineio_logger=True)
 
 # initialize the app with the extension
 db.init_app(app)
