@@ -961,11 +961,33 @@ def deploy_domain_config(domain_id):
     
     try:
         # Разворачиваем конфигурацию для домена
+        import asyncio
         from modules.proxy_manager import ProxyManager
+        from modules.retry_utils import async_retry
+        
         logger.info(f"Запуск деплоя конфигурации для домена {domain.name} на сервере {server.name}")
         
         proxy_manager = ProxyManager(current_app.config.get('NGINX_TEMPLATES_PATH', 'templates/nginx'))
-        success = proxy_manager.deploy_proxy_config(server.id, domain.id)
+        
+        # Используем асинхронную версию метода с повторными попытками
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                success = loop.run_until_complete(
+                    async_retry(
+                        proxy_manager.async_deploy_proxy_config,
+                        server.id, domain.id,
+                        max_attempts=3,
+                        retry_delay=2.0
+                    )
+                )
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.error(f"Ошибка при асинхронном деплое: {str(e)}")
+            success = proxy_manager.deploy_proxy_config(server.id, domain.id)
         
         if success:
             # Обновляем статус лога

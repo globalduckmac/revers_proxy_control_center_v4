@@ -1,10 +1,12 @@
 import logging
 import os
+import asyncio
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_required
 from models import Server, Domain, ProxyConfig, ServerLog, db
 from modules.proxy_manager import ProxyManager
 from modules.deployment import DeploymentManager
+from modules.retry_utils import async_retry
 
 bp = Blueprint('proxy', __name__, url_prefix='/proxy')
 logger = logging.getLogger(__name__)
@@ -27,9 +29,17 @@ def deploy(server_id):
     nginx_templates_path = os.path.join(current_app.root_path, 'templates', 'nginx')
     proxy_manager = ProxyManager(nginx_templates_path)
     
-    # Deploy configuration
+    # Deploy configuration using async method
     try:
-        success = proxy_manager.deploy_proxy_config(server_id)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            success = loop.run_until_complete(
+                proxy_manager.async_deploy_proxy_config(server_id)
+            )
+        finally:
+            loop.close()
         
         if success:
             flash(f'Proxy configuration successfully deployed to server {server.name}', 'success')
@@ -90,9 +100,26 @@ def setup_ssl(server_id):
     # Update config temporarily
     current_app.config['ADMIN_EMAIL'] = email
     
-    # Set up SSL using Certbot
+    # Set up SSL using Certbot with async retry for better reliability
     try:
-        success = DeploymentManager.setup_ssl_certbot(server, ssl_domains)
+        # Check if DeploymentManager has an async method for SSL setup
+        if hasattr(DeploymentManager, 'async_setup_ssl_certbot'):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                success = loop.run_until_complete(
+                    async_retry(
+                        DeploymentManager.async_setup_ssl_certbot,
+                        server, ssl_domains,
+                        max_attempts=3,
+                        retry_delay=2.0
+                    )
+                )
+            finally:
+                loop.close()
+        else:
+            success = DeploymentManager.setup_ssl_certbot(server, ssl_domains)
         
         if success:
             flash(f'SSL certificates successfully set up for {len(ssl_domains)} domains on server {server.name}', 'success')
@@ -152,9 +179,25 @@ def install_nginx(server_id):
     db.session.add(log)
     db.session.commit()
     
-    # Install Nginx
+    # Install Nginx with async support if available
     try:
-        success = DeploymentManager.deploy_nginx(server)
+        if hasattr(DeploymentManager, 'async_deploy_nginx'):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                success = loop.run_until_complete(
+                    async_retry(
+                        DeploymentManager.async_deploy_nginx,
+                        server,
+                        max_attempts=3,
+                        retry_delay=2.0
+                    )
+                )
+            finally:
+                loop.close()
+        else:
+            success = DeploymentManager.deploy_nginx(server)
         
         if success:
             # Update log entry
