@@ -257,7 +257,7 @@ Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
 Environment="PYTHONPATH=$APP_DIR"
 Environment="FLASK_APP=$APP_DIR/app.py"
 ExecStartPre=/bin/sleep 2
-ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug $APP_MODULE
+ExecStart=$APP_DIR/venv/bin/gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug wsgi:app
 Restart=always
 RestartSec=10
 
@@ -314,6 +314,8 @@ env_vars = {k: v for k, v in os.environ.items()
                       ['password', 'secret', 'key', 'token'])}
 logger.debug(f"Environment variables: {env_vars}")
 
+logger.info(f"Application object type: {type(application)}")
+logger.info(f"SocketIO setup: {hasattr(application, 'socketio')}")
 logger.info(f"Application object: {application}")
 
 app = application
