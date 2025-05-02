@@ -4,6 +4,7 @@ import threading
 import asyncio
 import pytz
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 from app import db
 from models import Server, Domain, DomainGroup, ExternalServer, ExternalServerMetric
@@ -15,6 +16,8 @@ from modules.telegram_notifier import TelegramNotifier
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+MAIN_EVENT_LOOP = None
 
 # Интервалы выполнения задач (в секундах)
 CHECK_SERVER_INTERVAL = 300  # 5 минут - мониторинг серверов только через Glances API
@@ -30,14 +33,23 @@ class BackgroundTasks:
     def __init__(self):
         self.is_running = False
         self.threads = []
+        self.event_loop = None
+        self.async_tasks = []
     
     def start(self):
         """Запускает все фоновые задачи."""
+        global MAIN_EVENT_LOOP
+        
         if self.is_running:
             logger.warning("Background tasks are already running")
             return
         
         self.is_running = True
+        
+        self._start_event_loop()
+        
+        while not MAIN_EVENT_LOOP:
+            time.sleep(0.1)
         
         # Запускаем задачу проверки серверов
         server_check_thread = threading.Thread(
@@ -100,6 +112,13 @@ class BackgroundTasks:
     def stop(self):
         """Останавливает все фоновые задачи."""
         self.is_running = False
+        
+        if self.event_loop:
+            for task in self.async_tasks:
+                self.event_loop.call_soon_threadsafe(task.cancel)
+            
+            self.event_loop.call_soon_threadsafe(self.event_loop.stop)
+        
         logger.info("Background tasks stopped")
     
     def _run_task(self, task_func, interval, task_name):
@@ -256,20 +275,14 @@ class BackgroundTasks:
                         # Отправляем уведомление, если настроен Telegram
                         if TelegramNotifier.is_configured():
                             try:
-                                # Используем новый event loop для асинхронной отправки уведомления
+                                # Используем общий event loop для асинхронной отправки уведомления
                                 logger.info(f"Sending status change notification for server {server.name}")
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                
-                                try:
-                                    loop.run_until_complete(
-                                        TelegramNotifier.notify_server_status_change(
-                                            server, old_status, server.status
-                                        )
+                                self._run_async_task(
+                                    TelegramNotifier.notify_server_status_change(
+                                        server, old_status, server.status
                                     )
-                                    logger.info(f"Server status notification sent for {server.name}")
-                                finally:
-                                    loop.close()
+                                )
+                                logger.info(f"Server status notification sent for {server.name}")
                             except Exception as e:
                                 logger.error(f"Error sending server status notification: {str(e)}")
                     
@@ -302,22 +315,16 @@ class BackgroundTasks:
                         # Если статус изменился, отправляем уведомление
                         if old_status != domain.ns_status and TelegramNotifier.is_configured():
                             try:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                
-                                try:
                                     # Получаем маскированное имя домена для логирования
                                     from modules.telegram_notifier import mask_domain_name
                                     masked_domain_name = mask_domain_name(domain.name)
                                     
-                                    loop.run_until_complete(
+                                    self._run_async_task(
                                         TelegramNotifier.notify_domain_ns_status_change(
                                             domain, old_status, domain.ns_status
                                         )
                                     )
                                     logger.info(f"Domain NS status notification sent for {masked_domain_name}")
-                                finally:
-                                    loop.close()
                             except Exception as e:
                                 # Маскируем домен даже в сообщениях об ошибках
                                 from modules.telegram_notifier import mask_domain_name
@@ -412,18 +419,12 @@ class BackgroundTasks:
                             # Проверяем изменение статуса для уведомления
                             if old_status != 'online' and TelegramNotifier.is_configured():
                                 try:
-                                    loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(loop)
-                                    
-                                    try:
-                                        loop.run_until_complete(
-                                            TelegramNotifier.notify_external_server_status_change(
-                                                server, old_status, 'online'
-                                            )
+                                    self._run_async_task(
+                                        TelegramNotifier.notify_external_server_status_change(
+                                            server, old_status, 'online'
                                         )
-                                        logger.info(f"External server status notification sent for {server.name}")
-                                    finally:
-                                        loop.close()
+                                    )
+                                    logger.info(f"External server status notification sent for {server.name}")
                                 except Exception as e:
                                     logger.error(f"Error sending external server status notification: {str(e)}")
                         else:
@@ -436,18 +437,12 @@ class BackgroundTasks:
                             # Отправляем уведомление об изменении статуса если сервер стал недоступен
                             if old_status != 'offline' and TelegramNotifier.is_configured():
                                 try:
-                                    loop = asyncio.new_event_loop()
-                                    asyncio.set_event_loop(loop)
-                                    
-                                    try:
-                                        loop.run_until_complete(
-                                            TelegramNotifier.notify_external_server_status_change(
-                                                server, old_status, 'offline'
-                                            )
+                                    self._run_async_task(
+                                        TelegramNotifier.notify_external_server_status_change(
+                                            server, old_status, 'offline'
                                         )
-                                        logger.info(f"External server status notification sent for {server.name}")
-                                    finally:
-                                        loop.close()
+                                    )
+                                    logger.info(f"External server status notification sent for {server.name}")
                                 except Exception as e:
                                     logger.error(f"Error sending external server status notification: {str(e)}")
                         
@@ -480,14 +475,8 @@ class BackgroundTasks:
         with app.app_context():
             try:
                 # Запускаем асинхронную задачу для отправки отчета
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                try:
-                    loop.run_until_complete(TelegramNotifier.send_daily_report())
-                    logger.info("Daily report sent successfully")
-                finally:
-                    loop.close()
+                self._run_async_task(TelegramNotifier.send_daily_report())
+                logger.info("Daily report sent successfully")
                 
             except Exception as e:
                 logger.error(f"Error sending daily report: {str(e)}")
@@ -506,17 +495,15 @@ class BackgroundTasks:
         with app.app_context():
             try:
                 # Запускаем асинхронную задачу для проверки и отправки напоминаний
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                try:
-                    reminder_count = loop.run_until_complete(TelegramNotifier.check_server_payment_reminders())
+                task = self._run_async_task(TelegramNotifier.check_server_payment_reminders())
+                if task:
+                    reminder_count = task.result()
                     if reminder_count > 0:
                         logger.info(f"Sent {reminder_count} payment reminders")
                     else:
                         logger.info("No payment reminders needed at this time")
-                finally:
-                    loop.close()
+                else:
+                    logger.error("Failed to run payment reminders task - event loop not started")
                 
             except Exception as e:
                 logger.error(f"Error checking payment reminders: {str(e)}")
@@ -538,17 +525,58 @@ class BackgroundTasks:
                         (metric.disk_usage and metric.disk_usage > 85)
         
         if has_high_load:
-            # Отправляем уведомление о высокой нагрузке
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
+            # Отправляем уведомление о высокой нагрузке через общий event loop
             try:
-                loop.run_until_complete(TelegramNotifier.notify_server_high_load(server, metric))
+                self._run_async_task(TelegramNotifier.notify_server_high_load(server, metric))
                 logger.info(f"High load notification sent for server {server.name}")
             except Exception as e:
                 logger.error(f"Error sending high load notification: {str(e)}")
+
+    def _start_event_loop(self):
+        """Starts the main event loop in a separate thread."""
+        def run_event_loop():
+            """Run the event loop in a thread."""
+            global MAIN_EVENT_LOOP
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            MAIN_EVENT_LOOP = loop
+            self.event_loop = loop
+            
+            logger.info("Starting main event loop for async tasks")
+            
+            try:
+                loop.run_forever()
+            except Exception as e:
+                logger.error(f"Error in event loop: {str(e)}")
             finally:
+                logger.info("Event loop stopped")
                 loop.close()
+        
+        event_loop_thread = threading.Thread(target=run_event_loop, daemon=True)
+        self.threads.append(event_loop_thread)
+        event_loop_thread.start()
+    
+    def _run_async_task(self, coro):
+        """
+        Runs an async coroutine in the main event loop.
+        
+        Args:
+            coro: Coroutine to run
+            
+        Returns:
+            asyncio.Task: Task object
+        """
+        global MAIN_EVENT_LOOP
+        
+        if not MAIN_EVENT_LOOP:
+            logger.error("Event loop not started")
+            return None
+        
+        task = asyncio.run_coroutine_threadsafe(coro, MAIN_EVENT_LOOP)
+        self.async_tasks.append(task)
+        
+        return task
 
 # Создаем глобальный экземпляр менеджера задач
 background_tasks = BackgroundTasks()

@@ -1,10 +1,14 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Config:
     """Base configuration class."""
     DEBUG = False
     TESTING = False
     SECRET_KEY = os.environ.get('SESSION_SECRET', 'dev-secret-key')
+    ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', 'default-encryption-key-change-in-production')
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://rpcc:jidVLxKX5VihdK@localhost/rpcc')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -16,8 +20,8 @@ class Config:
     
     # Default SSH settings
     DEFAULT_SSH_PORT = 22
-    SSH_TIMEOUT = 60  # seconds
-    SSH_COMMAND_TIMEOUT = 600  # seconds for long-running commands (increased to 10 min for SSL setup)
+    SSH_TIMEOUT = int(os.environ.get('SSH_TIMEOUT', '60'))  # seconds
+    SSH_COMMAND_TIMEOUT = int(os.environ.get('SSH_COMMAND_TIMEOUT', '600'))  # seconds for long-running commands
 
 
 class DevelopmentConfig(Config):

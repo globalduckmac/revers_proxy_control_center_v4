@@ -2,6 +2,7 @@ import os
 import logging
 import tempfile
 import json
+import asyncio
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 from threading import Thread
@@ -697,4 +698,398 @@ class ProxyManager:
             except Exception as inner_e:
                 logger.error(f"Failed to create error log: {str(inner_e)}")
                 
+            return False
+    async def async_deploy_proxy_config(self, server_id, domain_id=None):
+        """
+        Asynchronous version of deploy_proxy_config that uses asyncio instead of threading.
+        
+        Args:
+            server_id: ID of the server to deploy to
+            domain_id: Optional ID of a specific domain to deploy
+            
+        Returns:
+            bool: True if deployment process was successfully started, False otherwise
+        """
+        logger = current_app.logger
+        app = current_app._get_current_object()
+        templates_path = self.templates_path
+        
+        server = None
+        
+        try:
+            from models import Server, ProxyConfig, ServerLog, Domain, DomainGroup
+            from modules.async_server_manager import AsyncServerManager
+            
+            server = Server.query.get(server_id)
+            if not server:
+                logger.error(f"Server with ID {server_id} not found")
+                return False
+            
+            from modules.server_manager import ServerManager
+            if not ServerManager.check_connectivity(server):
+                logger.error(f"Cannot deploy to server {server.name}: Server is not reachable")
+                return False
+            
+            if domain_id:
+                logger.info(f"Generating configuration for server {server.name} and domain ID {domain_id}")
+                domain = Domain.query.get(domain_id)
+                if not domain:
+                    logger.error(f"Domain ID {domain_id} not found")
+                    return False
+                
+                domain_groups = [group for group in domain.groups if group.server_id == server_id]
+                if not domain_groups:
+                    logger.error(f"Domain {domain.name} (ID: {domain_id}) is not associated with server ID {server_id}")
+                    return False
+                
+                logger.info(f"Generating proxy configuration for specific domain: {domain.name}")
+                main_config, site_configs = self.generate_nginx_config(server, domain_id)
+            else:
+                logger.info(f"Generating configuration for all domains on server {server.name}")
+                main_config, site_configs = self.generate_nginx_config(server)
+            
+            if not site_configs:
+                logger.error(f"No site configurations found for server {server.name}")
+                return False
+            
+            proxy_config = ProxyConfig(
+                server_id=server.id,
+                config_content=main_config,
+                status='pending',
+                extra_data=json.dumps(site_configs)
+            )
+            db.session.add(proxy_config)
+            db.session.commit()
+            
+            asyncio.create_task(self._async_background_deploy(
+                app, server_id, proxy_config.id, templates_path, 
+                main_config, site_configs.copy(), server.name, domain_id
+            ))
+            
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error starting deployment process for server {server_id}: {str(e)}")
+            
+            try:
+                from models import Server, ServerLog
+                
+                server_obj = None
+                if 'server' in locals() and server:
+                    server_obj = server
+                else:
+                    server_obj = Server.query.get(server_id)
+                    
+                if server_obj:
+                    log = ServerLog(
+                        server_id=server_obj.id,
+                        action='proxy_deployment',
+                        status='error',
+                        message=f"Error starting deployment: {str(e)}"
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+            except Exception as inner_e:
+                logger.error(f"Failed to create error log: {str(inner_e)}")
+                
+            return False
+            
+    async def _async_background_deploy(self, app, server_id, proxy_config_id, templates_path, 
+                                     main_config, site_configs, server_name, domain_id=None):
+        """
+        Asynchronous background deployment function.
+        
+        Args:
+            app: Flask application object
+            server_id: ID of the server to deploy to
+            proxy_config_id: ID of the ProxyConfig record
+            templates_path: Path to templates directory
+            main_config: Main Nginx configuration content
+            site_configs: Dictionary of site configurations
+            server_name: Name of the server (for logging)
+            domain_id: Optional ID of a specific domain to deploy
+        """
+        logger = app.logger
+        logger.info(f"Starting async background deployment for server {server_name}")
+        
+        if not site_configs:
+            logger.error(f"Error: site_configs is empty for server {server_name}")
+            return
+        
+        logger.info(f"Async background deployment has {len(site_configs)} site configs for server {server_name}")
+        for domain_name, config in site_configs.items():
+            logger.info(f"Config for {domain_name} is {len(config)} bytes")
+        
+        try:
+            async with app.app_context():
+                from models import Server, ServerLog, ProxyConfig, db
+                from modules.domain_manager import DomainManager
+                from modules.async_server_manager import AsyncServerManager
+                
+                server = Server.query.get(server_id)
+                if not server:
+                    logger.error(f"Server with ID {server_id} not found in async task")
+                    return
+                    
+                proxy_config = ProxyConfig.query.get(proxy_config_id)
+                if not proxy_config:
+                    logger.error(f"ProxyConfig with ID {proxy_config_id} not found in async task")
+                    return
+                
+                max_retries = 3
+                retry_count = 0
+                
+                while retry_count < max_retries:
+                    try:
+                        stdout, stderr = await AsyncServerManager.execute_command(
+                            server, 
+                            "dpkg -l | grep nginx || sudo apt-get update && sudo apt-get install -y nginx"
+                        )
+                        
+                        if "nginx" in stdout or "nginx" in stderr:
+                            break
+                        else:
+                            logger.warning(f"Nginx installation check failed, retry {retry_count+1}/{max_retries}")
+                            retry_count += 1
+                            
+                    except Exception as e:
+                        logger.error(f"Error checking Nginx installation: {str(e)}")
+                        retry_count += 1
+                        await asyncio.sleep(2)  # Wait before retry
+                
+                if retry_count >= max_retries:
+                    logger.error(f"Failed to verify Nginx installation after {max_retries} attempts")
+                    proxy_config.status = 'error'
+                    db.session.commit()
+                    
+                    log = ServerLog(
+                        server_id=server.id,
+                        action='proxy_deployment',
+                        status='error',
+                        message=f"Failed to verify Nginx installation after {max_retries} attempts"
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+                    return
+                
+                try:
+                    await AsyncServerManager.upload_string_to_file(
+                        server,
+                        main_config,
+                        "/etc/nginx/nginx.conf"
+                    )
+                    
+                    await AsyncServerManager.execute_command(
+                        server,
+                        "sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled"
+                    )
+                    
+                    logger.info(f"Removing default nginx site configuration on server {server.name}")
+                    try:
+                        await AsyncServerManager.execute_command(
+                            server,
+                            "sudo rm -f /etc/nginx/sites-enabled/default"
+                        )
+                        logger.info(f"Successfully removed default nginx configuration")
+                    except Exception as e:
+                        logger.warning(f"Warning while removing default configuration: {str(e)}")
+                    
+                    upload_tasks = []
+                    
+                    for domain_name, site_config in site_configs.items():
+                        sanitized_name = domain_name.replace(".", "_")
+                        logger.info(f"Processing configuration for domain {domain_name} (file: {sanitized_name})")
+                        site_path = f"/etc/nginx/sites-available/{sanitized_name}"
+                        
+                        task = asyncio.create_task(
+                            self._async_upload_site_config(
+                                server, domain_name, site_config, site_path, sanitized_name
+                            )
+                        )
+                        upload_tasks.append(task)
+                    
+                    await asyncio.gather(*upload_tasks)
+                    
+                    await AsyncServerManager.execute_command(
+                        server,
+                        "sudo mkdir -p /etc/letsencrypt/live/ /etc/ssl/certs/ /etc/ssl/private/"
+                    )
+                    
+                    stdout, stderr = await AsyncServerManager.execute_command(
+                        server,
+                        "sudo nginx -t"
+                    )
+                    
+                    if "successful" not in stdout and "successful" not in stderr:
+                        if "duplicate default server for 0.0.0.0:80" in stderr:
+                            logger.warning(f"Detected duplicate default server conflict, trying to fix it")
+                            
+                            await AsyncServerManager.execute_command(
+                                server,
+                                "sudo sed -i 's/default_server//g' /etc/nginx/sites-enabled/*"
+                            )
+                            
+                            stdout, stderr = await AsyncServerManager.execute_command(
+                                server,
+                                "sudo nginx -t"
+                            )
+                            
+                            if "successful" not in stdout and "successful" not in stderr:
+                                raise Exception(f"Nginx config still failing after fixing default_server: {stderr}")
+                        else:
+                            raise Exception(f"Nginx configuration test failed: {stderr}")
+                    
+                    domains = DomainManager.get_domains_by_server(server.id)
+                    ssl_domains = [d for d in domains if d.ssl_enabled]
+                    
+                    if ssl_domains:
+                        logger.info(f"Checking SSL certificates for {len(ssl_domains)} domains")
+                        ssl_tasks = []
+                        
+                        for domain in ssl_domains:
+                            task = asyncio.create_task(
+                                self._async_update_ssl_config(server, domain)
+                            )
+                            ssl_tasks.append(task)
+                        
+                        await asyncio.gather(*ssl_tasks)
+                    
+                    stdout, stderr = await AsyncServerManager.execute_command(
+                        server,
+                        "sudo systemctl reload nginx || sudo systemctl restart nginx"
+                    )
+                    
+                    proxy_config.status = 'deployed'
+                    db.session.commit()
+                    
+                    log = ServerLog(
+                        server_id=server.id,
+                        action='proxy_deployment',
+                        status='success',
+                        message="Proxy configuration deployed successfully"
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+                    
+                    logger.info(f"Successfully deployed proxy configuration to server {server.name}")
+                    
+                except Exception as e:
+                    logger.error(f"Error in proxy deployment process: {str(e)}")
+                    
+                    proxy_config.status = 'error'
+                    db.session.commit()
+                    
+                    log = ServerLog(
+                        server_id=server.id,
+                        action='proxy_deployment',
+                        status='error',
+                        message=f"Deployment error: {str(e)}"
+                    )
+                    db.session.add(log)
+                    db.session.commit()
+                    
+        except Exception as e:
+            logger.error(f"Critical error in async deployment: {str(e)}")
+            try:
+                async with app.app_context():
+                    from models import ProxyConfig, ServerLog, db
+                    
+                    proxy_config = ProxyConfig.query.get(proxy_config_id)
+                    if proxy_config:
+                        proxy_config.status = 'error'
+                        
+                        log = ServerLog(
+                            server_id=server_id,
+                            action='proxy_deployment',
+                            status='error',
+                            message=f"Critical async deployment error: {str(e)}"
+                        )
+                        db.session.add(log)
+                        db.session.commit()
+            except Exception as inner_e:
+                logger.error(f"Failed to log error in database: {str(inner_e)}")
+                
+    async def _async_upload_site_config(self, server, domain_name, site_config, site_path, sanitized_name):
+        """Helper method to upload and configure a site configuration."""
+        from modules.async_server_manager import AsyncServerManager
+        logger = current_app.logger
+        
+        try:
+            file_check, _ = await AsyncServerManager.execute_command(
+                server,
+                f"ls -la {site_path} 2>/dev/null || echo 'NOT_FOUND'"
+            )
+            
+            await AsyncServerManager.upload_string_to_file(
+                server,
+                site_config,
+                site_path
+            )
+            
+            file_exists, _ = await AsyncServerManager.execute_command(
+                server,
+                f"ls -la {site_path} 2>/dev/null || echo 'NOT_FOUND'"
+            )
+            
+            if "NOT_FOUND" in file_exists:
+                raise Exception(f"Failed to create file {site_path}")
+            
+            logger.info(f"Creating symlink for {sanitized_name}")
+            
+            await AsyncServerManager.execute_command(
+                server,
+                f"sudo rm -f /etc/nginx/sites-enabled/{sanitized_name}"
+            )
+            
+            await AsyncServerManager.execute_command(
+                server,
+                f"sudo ln -sf {site_path} /etc/nginx/sites-enabled/{sanitized_name}"
+            )
+            
+            exists_check, _ = await AsyncServerManager.execute_command(
+                server,
+                f"ls -la /etc/nginx/sites-enabled/{sanitized_name} 2>/dev/null || echo 'NOT_FOUND'"
+            )
+            
+            if "NOT_FOUND" in exists_check:
+                logger.warning(f"Symlink was not created correctly for {sanitized_name}. Copying file directly.")
+                await AsyncServerManager.execute_command(
+                    server,
+                    f"sudo cp {site_path} /etc/nginx/sites-enabled/{sanitized_name} && sudo chmod 644 /etc/nginx/sites-enabled/{sanitized_name}"
+                )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error uploading site config for {domain_name}: {str(e)}")
+            raise
+    
+    async def _async_update_ssl_config(self, server, domain):
+        """Helper method to update SSL configuration for a domain."""
+        from modules.async_server_manager import AsyncServerManager
+        logger = current_app.logger
+        
+        try:
+            domain_safe = domain.name.replace(".", "_")
+            site_path = f"/etc/nginx/sites-available/{domain_safe}"
+            
+            cert_check_cmd = f"sudo ls -la /etc/letsencrypt/live/{domain.name}/fullchain.pem 2>/dev/null || echo 'Not found'"
+            cert_result, _ = await AsyncServerManager.execute_command(server, cert_check_cmd)
+            
+            if "Not found" not in cert_result:
+                logger.info(f"Found SSL certificates for {domain.name}, updating configuration")
+                
+                update_cmd = f"""sudo sed -i 's|ssl_certificate .*snakeoil.pem;|ssl_certificate /etc/letsencrypt/live/{domain.name}/fullchain.pem;|' {site_path} && \
+                                sudo sed -i 's|ssl_certificate_key .*snakeoil.key;|ssl_certificate_key /etc/letsencrypt/live/{domain.name}/privkey.pem;|' {site_path} && \
+                                sudo sed -i 's|# include /etc/letsencrypt/options-ssl-nginx.conf;|include /etc/letsencrypt/options-ssl-nginx.conf;|' {site_path} && \
+                                sudo sed -i 's|# ssl_dhparam|ssl_dhparam|' {site_path}"""
+                
+                await AsyncServerManager.execute_command(server, update_cmd)
+                logger.info(f"SSL configuration updated for {domain.name}")
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Could not update SSL configuration for {domain.name}: {str(e)}")
             return False
