@@ -197,6 +197,51 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+print_header "Detecting application entry point"
+cd "$APP_DIR"
+
+APP_MODULE="app:app"
+if [ -f "$APP_DIR/main.py" ]; then
+    print_info "Found main.py, checking if it should be used as entry point..."
+    grep -q "from app import app" "$APP_DIR/main.py"
+    if [ $? -eq 0 ]; then
+        print_info "main.py imports app, will try it as primary entry point"
+        APP_MODULE="main:app"
+    fi
+fi
+
+print_info "Using $APP_MODULE as application entry point"
+
+cat > "$APP_DIR/test_app_import.py" << EOF
+import sys
+import importlib.util
+
+try:
+    module_name, object_name = "$APP_MODULE".split(':')
+    spec = importlib.util.spec_from_file_location(module_name, "$APP_DIR/{}.py".format(module_name))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    app_object = getattr(module, object_name)
+    print("Successfully imported {}".format("$APP_MODULE"))
+    sys.exit(0)
+except Exception as e:
+    print("Error importing {}: {}".format("$APP_MODULE", e))
+    sys.exit(1)
+EOF
+
+"$APP_DIR/venv/bin/python" "$APP_DIR/test_app_import.py"
+if [ $? -ne 0 ]; then
+    print_warning "Failed to import $APP_MODULE, falling back to alternative"
+    if [ "$APP_MODULE" = "app:app" ]; then
+        APP_MODULE="main:app"
+    else
+        APP_MODULE="app:app"
+    fi
+    print_info "Trying alternative entry point: $APP_MODULE"
+fi
+
+rm -f "$APP_DIR/test_app_import.py"
+
 print_header "Creating systemd service"
 cat > /etc/systemd/system/reverse_proxy_control_center.service << EOF
 [Unit]
@@ -211,8 +256,9 @@ WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
 Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
 Environment="PYTHONPATH=$APP_DIR"
+Environment="FLASK_APP=$APP_DIR/app.py"
 ExecStartPre=/bin/sleep 2
-ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log app:app
+ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug $APP_MODULE
 Restart=always
 RestartSec=10
 
@@ -225,17 +271,63 @@ systemctl daemon-reload
 systemctl enable reverse_proxy_control_center.service
 systemctl restart nginx
 
+print_info "Installing additional dependencies for WebSockets..."
+"$APP_DIR/venv/bin/pip" install flask-socketio eventlet gunicorn==20.1.0
+
+print_info "Creating debug wrapper for application..."
+cat > "$APP_DIR/wsgi.py" << EOF
+import os
+import sys
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[
+        logging.FileHandler('/var/log/reverse_proxy_control_center/debug.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('wsgi')
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+try:
+    logger.info("Attempting to import app from main module")
+    from main import app as application
+    logger.info("Successfully imported app from main module")
+except Exception as e:
+    logger.error(f"Error importing from main: {str(e)}")
+    try:
+        logger.info("Attempting to import app from app module")
+        from app import app as application
+        logger.info("Successfully imported app from app module")
+    except Exception as e:
+        logger.error(f"Error importing from app: {str(e)}")
+        raise
+
+env_vars = {k: v for k, v in os.environ.items() 
+            if not any(sensitive in k.lower() for sensitive in 
+                      ['password', 'secret', 'key', 'token'])}
+logger.debug(f"Environment variables: {env_vars}")
+
+logger.info(f"Application object: {application}")
+
+app = application
+EOF
+
 print_info "Starting application service..."
+systemctl daemon-reload
 systemctl restart reverse_proxy_control_center.service
 
-print_info "Waiting for services to start (10 seconds)..."
-sleep 10
+print_info "Waiting for services to start (15 seconds)..."
+sleep 15
 
 if ! systemctl is-active --quiet reverse_proxy_control_center; then
     print_warning "Service failed to start. Checking logs..."
     journalctl -u reverse_proxy_control_center -n 50 --no-pager
     
-    print_info "Attempting to fix service configuration..."
+    print_info "Attempting to fix service configuration with eventlet worker..."
     cat > /etc/systemd/system/reverse_proxy_control_center.service << EOF
 [Unit]
 Description=Reverse Proxy Control Center v4
@@ -249,8 +341,9 @@ WorkingDirectory=$APP_DIR
 EnvironmentFile=$APP_DIR/.env
 Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
 Environment="PYTHONPATH=$APP_DIR"
+Environment="FLASK_APP=$APP_DIR/app.py"
 ExecStartPre=/bin/sleep 2
-ExecStart=$APP_DIR/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log main:app
+ExecStart=$APP_DIR/venv/bin/gunicorn --worker-class eventlet --workers 1 --bind 0.0.0.0:5000 --timeout 120 --access-logfile /var/log/reverse_proxy_control_center/access.log --error-logfile /var/log/reverse_proxy_control_center/error.log --log-level debug wsgi:app
 Restart=always
 RestartSec=10
 
@@ -260,24 +353,48 @@ EOF
     
     systemctl daemon-reload
     systemctl restart reverse_proxy_control_center.service
-    sleep 5
+    sleep 10
     
     if ! systemctl is-active --quiet reverse_proxy_control_center; then
-        print_warning "Service still failed to start. Checking for main.py file..."
-        if [ -f "$APP_DIR/main.py" ]; then
-            print_info "Found main.py, using it as entry point..."
-        else
-            print_info "Creating main.py wrapper..."
-            cat > "$APP_DIR/main.py" << EOF
-from app import app
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-EOF
-        fi
+        print_warning "Service still failed to start. Trying direct Flask run..."
         
+        cat > "$APP_DIR/run_flask.sh" << EOF
+cd $APP_DIR
+source venv/bin/activate
+export FLASK_APP=app.py
+export FLASK_ENV=production
+export DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc
+python -m flask run --host=0.0.0.0 --port=5000 > /var/log/reverse_proxy_control_center/flask.log 2>&1
+EOF
+        
+        chmod +x "$APP_DIR/run_flask.sh"
+        
+        cat > /etc/systemd/system/reverse_proxy_control_center.service << EOF
+[Unit]
+Description=Reverse Proxy Control Center v4
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment="DATABASE_URL=postgresql://rpcc:$DB_PASSWORD@localhost/rpcc"
+Environment="PYTHONPATH=$APP_DIR"
+Environment="FLASK_APP=$APP_DIR/app.py"
+ExecStartPre=/bin/sleep 2
+ExecStart=$APP_DIR/run_flask.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        
+        systemctl daemon-reload
         systemctl restart reverse_proxy_control_center.service
-        sleep 5
+        sleep 10
     fi
 fi
 
