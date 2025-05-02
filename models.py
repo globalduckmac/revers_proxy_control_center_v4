@@ -7,9 +7,12 @@ import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from flask import current_app
 
-# Секретный ключ для шифрования (можно получить из переменной окружения)
-SECRET_KEY = os.environ.get("SESSION_SECRET", "default-secret-key-for-encryption")
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY") or (
+    current_app.config.get("ENCRYPTION_KEY") if current_app else 
+    "default-encryption-key-change-in-production"
+)
 
 def get_encryption_key(secret):
     """Генерирует ключ шифрования на основе секрета"""
@@ -28,7 +31,7 @@ def encrypt_password(password):
     if not password:
         return None
     
-    key = get_encryption_key(SECRET_KEY)
+    key = get_encryption_key(ENCRYPTION_KEY)
     f = Fernet(key)
     encrypted = f.encrypt(password.encode())
     return encrypted.decode()
@@ -38,7 +41,7 @@ def decrypt_password(encrypted_password):
     if not encrypted_password:
         return None
     
-    key = get_encryption_key(SECRET_KEY)
+    key = get_encryption_key(ENCRYPTION_KEY)
     f = Fernet(key)
     try:
         decrypted = f.decrypt(encrypted_password.encode())
