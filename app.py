@@ -1,4 +1,6 @@
 import os
+import atexit
+import asyncio
 from datetime import datetime
 
 from flask import Flask
@@ -6,6 +8,12 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from flask_login import LoginManager
 from config import config
+
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass
 
 
 class Base(DeclarativeBase):
@@ -86,3 +94,26 @@ with app.app_context():
     
     # Register blueprints
     register_blueprints(app)
+
+def cleanup_async_resources():
+    """Clean up asyncio resources on application shutdown."""
+    from modules.async_server_manager import AsyncServerManager
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        if not loop.is_closed():
+            loop.run_until_complete(AsyncServerManager.close_connections())
+            
+    except Exception as e:
+        logger.error(f"Error cleaning up async resources: {str(e)}")
+
+# Register cleanup function
+atexit.register(cleanup_async_resources)
