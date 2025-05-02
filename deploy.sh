@@ -273,6 +273,10 @@ systemctl restart nginx
 print_info "Installing additional dependencies for WebSockets..."
 "$APP_DIR/venv/bin/pip" install flask-socketio eventlet gunicorn==20.1.0
 
+print_info "Installing additional dependencies for Telegram notifications..."
+"$APP_DIR/venv/bin/pip" install urllib3==1.26.15
+"$APP_DIR/venv/bin/pip" install python-telegram-bot==13.15
+
 print_info "Creating debug wrapper for application..."
 cat > "$APP_DIR/wsgi.py" << EOF
 import os
