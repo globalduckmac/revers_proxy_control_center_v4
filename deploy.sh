@@ -144,7 +144,12 @@ EOF
 print_header "Running setup script"
 cd "$APP_DIR"
 chmod +x setup.sh
+
+# Ensure setup.sh runs with the virtual environment
+print_info "Setting up Reverse Proxy Control Center v4..."
+source "$APP_DIR/venv/bin/activate"
 ./setup.sh
+deactivate
 
 print_header "Setting permissions"
 chown -R www-data:www-data "$APP_DIR"
